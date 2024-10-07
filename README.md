@@ -6,7 +6,7 @@ Attempt at creating an Operating System from scratch.
 
 1. Install `qemu`, `nasm`
 2. Build a [C Cross Compiler](https://wiki.osdev.org/GCC_Cross-Compiler)
-3. Update **CC* and **GDB** in the `Makefile`
+3. Update **CC** and **GDB** in the `Makefile`
 4. Run with `make run`
 
 ## Resources
