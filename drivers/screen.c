@@ -1,6 +1,6 @@
 #include "screen.h"
-#include "ports.h"
-#include "../kernel/util.h"
+#include "../cpu/ports.h"
+#include "../libc/mem.h"
 
 #define VIDEO_ADDRESS 0xb8000
 #define MAX_ROWS 25
@@ -54,8 +54,8 @@ int handle_scrolling(int offset) {
     for (int i = 1; i < MAX_ROWS; i++) {
         // Copy ith row to i-1th row
         memory_copy(
-            screen + get_screen_offset(i, 0), 
-            screen + get_screen_offset(i-1, 0), 
+            (uint8_t*)(screen + get_screen_offset(i, 0)), 
+            (uint8_t*)(screen + get_screen_offset(i-1, 0)), 
             MAX_COLS
         );
     }
@@ -83,6 +83,9 @@ int print_char_at(char character, int row, int col) {
     if (character == '\n') {
         row = get_offset_row(offset);
         offset = get_screen_offset(row + 1, 0);
+    } else if (character == 0x08) {
+        screen[offset] = ' ';
+        screen[offset+1] = WHITE_ON_BLACK;
     } else {
         screen[offset] = character;
         screen[offset+1] = attrib;
@@ -96,6 +99,13 @@ int print_char_at(char character, int row, int col) {
 
 int print_char(char character) {
     return print_char_at(character, -1, -1);
+}
+
+void print_backspace() {
+    int offset = get_cursor_offset()-2;
+    int row = get_offset_row(offset);
+    int col = get_offset_col(offset);
+    print_char_at(0x08, row, col);
 }
 
 void print_string_at(char *message, int row, int col) {
