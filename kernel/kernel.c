@@ -9,8 +9,16 @@ void kernel_main() {
     irq_install();
 
     clear_screen();
+    division_by_zero();
+
     print_string("Type something, it will go through the kernel\n"
         "Type END to halt the CPU\n> ");
+}
+
+void division_by_zero() {
+    int x = 1;
+    int y = 0;
+    x = x / y;
 }
 
 void user_input(char *input) {
