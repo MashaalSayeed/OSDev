@@ -1,38 +1,33 @@
-#include "string.h"
-#include <stdint.h>
+#include "libc/string.h"
 
-void int_to_ascii(int n, char str[]) {
-    int i, sign;
-    if ((sign = n) < 0) n = -n;
-    i = 0;
-    do {
-        str[i++] = n % 10 + '0';
-    } while ((n /= 10) > 0);
-
-    if (sign < 0) str[i++] = '-';
-    str[i] = '\0';
-
-    reverse(str);
+size_t strlen(const char *s) {
+    size_t i = 0;
+    for(; *s; i++) {
+        s++;
+    }
+    return i;
 }
 
-void hex_to_ascii(int n, char str[]) {
-    append(str, '0');
-    append(str, 'x');
-    char zeros = 0;
-
-    int32_t tmp;
-    int i;
-    for (i = 28; i > 0; i -= 4) {
-        tmp = (n >> i) & 0xF;
-        if (tmp == 0 && zeros == 0) continue;
-        zeros = 1;
-        if (tmp > 0xA) append(str, tmp - 0xA + 'a');
-        else append(str, tmp + '0');
+char *strcpy(char *dest, const char *src) {
+    char *ret = dest;
+    while(*src) {
+        *dest = *src;
+        dest++;
+        src++;
     }
+    *dest = '\0';
+    return ret;
+}
 
-    tmp = n & 0xF;
-    if (tmp >= 0xA) append(str, tmp - 0xA + 'a');
-    else append(str, tmp + '0');
+int strcmp(const char *s1, const char *s2) {
+    while(*s1 && *s2) {
+        if(*s1 != *s2) {
+            return *s1 - *s2;
+        }
+        s1++;
+        s2++;
+    }
+    return *s1 - *s2;
 }
 
 void reverse(char s[]) {
@@ -44,30 +39,52 @@ void reverse(char s[]) {
     }
 }
 
-int strlen(char s[]) {
-    int i = 0;
-    while (s[i] != '\0') ++i;
-    return i;
-}
-
-
-void append(char s[], char n) {
-    int len = strlen(s);
-    s[len] = n;
-    s[len+1] = '\0';
-}
-
-void backspace(char s[]) {
-    int len = strlen(s);
-    s[len-1] = '\0';
-}
-
-/* K&R 
- * Returns <0 if s1<s2, 0 if s1==s2, >0 if s1>s2 */
-int strcmp(char s1[], char s2[]) {
-    int i;
-    for (i = 0; s1[i] == s2[i]; i++) {
-        if (s1[i] == '\0') return 0;
+void int_to_ascii(uint32_t num, char *buffer) {
+    // Handle zero case
+    if (num == 0) {
+        buffer[0] = '0';
+        buffer[1] = '\0';
+        return;
     }
-    return s1[i] - s2[i];
+
+    char *ptr = buffer;
+    char *ptr1 = buffer; // Pointer to the start of the string
+    int temp;
+
+    while (num != 0) {
+        temp = num % 10;
+        num /= 10;
+        *ptr++ = temp + '0';
+    }
+    *ptr = '\0';                    // Null-terminate the string
+
+    reverse(ptr1);
+}
+
+void hex_to_ascii(uint32_t num, char* buffer) {
+    char *ptr = buffer;
+    char *ptr1 = buffer; // Pointer to the start of the string
+
+    *ptr++ = '0';
+    *ptr++ = 'x';
+
+    if (num == 0) {
+        *ptr++ = '0';
+        *ptr = '\0';
+        return;
+    }
+
+    int temp;
+    while (num != 0) {
+        temp = num % 16;
+        num /= 16;
+        if (temp < 10) {
+            *ptr++ = temp + '0';
+        } else {
+            *ptr++ = temp - 10 + 'A';
+        }
+    }
+    *ptr = '\0';
+
+    reverse(ptr1 + 2);
 }

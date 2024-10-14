@@ -1,48 +1,85 @@
-C_SOURCES = $(wildcard kernel/*.c drivers/*.c cpu/*.c libc/*.c)
-HEADERS = $(wildcard kernel/*.h drivers/*.h cpu/*.h libc/*.h)
-# Nice syntax for file extension replacement
-OBJ = ${C_SOURCES:.c=.o cpu/interrupt.o}
+ARCH?=i386
+TARGET=$(ARCH)-elf
+CC=$(TARGET)-gcc
+LD=$(TARGET)-ld
+AS=$(TARGET)-as
+GDB=$(TARGET)-gdb
 
-# Change this if your cross-compiler is somewhere else
-CC = i686-elf-gcc#~/opt/i386elfgcc/bin/i386-elf-gcc
-GDB = ~/opt/i386elfgcc/bin/i386-elf-gdb
+PWD=${shell pwd}
 
-# -g: Use debugging symbols in gcc
-CFLAGS = -g -ffreestanding -Wall -Wextra -fno-exceptions -m32
+# Compiler and linker flags
+CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I${PWD}/include 
+CFLAGS+=-g # Enable debugging
+LDFLAGS=-nostdlib -T arch/$(ARCH)/linker.ld
 
-# First rule is the one executed when no parameters are fed to the Makefile
-all: os-image.bin
+BUILD_DIR=build/$(ARCH)
+KERNEL_BIN=$(BUILD_DIR)/zineos.bin
+ISO_IMAGE=iso/zineos-$(ARCH).iso
 
-os-image.bin: boot/bootsect.bin kernel.bin
-	cat $^ > $@
+# Directories
+ARCH_DIR=arch/$(ARCH)
+KERNEL_DIR=$(ARCH_DIR)/kernel
+DRIVERS_DIR=drivers/$(ARCH)
+LIBC_DIR=libc
 
-kernel.bin: boot/kernel_entry.o ${OBJ}
-	i686-elf-ld -o $@ -Ttext 0x1000 $^ --oformat binary
+# Source files
+BOOT_SRC=$(wildcard $(ARCH_DIR)/*.s)
+KERNEL_SRC=$(wildcard $(KERNEL_DIR)/*.c)
+DRIVER_SRC=$(wildcard $(DRIVERS_DIR)/*.c)
+LIBC_SRC=$(wildcard $(LIBC_DIR)/*.c)
 
-# Used for debugging purposes
-kernel.elf: boot/kernel_entry.o ${OBJ}
-	i686-elf-ld -o $@ -Ttext 0x1000 $^
+# Object files
+KERNEL_OBJ=$(KERNEL_SRC:$(KERNEL_DIR)/%.c=$(BUILD_DIR)/kernel/%.o)
+DRIVER_OBJ=$(DRIVER_SRC:$(DRIVERS_DIR)/%.c=$(BUILD_DIR)/drivers/%.o)
+LIBC_OBJ=$(LIBC_SRC:$(LIBC_DIR)/%.c=$(BUILD_DIR)/libc/%.o)
+ASM_OBJ=$(BOOT_SRC:$(ARCH_DIR)/%.s=$(BUILD_DIR)/%.o)
+ASM_OBJ+=$(BUILD_DIR)/crtbegin.o $(BUILD_DIR)/crtend.o
+OBJS=$(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ)
 
-run: os-image.bin
-	qemu-system-x86_64 -fda $<
+# Build rules
+all: $(KERNEL_BIN)
 
-# Open the connection to qemu and load our kernel-object file with symbols
-debug: os-image.bin kernel.elf
-	qemu-system-i386 -s -fda os-image.bin -S &
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc
+
+$(DRIVER_OBJ):
+	make -C drivers/$(ARCH) ARCH=$(ARCH) CFLAGS="$(CFLAGS)" CC=${CC}
+
+$(BUILD_DIR)/libc/%.o: $(LIBC_DIR)/%.c | $(BUILD_DIR)
+	@echo "Compiling libc source file $<..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(ARCH_DIR)/%.s | $(BUILD_DIR)
+	@echo "Assembling $<..."
+	$(CC) -MD -c $< -o $@ $(CFLAGS)
+
+$(BUILD_DIR)/crtbegin.o $(BUILD_DIR)/crtend.o:
+	@echo "Copying crtbegin.o and crtend.o..."
+	@OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
+
+$(BUILD_DIR)/kernel/%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
+	@echo "Compiling kernel source file $<..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(KERNEL_BIN): $(OBJS) $(ARCH_DIR)/linker.ld
+	@echo "Linking kernel..."
+	$(LD) $(LDFLAGS) -o $(KERNEL_BIN) $(OBJS)
+
+run: $(KERNEL_BIN)
+	qemu-system-$(ARCH) -kernel $(KERNEL_BIN)  -serial file:serial_output.log
+
+debug: $(KERNEL_BIN)
+	qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -s -S &
 	sleep 1
-	${GDB} -ex "target remote localhost:1234" -ex "symbol-file kernel.elf"
-
-# Generic rules for wildcards
-# To make an object, always compile from its .c
-%.o: %.c ${HEADERS}
-	${CC} ${CFLAGS} -ffreestanding -c $< -o $@
-
-%.o: %.asm
-	nasm $< -f elf -o $@
-
-%.bin: %.asm
-	nasm $< -f bin -o $@
+	$(GDB) -ex "target remote localhost:1234" -ex "symbol-file $(KERNEL_BIN)"
 
 clean:
-	rm -rf *.bin *.dis *.o os-image.bin *.elf
-	rm -rf kernel/*.o boot/*.bin drivers/*.o boot/*.o cpu/*.o libc/*.o
+	rm -rf $(BUILD_DIR) $(KERNEL_BIN) $(ISO_IMAGE)
+	rm -rf iso/boot
+
+help:
+	@echo "Available targets:"
+	@echo "  make       - Build the kernel"
+	@echo "  run        - Run the kernel in QEMU"
+	@echo "  debug      - Run the kernel in QEMU with GDB server"
+	@echo "  clean      - Clean the build directory"

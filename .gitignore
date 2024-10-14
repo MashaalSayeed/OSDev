@@ -1,4 +1,10 @@
-*.bin
+build/
+notes/
+
+.DS_Store
+
 *.o
+*.bin
+*.log
 *.elf
-*.DS_Store
+*.hex
