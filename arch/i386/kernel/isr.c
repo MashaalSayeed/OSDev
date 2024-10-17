@@ -129,7 +129,13 @@ char *exception_messages[] = {
     "Reserved"
 };
 
+isr_t interrupt_handlers[256];
 void isr_handler(registers_t *r) {
+    if (interrupt_handlers[r->int_no] != 0) {
+        isr_t handler = interrupt_handlers[r->int_no];
+        handler(r);
+    }
+
     if (r->int_no < 32) {
         // Handle exception
         terminal_writestring("System Exception: ");
@@ -138,13 +144,9 @@ void isr_handler(registers_t *r) {
 
         for (;;) {} // Halt
     }
-
-    terminal_writestring("Received interrupt: ");
     // terminal_write((char*)&r->int_no, 4);
 }
 
-
-isr_t interrupt_handlers[256];
 void irq_handler(registers_t *r) {
     // terminal_writestring("Received IRQ: ");
     // char s[24];

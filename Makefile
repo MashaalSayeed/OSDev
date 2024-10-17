@@ -33,7 +33,6 @@ KERNEL_OBJ=$(KERNEL_SRC:$(KERNEL_DIR)/%.c=$(BUILD_DIR)/kernel/%.o)
 DRIVER_OBJ=$(DRIVER_SRC:$(DRIVERS_DIR)/%.c=$(BUILD_DIR)/drivers/%.o)
 LIBC_OBJ=$(LIBC_SRC:$(LIBC_DIR)/%.c=$(BUILD_DIR)/libc/%.o)
 ASM_OBJ=$(BOOT_SRC:$(ARCH_DIR)/%.s=$(BUILD_DIR)/%.o)
-ASM_OBJ+=$(BUILD_DIR)/crtbegin.o $(BUILD_DIR)/crtend.o
 OBJS=$(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ)
 
 # Build rules
@@ -51,11 +50,7 @@ $(BUILD_DIR)/libc/%.o: $(LIBC_DIR)/%.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: $(ARCH_DIR)/%.s | $(BUILD_DIR)
 	@echo "Assembling $<..."
-	$(CC) -MD -c $< -o $@ $(CFLAGS)
-
-$(BUILD_DIR)/crtbegin.o $(BUILD_DIR)/crtend.o:
-	@echo "Copying crtbegin.o and crtend.o..."
-	@OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
+	nasm -f elf32 $< -o $@
 
 $(BUILD_DIR)/kernel/%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 	@echo "Compiling kernel source file $<..."
