@@ -1,49 +1,69 @@
-.set ALIGN,    1<<0             # align loaded modules on page boundaries
-.set MEMINFO,  1<<1             # provide memory map
-.set GFXINFO,  1<<2             # provide video information
+MBOOT_PAGE_ALIGN EQU 1 << 0
+MBOOT_MEM_INFO EQU 1 << 1
+MBOOT_USE_GFX EQU 0
 
-.set FLAGS,    ALIGN | MEMINFO | GFXINFO  # this is the Multiboot 'flag' field
-.set MAGIC,    0x1BADB002       # 'magic number' lets bootloader find the header
-.set CHECKSUM, -(MAGIC + FLAGS) # checksum of above, to prove we are multiboot
+MBOOT_MAGIC EQU 0x1BADB002
+MBOOT_FLAGS EQU MBOOT_PAGE_ALIGN | MBOOT_MEM_INFO | MBOOT_USE_GFX
+MBOOT_CHECKSUM EQU -(MBOOT_MAGIC + MBOOT_FLAGS)
 
-# Declare a header as in the Multiboot Standard.
-.section .multiboot
-.align 4
-.long MAGIC
-.long FLAGS
-.long CHECKSUM
-.long 0, 0, 0, 0, 0
+section .multiboot
+ALIGN 4
+    DD MBOOT_MAGIC
+    DD MBOOT_FLAGS
+    DD MBOOT_CHECKSUM
+    DD 0, 0, 0, 0, 0
 
-# Video Mode Settings
-.long 0
-.long 1024
-.long 768
-.long 32
+    DD 0
+    DD 800
+    DD 600
+    DD 32
 
-# Reserve a stack for the initial thread.
-.section .bss
-.align 16
+SECTION .bss
+ALIGN 16
 stack_bottom:
-.skip 16384 # 16 KiB
+    RESB 16384 * 8
 stack_top:
 
-# The kernel entry point.
-.section .text
-.global _start
-.type _start, @function
+section .boot
+
+global _start
 _start:
-	movl $stack_top, %esp
+    MOV ecx, (initial_page_dir - 0xC0000000)
+    MOV cr3, ecx
 
-	# Call the global constructors.
-	call _init
+    MOV ecx, cr4
+    OR ecx, 0x10
+    MOV cr4, ecx
 
-	# Transfer control to the main kernel.
-	pushl %ebx
-	pushl %eax
-	call kernel_main
+    MOV ecx, cr0
+    OR ecx, 0x80000000
+    MOV cr0, ecx
 
-	# Hang if kernel_main unexpectedly returns.
-	cli
-1:	hlt
-	jmp 1b
-.size _start, . - _start
+    JMP higher_half
+
+section .text
+higher_half:
+    MOV esp, stack_top
+    PUSH ebx
+    PUSH eax
+    XOR ebp, ebp
+    extern kernel_main
+    CALL kernel_main
+
+halt:
+    hlt
+    JMP halt
+
+
+section .data
+align 4096
+global initial_page_dir
+initial_page_dir:
+    DD 10000011b
+    TIMES 768-1 DD 0
+
+    DD (0 << 22) | 10000011b
+    DD (1 << 22) | 10000011b
+    DD (2 << 22) | 10000011b
+    DD (3 << 22) | 10000011b
+    TIMES 256-4 DD 0

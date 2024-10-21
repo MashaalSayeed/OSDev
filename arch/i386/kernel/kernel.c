@@ -4,15 +4,16 @@
 #include "kernel/multiboot.h"
 #include "kernel/memory.h"
 #include "libc/stdio.h"
+#include "libc/memory.h"
 #include "gdt.h"
 #include "isr.h"
 #include "timer.h"
 
-// void test_divide_by_zero() {
-// 	int x = 1;
-// 	int y = 0;
-// 	int z = x / y;
-// }
+void test_divide_by_zero() {
+	int x = 1;
+	int y = 0;
+	int z = x / y;
+}
 
 void kernel_main(uint32_t magic, struct multiboot_info* mbd) 
 {
@@ -24,11 +25,19 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 	terminal_initialize();
 	init_keyboard();
 	init_memory(mbd);
+	printf("\n");
 
-	printf("Hello, kernel World!\n");
-	printf("Magic number: %x\n", magic);
-	printf("%x\n", 0x64);
-	printf("%d\n", 0x64);
+	kmalloc_init(0x1000);
+	void *ptr1 = kmalloc(100);
+	void *ptr2 = kmalloc(100);
+	printf("Allocated memory at %x\n", ptr1);
+	printf("Allocated memory at %x\n", ptr2);
+
+	kfree(ptr1, 100);
+	kfree(ptr2, 100);
+
+	// printf("Multiboot flags: %x\n", mbd->flags);
+	// test_divide_by_zero();
 	// terminal_writestring("Enter input >");
 
 	// init_timer(100);

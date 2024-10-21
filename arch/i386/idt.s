@@ -1,143 +1,139 @@
-.globl idt_flush
-.extern isr_handler
-.extern irq_handler
-
-# Flush the IDT (load the IDT descriptor)
+global idt_flush
 idt_flush:
-    movl 4(%esp), %eax          # Load argument from the stack (IDT descriptor)
-    lidt (%eax)                 # Load IDT descriptor
-    ret                         # Return from function
+    MOV eax, [esp+4]
+    LIDT [eax]
+    STI
+    RET
 
-# Common ISR handler stub
-# This is used for both error and non-error ISRs
+%macro ISR_NOERRCODE 1
+    global isr%1
+    isr%1:
+        CLI
+        PUSH LONG 0
+        PUSH LONG %1
+        JMP isr_common_stub
+%endmacro
+
+%macro ISR_ERRCODE 1
+    global isr%1
+    isr%1:
+        CLI
+        PUSH LONG %1
+        JMP isr_common_stub
+%endmacro
+
+%macro IRQ 2
+    global irq%1
+    irq%1:
+        CLI
+        PUSH LONG 0
+        PUSH LONG %2
+        JMP irq_common_stub
+%endmacro
+
+ISR_NOERRCODE 0
+ISR_NOERRCODE 1
+ISR_NOERRCODE 2
+ISR_NOERRCODE 3
+ISR_NOERRCODE 4
+ISR_NOERRCODE 5
+ISR_NOERRCODE 6
+ISR_NOERRCODE 7
+
+ISR_ERRCODE 8
+ISR_NOERRCODE 9 
+ISR_ERRCODE 10
+ISR_ERRCODE 11
+ISR_ERRCODE 12
+ISR_ERRCODE 13
+ISR_ERRCODE 14
+ISR_NOERRCODE 15
+ISR_NOERRCODE 16
+ISR_NOERRCODE 17
+ISR_NOERRCODE 18
+ISR_NOERRCODE 19
+ISR_NOERRCODE 20
+ISR_NOERRCODE 21
+ISR_NOERRCODE 22
+ISR_NOERRCODE 23
+ISR_NOERRCODE 24
+ISR_NOERRCODE 25
+ISR_NOERRCODE 26
+ISR_NOERRCODE 27
+ISR_NOERRCODE 28
+ISR_NOERRCODE 29
+ISR_NOERRCODE 30
+ISR_NOERRCODE 31
+ISR_NOERRCODE 128
+ISR_NOERRCODE 177
+
+IRQ 0, 32
+IRQ   1,    33
+IRQ   2,    34
+IRQ   3,    35
+IRQ   4,    36
+IRQ   5,    37
+IRQ   6,    38
+IRQ   7,    39
+IRQ   8,    40
+IRQ   9,    41
+IRQ  10,    42
+IRQ  11,    43
+IRQ  12,    44
+IRQ  13,    45
+IRQ  14,    46
+IRQ  15,    47
+
+extern isr_handler
 isr_common_stub:
-    pushal                      # Push all general purpose registers
-    pushl %ds                   # Push data segment register
-    pushl %esp                  # Push current stack pointer (for stack tracing)
+    pusha
+    mov eax,ds
+    PUSH eax
 
-    cld
-    call isr_handler            # Call the common ISR handler (defined in C)
+    MOV ax, 0x10
+    MOV ds, ax
+    MOV es, ax
+    MOV fs, ax
+    MOV gs, ax
 
-    pop %eax
-    popl %ds
-    popal                       # Restore general purpose registers
-    addl $8, %esp               # Adjust stack (remove pushed %esp)
-    sti                         # Re-enable interrupts
-    iret                        # Return from interrupt
+    PUSH esp
+    CALL isr_handler
 
+    ADD esp, 8
+    POP ebx
+    MOV ds, bx
+    MOV es, bx
+    MOV fs, bx
+    MOV gs, bx
+
+    POPA
+    ADD esp, 8
+    STI
+    IRET
+
+extern irq_handler
 irq_common_stub:
-    pushal                      # Push all general-purpose registers
-    mov %ds, %ax
-    pushl %eax
-    mov $0x10, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
-    pushl %esp                  # Push current stack pointer (for stack tracing)
+    pusha
+    mov eax,ds
+    PUSH eax
 
-    cld
-    call irq_handler            # Call the common ISR handler (defined in C)
+    MOV ax, 0x10
+    MOV ds, ax
+    MOV es, ax
+    MOV fs, ax
+    MOV gs, ax
 
-    addl $4, %esp               # Adjust stack (remove pushed %esp)
-    popl %ebx
+    PUSH esp
+    CALL irq_handler
 
-    mov %bx, %ds
-    mov %bx, %es
-    mov %bx, %fs
-    mov %bx, %gs
-    popal                       # Restore general-purpose registers
+    ADD esp, 4
+    POP ebx
+    MOV ds, bx
+    MOV es, bx
+    MOV fs, bx
+    MOV gs, bx
 
-    addl $8, %esp               # Adjust stack (remove pushed int_no & error_code)
-    sti
-    iret                        # Return from interrupt
-
-# Macro for defining ISRs without error codes
-.macro isr_no_error num
-.section .text
-.global isr\num
-isr\num:
-    cli                         # Disable interrupts
-    pushl $0                    # Push a dummy error code (0) for non-error ISRs
-    pushl $\num                 # Push the ISR number
-    jmp isr_common_stub          # Jump to the common ISR handler stub
-.endm
-
-# Macro for defining ISRs with error codes
-.macro isr_error num
-.section .text
-.global isr\num
-isr\num:
-    cli                         # Disable interrupts
-    pushl $\num                 # Push the ISR number
-    jmp isr_common_stub          # Jump to the common ISR handler stub (error code is already pushed by the CPU)
-.endm
-
-.macro irq_macro num irq_num
-.section .text
-.global irq\num
-irq\num:
-    cli                          # Disable interrupts
-    pushl $\num                     # Push a dummy error code (0) for IRQs
-    pushl $\irq_num              # Push the IRQ number
-    jmp irq_common_stub          # Jump to the common ISR handler stub
-.endm
-
-
-# Define the ISRs (0-31)
-# ISRs with error codes (exceptions 8, 10-14)
-isr_error 8
-isr_error 10
-isr_error 11
-isr_error 12
-isr_error 13
-isr_error 14
-
-# ISRs without error codes (exceptions 0-7, 9, 15-31)
-isr_no_error 0
-isr_no_error 1
-isr_no_error 2
-isr_no_error 3
-isr_no_error 4
-isr_no_error 5
-isr_no_error 6
-isr_no_error 7
-isr_no_error 9
-isr_no_error 15
-isr_no_error 16
-isr_no_error 17
-isr_no_error 18
-isr_no_error 19
-isr_no_error 20
-isr_no_error 21
-isr_no_error 22
-isr_no_error 23
-isr_no_error 24
-isr_no_error 25
-isr_no_error 26
-isr_no_error 27
-isr_no_error 28
-isr_no_error 29
-isr_no_error 30
-isr_no_error 31
-
-isr_no_error 128
-isr_no_error 177
-
-irq_macro 0, 32
-irq_macro 1, 33
-irq_macro 2, 34
-irq_macro 3, 35
-irq_macro 4, 36
-irq_macro 5, 37
-irq_macro 6, 38
-irq_macro 7, 39
-irq_macro 8, 40
-irq_macro 9, 41
-irq_macro 10, 42
-irq_macro 11, 43
-irq_macro 12, 44
-irq_macro 13, 45
-irq_macro 14, 46
-irq_macro 15, 47
-
+    POPA
+    ADD esp, 8
+    STI
+    IRET
