@@ -36,10 +36,18 @@ void change_heap_size(uint32_t new_heap_size) {
 void* kmalloc(uint32_t size) {
     size = (size + 3) & ~3; // Align to 4 bytes
     if (size + sizeof(uint32_t) > heap_size - threshold) {
-        // Not enough space; you might want to handle this differently
+        // Request for more memory
         return 0;
     }
-    return 0;
+
+    // Allocate memory
+    uint32_t *ptr = (uint32_t*)(heap_start + threshold);
+    threshold += size;
+    return ptr;
+}
+
+void kfree(void *ptr, uint32_t size) {
+
 }
 
 void memset(void *dest, char val, uint32_t count){

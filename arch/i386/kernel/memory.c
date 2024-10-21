@@ -17,31 +17,57 @@ uint8_t physical_memory_bitmap[NUM_PAGE_FRAMES / 8];
 static uint32_t page_directory[NUM_PAGE_DIRS][1024] __attribute__((aligned(4096)));
 static uint32_t page_directory_used[NUM_PAGE_DIRS];
 
-void pmm_init(uint32_t mem_lower, uint32_t mem_upper) {
-    printf("Memory Lower: %x\n", mem_lower);
-    printf("Memory Upper: %x\n", mem_upper);
+void mark_memory_region(uint32_t addr, uint32_t length, int available) {
+    // Convert address to page index
+    printf("Marking memory region: %x - %x as Available? : %d\n", addr, addr + length, available);
+    uint32_t start_page = addr / PAGE_SIZE;
+    uint32_t num_pages = length / PAGE_SIZE;
 
-    page_frame_min = CEIL_DIV(mem_lower, PAGE_SIZE);
-    page_frame_max = mem_upper / PAGE_SIZE;
+    for (uint32_t i = 0; i < num_pages; i++) {
+        uint32_t page_index = start_page + i;
+
+        if (available) {
+            physical_memory_bitmap[page_index / 8] &= ~(1 << (page_index % 8));
+        } else {
+            physical_memory_bitmap[page_index / 8] |= (1 << (page_index % 8));
+        }
+    }
+}
+
+void init_pmm() {
+    page_frame_min = 0;
+    page_frame_max = NUM_PAGE_FRAMES;
     totalAlloc = 0;
+    mem_num_vpages = 0;
 
-    memset(physical_memory_bitmap, 0, sizeof(physical_memory_bitmap));
+    memset(physical_memory_bitmap, 0xFF, sizeof(physical_memory_bitmap));
 }
 
 void init_memory(struct multiboot_info *mbd) {
-    uint32_t mods_addr = *(uint32_t *)(mbd->mods_addr + 4);
-    uint32_t phys_alloc_start = (mods_addr + 0xFFF) & ~0xFFF;
-    uint32_t phys_alloc_end = mbd->mem_upper * 1024;
+    // uint32_t mods_addr = *(uint32_t *)(mbd->mods_addr + 4);
+    // uint32_t phys_alloc_start = (mods_addr + 0xFFF) & ~0xFFF;
+    // uint32_t phys_alloc_end = mbd->mem_upper * 1024;
+
+    // memset(page_directory, 0, sizeof(page_directory));
+    // memset(page_directory_used, 0, sizeof(page_directory_used));
+
+    if (mbd->flags & MULTIBOOT_INFO_MEMORY) {
+        struct multiboot_mmap_entry *entry = (struct multiboot_mmap_entry*) mbd->mmap_addr;
+        while ((uint32_t)entry < mbd->mmap_addr + mbd->mmap_length) {
+            mark_memory_region(entry->addr_low, entry->addr_low + entry->len_low, entry->type == 1);
+
+            entry = (struct multiboot_mmap_entry*) ((uint32_t)entry + entry->size);
+        }
+    }
+
+    init_pmm();
 
     initial_page_dir[0] = 0;
     invalidate_page(0); // Invalidate the first page
 
+    // Make the last page point to the page directory
     initial_page_dir[1023] = (uint32_t)(initial_page_dir - KERNEL_START) | PAGE_FLAG_PRESENT | PAGE_FLAG_RW;
     invalidate_page(0xFFFFF000); // Invalidate the last page
-
-    pmm_init(phys_alloc_start, phys_alloc_end);
-    memset(page_directory, 0, sizeof(page_directory));
-    memset(page_directory_used, 0, sizeof(page_directory_used));
 
     register_interrupt_handler(14, page_fault_handler);
 }

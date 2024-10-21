@@ -28,8 +28,13 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 	printf("\n");
 
 	kmalloc_init(0x1000);
-	void *ptr = kmalloc(0x1000);
-	printf("Allocated memory at %x\n", ptr);
+	void *ptr1 = kmalloc(100);
+	void *ptr2 = kmalloc(100);
+	printf("Allocated memory at %x\n", ptr1);
+	printf("Allocated memory at %x\n", ptr2);
+
+	kfree(ptr1, 100);
+	kfree(ptr2, 100);
 
 	// printf("Multiboot flags: %x\n", mbd->flags);
 	// test_divide_by_zero();

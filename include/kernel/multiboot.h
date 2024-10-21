@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define MULTIBOOT_INFO_MEMORY 0x00000001
+
 struct multiboot_aout_symbol_table
 {
   uint32_t tabsize;
