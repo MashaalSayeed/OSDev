@@ -1,4 +1,4 @@
-#include "gdt.h"
+#include "kernel/gdt.h"
 
 extern void gdt_flush(void* addr);
 

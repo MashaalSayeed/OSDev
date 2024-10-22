@@ -1,4 +1,4 @@
-#include "isr.h"
+#include "kernel/isr.h"
 #include "io.h"
 #include "drivers/tty.h"
 #include "drivers/serial.h"

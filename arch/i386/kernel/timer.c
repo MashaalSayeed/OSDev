@@ -1,4 +1,4 @@
-#include "timer.h"
+#include "kernel/timer.h"
 #include "drivers/tty.h"
 #include "io.h"
 

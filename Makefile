@@ -8,7 +8,7 @@ GDB=$(TARGET)-gdb
 PWD=${shell pwd}
 
 # Compiler and linker flags
-CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I${PWD}/include 
+CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I${PWD}/include -std=gnu99
 CFLAGS+=-g # Enable debugging
 LDFLAGS=-nostdlib -T arch/$(ARCH)/linker.ld
 
@@ -24,7 +24,7 @@ LIBC_DIR=libc
 
 # Source files
 BOOT_SRC=$(wildcard $(ARCH_DIR)/*.s)
-KERNEL_SRC=$(wildcard $(KERNEL_DIR)/*.c)
+KERNEL_SRC=$(shell find $(KERNEL_DIR) -name "*.c")
 DRIVER_SRC=$(wildcard $(DRIVERS_DIR)/*.c)
 LIBC_SRC=$(wildcard $(LIBC_DIR)/*.c)
 
@@ -39,7 +39,8 @@ OBJS=$(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ)
 all: $(KERNEL_BIN)
 
 $(BUILD_DIR):
-	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc
+	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc \
+	         $(BUILD_DIR)/kernel/memory $(BUILD_DIR)/kernel/descriptors
 
 $(DRIVER_OBJ):
 	make -C drivers/$(ARCH) ARCH=$(ARCH) CFLAGS="$(CFLAGS)" CC=${CC}

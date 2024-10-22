@@ -2,7 +2,7 @@
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "libc/string.h"
-#include "isr.h"
+#include "kernel/isr.h"
 #include "io.h"
 
 const uint32_t UNKNOWN = 0xFFFFFFFF;

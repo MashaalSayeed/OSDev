@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+void memset(void *dest, char val, uint32_t count);
+
 size_t strlen(const char *s);
 char *strcpy(char *dest, const char *src);
 int strcmp(const char *s1, const char *s2);
