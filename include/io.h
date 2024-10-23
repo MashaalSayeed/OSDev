@@ -2,8 +2,6 @@
 
 #include <stdint.h>
 
-#define UNUSED(x) (void)(x)
-
 static inline void outb(uint16_t port, uint8_t value) {
     // __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
     asm volatile ("outb %1, %0" : : "dN"(port), "a"(value));

@@ -1,6 +1,7 @@
 #include "kernel/timer.h"
 #include "drivers/tty.h"
 #include "io.h"
+#include "system.h"
 
 uint32_t tick = 0;
 uint32_t timer_freq = 100;

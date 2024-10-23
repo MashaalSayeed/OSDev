@@ -8,3 +8,4 @@ notes/
 *.log
 *.elf
 *.hex
+*.out

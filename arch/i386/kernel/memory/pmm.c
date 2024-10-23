@@ -16,7 +16,7 @@ void pmm_init(struct multiboot_info *mbd, uint32_t mem_size) {
     memset(bitmap, 0, bitmap_size);
     
     mem_start = (uint8_t*)BLOCK_ALIGN((uint32_t) bitmap + bitmap_size);
-    print_memory_map(mbd);
+    // print_memory_map(mbd);
     // printf("mem size:     %d mb\n", mem_size / (1024 * 1024));
     // printf("total_blocks: %d\n", total_blocks);
     // printf("bitmap addr:  %x\n", bitmap);

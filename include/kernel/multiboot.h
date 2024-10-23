@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 #define MULTIBOOT_INFO_MEMORY 0x00000001
 
 struct multiboot_aout_symbol_table

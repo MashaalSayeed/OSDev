@@ -1,13 +1,26 @@
-#include "kernel/kheap.h"
-#include "libc/stdio.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 
-uint8_t *kheap_start;
-uint8_t *kheap_end;
-uint8_t *kheap_curr;
+typedef struct kheap_block {
+    size_t size;
+    struct kheap_block *next;
+} kheap_block_t;
 
-static kheap_block_t *free_list;
+uint8_t temp_heap[0x1000];
 
-void * kmalloc(size_t size) {
+uint8_t * kheap_start;
+uint8_t * kheap_end;
+uint8_t * kheap_curr;
+#define KHEAP_ALIGNMENT 8
+
+static inline uint32_t align(uint32_t size) {
+    return (size + (KHEAP_ALIGNMENT - 1)) & ~(KHEAP_ALIGNMENT - 1);
+}
+
+static kheap_block_t * free_list;
+
+void * kmalloc (size_t size) {
     size = align(size);
     kheap_block_t *cur_block = free_list;
     kheap_block_t *prev_block = NULL;
@@ -48,7 +61,7 @@ void * kmalloc(size_t size) {
     return NULL;
 }
 
-void kfree(void *ptr) {
+void kfree (void * ptr) {
     if (!ptr) return;
 
     kheap_block_t *block = (kheap_block_t *)(ptr - sizeof(kheap_block_t));
@@ -69,21 +82,29 @@ void kfree(void *ptr) {
     }
 }
 
-void print_kheap() {
-    kheap_block_t *cur_block = free_list;
-    while (cur_block) {
-        printf("Free Blocks: %x, Size: %x\n", cur_block, cur_block->size);
-        cur_block = cur_block->next;
-    }
+void print_kheap () {
+    return;
 }
 
-void kheap_init() {
-    // Allocate 48MB of memory for the kernel heap
-    kheap_start = (uint8_t *)KHEAP_START;
-    kheap_end = kheap_start + KHEAP_INITIAL_SIZE;
+void kheap_init () {
+    kheap_start = temp_heap;
+    kheap_end = temp_heap + sizeof(temp_heap);
     kheap_curr = kheap_start;
 
-    free_list = (kheap_block_t *)kheap_start;
-    free_list->size = KHEAP_INITIAL_SIZE - sizeof(kheap_block_t);
+    free_list = (kheap_block_t *) kheap_start;
+    free_list->size = sizeof(temp_heap) - sizeof(kheap_block_t);
     free_list->next = NULL;
+}
+
+void main() {
+    kheap_init();
+    uint8_t * ptr1 = kmalloc(0x20);
+    uint8_t * ptr2 = kmalloc(0x20);
+
+    printf("Allocated memory at %x\n", ptr1);
+    printf("Allocated memory at %x\n", ptr2);
+
+    kfree(ptr1);
+    printf("Freed memory at %x\n", ptr1);
+    return;
 }

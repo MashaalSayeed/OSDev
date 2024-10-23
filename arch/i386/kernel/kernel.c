@@ -4,16 +4,37 @@
 #include "kernel/multiboot.h"
 #include "kernel/pmm.h"
 #include "kernel/paging.h"
-#include "libc/stdio.h"
+#include "kernel/kheap.h"
 #include "kernel/gdt.h"
 #include "kernel/isr.h"
 #include "kernel/timer.h"
+#include "libc/stdio.h"
+#include "system.h"
 
-// void test_divide_by_zero() {
-// 	int x = 1;
-// 	int y = 0;
-// 	int z = x / y;
-// }
+void test_divide_by_zero() {
+	int x = 1;
+	int y = 0;
+	int z = x / y;
+	UNUSED(z);
+}
+
+void test_heap() {
+	uint8_t* ptr1 = (uint8_t *)kmalloc(0x20);
+	uint8_t* ptr2 = (uint8_t *)kmalloc(0x20);
+
+	printf("Allocated memory at %x\n", ptr1);
+	printf("Allocated memory at %x\n", ptr2);
+
+	kfree(ptr2);
+	printf("Freed memory at %x\n", ptr2);
+
+	ptr2 = kmalloc(0x20);
+	printf("Allocated memory at %x\n\n", ptr2);
+
+	print_kheap();
+	kfree(ptr1);
+	kfree(ptr2);
+}
 
 void kernel_main(uint32_t magic, struct multiboot_info* mbd) 
 {
@@ -25,25 +46,21 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 	terminal_initialize();
 	init_keyboard();
 
+	if (magic != MULTIBOOT_BOOTLOADER_MAGIC) {
+		printf("Invalid magic number: 0x%x\n", magic);
+		return;
+	}
+
 	// Allocate 1096MB of memory
 	pmm_init(mbd, 1096 * 0x100000);
 	paging_init();
-
-
-	// init_memory(mbd);
-	printf("\n");
-
-	// void *ptr1 = kmalloc(100);
-	// void *ptr2 = kmalloc(100);
-	// printf("Allocated memory at %x\n", ptr1);
-	// printf("Allocated memory at %x\n", ptr2);
-
-
-	// printf("Multiboot flags: %x\n", mbd->flags);
-	// test_divide_by_zero();
-	// terminal_writestring("Enter input >");
+	kheap_init();
+	
+	
+	printf("Initialized Paging\n\n");
 
 	// init_timer(100);
+	// test_divide_by_zero();
 
 	log_to_serial("Hello, serial World!\n");
 

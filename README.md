@@ -15,10 +15,10 @@
 
 ### 2. Memory Management
 
-1. Paging Setup ✅
-2. Physical Memory Manager
-3. kmalloc()
-4. Virtual Memory Manager
+1. Physical Memory Manager ✅
+2. Virtual Memory Manager
+3. Paging Setup ✅
+4. Heap Allocation
 
 ### 3. Drivers
 
