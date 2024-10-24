@@ -4,6 +4,8 @@
 #include <stdint.h>
 
 void memset(void *dest, char val, uint32_t count);
+void memcpy(void *dest, const void *src, uint32_t count);
+uint8_t memcmp(void *dest, const void *src, uint32_t count);
 
 size_t strlen(const char *s);
 char *strcpy(char *dest, const char *src);

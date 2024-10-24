@@ -33,8 +33,10 @@
 
 1. libc ✅
 2. Basic printf ✅
-3. Exception Handling
-4. Kernel Panics
+3. ACPI ✅
+4. APIC
+5. Exception Handling
+6. Kernel Panics
 
 
 ## Resources

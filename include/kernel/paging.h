@@ -50,5 +50,7 @@ void switch_page_directory(page_directory_t *dir, uint32_t phys);
 void enable_paging();
 void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags);
 void free_page(page_directory_t *dir, uint32_t virtual);
+void * physical2virtual(page_directory_t *dir, void *physical);
 void * virtual2physical(page_directory_t *dir, void *virtual);
+void map_physical_to_virtual(uint32_t virtual, uint32_t physical);
 void page_fault_handler(registers_t *regs);

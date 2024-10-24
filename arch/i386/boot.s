@@ -37,6 +37,8 @@ initial_page_dir:
 
     DD (0 << 22) | 10000011b          ; Create PDEs for higher half kernel
     DD (1 << 22) | 10000011b
+    DD (2 << 22) | 10000011b
+    DD (3 << 22) | 10000011b
     TIMES (1024 - PDE_INDEX - 1) DD 0 ; Zero out the rest of the PDEs (Unused)
 
 

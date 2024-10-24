@@ -7,6 +7,25 @@ void memset(void *dest, char val, uint32_t count){
     }
 }
 
+void memcpy(void *dest, const void *src, uint32_t count){
+    char *dest8 = (char*) dest;
+    const char *src8 = (const char*) src;
+    for (; count != 0; count --){
+        *dest8++ = *src8++;
+    }
+}
+
+uint8_t memcmp(void *dest, const void *src, uint32_t count){
+    char *dest8 = (char*) dest;
+    const char *src8 = (const char*) src;
+    for (; count != 0; count --){
+        if (*dest8++ != *src8++){
+            return 1;
+        }
+    }
+    return 0;
+}
+
 size_t strlen(const char *s) {
     size_t i = 0;
     for(; *s; i++) {

@@ -8,6 +8,7 @@
 #include "kernel/gdt.h"
 #include "kernel/isr.h"
 #include "kernel/timer.h"
+#include "kernel/acpi.h"
 #include "libc/stdio.h"
 #include "system.h"
 
@@ -44,20 +45,24 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 
 	init_serial();
 	terminal_initialize();
-	init_keyboard();
-
 	if (magic != MULTIBOOT_BOOTLOADER_MAGIC) {
 		printf("Invalid magic number: 0x%x\n", magic);
 		return;
 	}
 
+
+	init_keyboard();
+
 	// Allocate 1096MB of memory
 	pmm_init(mbd, 1096 * 0x100000);
 	paging_init();
 	kheap_init();
-	
-	
 	printf("Initialized Paging\n\n");
+	
+	acpi_init();
+	
+
+	// find_rsdt();
 
 	// init_timer(100);
 	// test_divide_by_zero();
