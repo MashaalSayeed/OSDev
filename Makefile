@@ -36,7 +36,7 @@ ASM_OBJ=$(BOOT_SRC:$(ARCH_DIR)/%.s=$(BUILD_DIR)/%.o)
 OBJS=$(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ)
 
 # Build rules
-all: $(KERNEL_BIN)
+all: $(ISO_IMAGE)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc \
@@ -61,17 +61,24 @@ $(KERNEL_BIN): $(OBJS) $(ARCH_DIR)/linker.ld
 	@echo "Linking kernel..."
 	$(LD) $(LDFLAGS) -o $(KERNEL_BIN) $(OBJS)
 
-run: $(KERNEL_BIN)
-	qemu-system-$(ARCH) -kernel $(KERNEL_BIN)  -serial file:serial_output.log
+$(ISO_IMAGE): $(KERNEL_BIN)
+	rm $(ISO_IMAGE) || true
+	mkdir -p iso/boot/grub
+	cp $(KERNEL_BIN) iso/boot/zineos.bin
+	grub-mkrescue -o $(ISO_IMAGE) iso
 
-debug: $(KERNEL_BIN)
-	qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -s -S &
+run: $(ISO_IMAGE)
+# qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -serial file:serial_output.log -vga std
+	qemu-system-$(ARCH) $(ISO_IMAGE) -serial file:serial_output.log
+
+debug: $(ISO_IMAGE)
+# qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -s -S &
+	qemu-system-$(ARCH) $(ISO_IMAGE) -s -S &
 	sleep 1
 	$(GDB) -ex "target remote localhost:1234" -ex "symbol-file $(KERNEL_BIN)"
 
 clean:
-	rm -rf $(BUILD_DIR) $(KERNEL_BIN) $(ISO_IMAGE)
-	rm -rf iso/boot
+	rm -rf $(BUILD_DIR) $(KERNEL_BIN) $(ISO_IMAGE) iso/boot/zineos.bin
 
 help:
 	@echo "Available targets:"

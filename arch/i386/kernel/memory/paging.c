@@ -5,6 +5,7 @@
 #include "libc/stdio.h"
 #include "libc/string.h"
 #include "system.h"
+#include "drivers/serial.h"
 
 
 uint8_t * temp_mem;
@@ -194,6 +195,8 @@ void paging_init() {
 void page_fault_handler(registers_t *regs) {
     uint32_t faulting_address;
     asm volatile("mov %%cr2, %0" : "=r" (faulting_address));
+
+    log_to_serial("Page fault\n");
 
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);

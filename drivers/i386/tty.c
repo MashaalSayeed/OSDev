@@ -1,6 +1,7 @@
 #include "drivers/tty.h"
 #include "libc/string.h"
 #include "io.h"
+#include "drivers/serial.h"
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
@@ -59,6 +60,7 @@ void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
 
 void terminal_putchar(char c) 
 {
+    serial_write(c);
     switch (c)
     {
     case '\n':

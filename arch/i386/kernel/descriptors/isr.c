@@ -3,6 +3,7 @@
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "libc/string.h"
+#include "libc/stdio.h"
 
 static idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -138,13 +139,11 @@ void isr_handler(registers_t *r) {
 
     if (r->int_no < 32) {
         // Handle exception
-        terminal_writestring("System Exception: ");
-        terminal_writestring(exception_messages[r->int_no]);
-        terminal_putchar('\n');
+        log_to_serial("Exception: \n");
+        printf("System Exception: %s\n", exception_messages[r->int_no]);
 
         for (;;) {} // Halt
     }
-    // terminal_write((char*)&r->int_no, 4);
 }
 
 void irq_handler(registers_t *r) {
