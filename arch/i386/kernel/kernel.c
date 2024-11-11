@@ -39,12 +39,6 @@ void test_heap() {
 	kfree(ptr2);
 }
 
-void draw_pixel(uint32_t x, uint32_t y, uint32_t color, struct multiboot_info* mbd) {
-    uint32_t* framebuffer = (uint32_t*)mbd->framebuffer_addr;
-    uint32_t pitch = mbd->framebuffer_pitch / 4; // pitch in pixels
-    framebuffer[y * pitch + x] = color;
-}
-
 
 void kernel_main(uint32_t magic, struct multiboot_info* mbd) 
 {
@@ -56,7 +50,8 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 	log_to_serial("Initialized Serial\n");
 
 	terminal_initialize();
-	printf("Hello World\n");
+	printf("Initialized Terminal\n\n");
+	printf("Bootloader Name: %s\n", mbd->boot_loader_name);
 
 	if (magic != MULTIBOOT_BOOTLOADER_MAGIC) {
 		printf("Invalid magic number: 0x%x\n", magic);
@@ -65,8 +60,9 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 
 	if (!(mbd->flags & MULTIBOOT_INFO_FRAMEBUFFER_INFO)) {
 		printf("No framebuffer available\n");
-		log_to_serial("No framebuffer available\n");
 		return;
+	} else {
+		printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",  mbd->framebuffer_pitch, mbd->framebuffer_width, mbd->framebuffer_height, mbd->framebuffer_bpp);
 	}
 
 	init_keyboard();
@@ -81,25 +77,27 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 	kheap_init();
 	printf("Initialized Paging\n\n");
 	
-	acpi_init();
+	// acpi_init();
 
 	log_to_serial("Hello, Serial World 1!\n");
 
-	uint32_t red = 0xFF0000; // Assuming 32-bit color depth (ARGB)
 
 	printf("Multiboot Descriptor: %x\n", mbd);
-	map_physical_to_virtual(mbd + 0xC0000000, mbd);
-
-	mbd += 0xC0000000;
+	map_physical_to_virtual((uint32_t)(mbd + LOAD_MEMORY_ADDRESS), (uint32_t) mbd);
+	mbd += LOAD_MEMORY_ADDRESS;
 
 	printf("Multiboot Descriptor: %x\n", mbd);
 	printf("Multiboot Framebuffer Address: %x\n", mbd->framebuffer_addr);
-    // draw_pixel(10, 10, red, mbd);
+
+	map_physical_to_virtual(mbd->framebuffer_addr + LOAD_MEMORY_ADDRESS, mbd->framebuffer_addr);
+	mbd->framebuffer_addr += LOAD_MEMORY_ADDRESS;
+
 
 	// find_rsdt();
 
 	// init_timer(100);
 	// test_divide_by_zero();
+
 
 	log_to_serial("Hello, Serial World 2!\n");
 

@@ -69,7 +69,7 @@ $(ISO_IMAGE): $(KERNEL_BIN)
 
 run: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -serial file:serial_output.log -vga std
-	qemu-system-$(ARCH) $(ISO_IMAGE) -serial file:serial_output.log
+	qemu-system-$(ARCH) -cdrom $(ISO_IMAGE) -serial file:serial_output.log -vga std
 
 debug: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -s -S &

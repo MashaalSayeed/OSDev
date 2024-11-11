@@ -16,7 +16,7 @@ extern uint32_t bitmap_size;
 
 int paging_enabled = 0;
 
-uint32_t dumb_kmalloc(uint32_t size, uint32_t align) {
+void * dumb_kmalloc(uint32_t size, uint32_t align) {
     void *ret = temp_mem;
     if (align && !IS_ALIGN(ret)) {
         ret = (void*) PAGE_ALIGN(ret);
@@ -97,8 +97,8 @@ void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags) {
     if (!pt->pages[pt_index].present) {
         uint32_t frame = allocate_block();
         pt->pages[pt_index].present = 1;
-        pt->pages[pt_index].rw = 1;
-        pt->pages[pt_index].user = 1;
+        pt->pages[pt_index].rw = (flags & 0x2) ? 1 : 0;
+        pt->pages[pt_index].user = (flags & 0x4) ? 1 : 0;
         pt->pages[pt_index].frame = frame;
     }
 }

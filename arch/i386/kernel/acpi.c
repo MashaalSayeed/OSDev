@@ -46,7 +46,7 @@ void find_rsdt() {
     }
 
     acpi_table_header_t* rsdt_virt = 0xC0000000 + rsdt;
-    map_physical_to_virtual(rsdt_virt, rsdt);
+    map_physical_to_virtual((uint32_t) rsdt_virt, (uint32_t) rsdt);
     uint32_t num_entries = (rsdt_virt->length - sizeof(acpi_table_header_t)) / sizeof(uint32_t);
 
     printf("RSDT found at %x\n", rsdt_virt);

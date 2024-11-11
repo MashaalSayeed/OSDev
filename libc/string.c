@@ -114,3 +114,24 @@ void hex_to_ascii(uint32_t num, char* buffer) {
 
     reverse(ptr1 + 2);
 }
+
+void bin_to_ascii(uint32_t num, char* buffer) {
+    char *ptr = buffer;
+    char *ptr1 = buffer; // Pointer to the start of the string
+
+    if (num == 0) {
+        *ptr++ = '0';
+        *ptr = '\0';
+        return;
+    }
+
+    int temp;
+    while (num != 0) {
+        temp = num % 2;
+        num /= 2;
+        *ptr++ = temp + '0';
+    }
+    *ptr = '\0';
+
+    reverse(ptr1);
+}

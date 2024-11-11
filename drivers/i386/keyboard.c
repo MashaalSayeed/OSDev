@@ -4,6 +4,7 @@
 #include "libc/string.h"
 #include "kernel/isr.h"
 #include "io.h"
+#include "system.h"
 
 const uint32_t UNKNOWN = 0xFFFFFFFF;
 const uint32_t ESC = 0xFFFFFFFF - 1;
@@ -68,7 +69,7 @@ int shift_on;
 int caps_lock;
 
 void keyboard_callback(registers_t *regs) {
-    char scancode = inb(0x60) & 0x7F;
+    unsigned char scancode = inb(0x60) & 0x7F;
     char press = inb(0x60) & 0x80;
 
     // char s[3];
@@ -120,6 +121,8 @@ void keyboard_callback(registers_t *regs) {
             }
             break;
     }
+
+    UNUSED(regs);
 }
 
 void init_keyboard() {
