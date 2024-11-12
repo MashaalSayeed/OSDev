@@ -13,6 +13,8 @@
 #include "libc/stdio.h"
 #include "system.h"
 
+#include "image.h"
+
 extern page_directory_t *kpage_dir;
 
 void test_divide_by_zero() {
@@ -39,6 +41,7 @@ void test_heap() {
 	kfree(ptr1);
 	kfree(ptr2);
 }
+
 
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
@@ -99,6 +102,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	init_framebuffer(fb.framebuffer_width, fb.framebuffer_height, fb.framebuffer_pitch, fb.framebuffer_bpp, fb.framebuffer_addr);
 	fill_screen(0x000FFFF0);
+	draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
 
 	// printf("Multiboot Framebuffer Address: %x\n", fb.framebuffer_addr);
 

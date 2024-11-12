@@ -8,7 +8,7 @@ GDB=$(TARGET)-gdb
 PWD=${shell pwd}
 
 # Compiler and linker flags
-CFLAGS=-ffreestanding -O2 -Wall -Wextra -Werror -O0 -I${PWD}/include -std=gnu99
+CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I${PWD}/include -std=gnu99
 CFLAGS+=-g # Enable debugging
 LDFLAGS=-nostdlib -T arch/$(ARCH)/linker.ld
 

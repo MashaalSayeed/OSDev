@@ -22,3 +22,12 @@ void fill_screen(uint32_t color) {
         }
     }
 }
+
+void draw_image(uint32_t *image_data, uint32_t x, uint32_t y, uint32_t image_width, uint32_t image_height) {
+    for (uint32_t row = 0; row < image_height; row++) {
+        for (uint32_t col = 0; col < image_width; col++) {
+            uint32_t pixel_color = image_data[row * image_width + col];
+            put_pixel(x + col, y + row, pixel_color);
+        }
+    }
+}
