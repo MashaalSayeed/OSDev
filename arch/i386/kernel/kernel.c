@@ -9,6 +9,7 @@
 #include "kernel/isr.h"
 #include "kernel/timer.h"
 #include "kernel/acpi.h"
+#include "kernel/framebuffer.h"
 #include "libc/stdio.h"
 #include "system.h"
 
@@ -39,8 +40,7 @@ void test_heap() {
 	kfree(ptr2);
 }
 
-
-void kernel_main(uint32_t magic, struct multiboot_info* mbd) 
+void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
 	gdt_install();
 	isr_install();
@@ -51,19 +51,32 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 
 	terminal_initialize();
 	printf("Initialized Terminal\n\n");
-	printf("Bootloader Name: %s\n", mbd->boot_loader_name);
 
-	if (magic != MULTIBOOT_BOOTLOADER_MAGIC) {
-		printf("Invalid magic number: 0x%x\n", magic);
-		return;
-	}
+    if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
+        printf("Invalid magic number: %x\n", magic);
+        return;
+    }
 
-	if (!(mbd->flags & MULTIBOOT_INFO_FRAMEBUFFER_INFO)) {
-		printf("No framebuffer available\n");
-		return;
-	} else {
-		printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",  mbd->framebuffer_pitch, mbd->framebuffer_width, mbd->framebuffer_height, mbd->framebuffer_bpp);
-	}
+	struct multiboot_tag* tag = mbd;
+	struct multiboot_tag_framebuffer fb;
+	mbd->size = sizeof(struct multiboot_tag); // idk why this is needed
+
+    for (; tag->type != MULTIBOOT_TAG_TYPE_END; 
+         tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7))) 
+    {
+        if (tag->type == MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME) {
+            struct multiboot_tag_string* boot_loader_name = (struct multiboot_tag_string*) tag;
+            printf("Bootloader Name: %s\n", boot_loader_name->string);
+        }
+        else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
+			struct multiboot_tag_framebuffer *fb_tag = (struct multiboot_tag_framebuffer*) tag;
+            printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",
+                   fb_tag->framebuffer_pitch, fb_tag->framebuffer_width,
+                   fb_tag->framebuffer_height, fb_tag->framebuffer_bpp);
+			printf("Framebuffer address: %x\n", fb_tag->framebuffer_addr);
+			fb = *fb_tag;
+        }
+    }
 
 	init_keyboard();
 
@@ -81,17 +94,13 @@ void kernel_main(uint32_t magic, struct multiboot_info* mbd)
 
 	log_to_serial("Hello, Serial World 1!\n");
 
+	printf("Multiboot Framebuffer Address: %x\n", fb.framebuffer_addr);
+	map_physical_to_virtual_region(fb.framebuffer_addr, fb.framebuffer_addr, fb.framebuffer_pitch * fb.framebuffer_height);
 
-	printf("Multiboot Descriptor: %x\n", mbd);
-	map_physical_to_virtual((uint32_t)(mbd + LOAD_MEMORY_ADDRESS), (uint32_t) mbd);
-	mbd += LOAD_MEMORY_ADDRESS;
+	init_framebuffer(fb.framebuffer_width, fb.framebuffer_height, fb.framebuffer_pitch, fb.framebuffer_bpp, fb.framebuffer_addr);
+	fill_screen(0x000FFFF0);
 
-	printf("Multiboot Descriptor: %x\n", mbd);
-	printf("Multiboot Framebuffer Address: %x\n", mbd->framebuffer_addr);
-
-	map_physical_to_virtual(mbd->framebuffer_addr + LOAD_MEMORY_ADDRESS, mbd->framebuffer_addr);
-	mbd->framebuffer_addr += LOAD_MEMORY_ADDRESS;
-
+	// printf("Multiboot Framebuffer Address: %x\n", fb.framebuffer_addr);
 
 	// find_rsdt();
 

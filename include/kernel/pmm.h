@@ -17,7 +17,7 @@
 
 extern const uint32_t _kernel_end;
 
-void pmm_init(struct multiboot_info *mbd, uint32_t mem_size);
+void pmm_init(struct multiboot_tag *mbd, uint32_t mem_size);
 uint32_t allocate_block();
 uint32_t first_free_block();
 void free_block(uint32_t block);

@@ -13,7 +13,7 @@ uint32_t bitmap_size;
 bool out_of_memory = false;
 
 
-void pmm_init(struct multiboot_info *mbd, uint32_t mem_size) {
+void pmm_init(struct multiboot_tag *mbd, uint32_t mem_size) {
     total_blocks = mem_size / BLOCK_SIZE;
     bitmap_size = CEILDIV(total_blocks, BLOCKS_PER_BUCKET);
 
@@ -56,10 +56,10 @@ void free_block(uint32_t block) {
     CLEARBIT(block);
 }
 
-void print_memory_map(struct multiboot_info *mbd) {
-    for (uint32_t i=0; i < mbd->mmap_length; i += sizeof(struct multiboot_mmap_entry)) {
-        struct multiboot_mmap_entry *entry = (struct multiboot_mmap_entry*) (mbd->mmap_addr + i);
-        printf("Low Addr: %x | High Addr: %x | Low Len: %x | High Len: %x | Size: %d | Type: %d\n", 
-            entry->addr_low, entry->addr_high, entry->len_low, entry->len_high, entry->size, entry->type);
-    }
+void print_memory_map(struct multiboot_tag *mbd) {
+    // for (uint32_t i=0; i < mbd->mmap_length; i += sizeof(struct multiboot_mmap_entry)) {
+    //     struct multiboot_mmap_entry *entry = (struct multiboot_mmap_entry*) (mbd->mmap_addr + i);
+    //     printf("Low Addr: %x | High Addr: %x | Low Len: %x | High Len: %x | Size: %d | Type: %d\n", 
+    //         entry->addr_low, entry->addr_high, entry->len_low, entry->len_high, entry->size, entry->type);
+    // }
 }

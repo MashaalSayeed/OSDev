@@ -12,23 +12,23 @@
 4. Setup IDT ✅
 5. Timer ✅
 6. Higher Half Kernel ✅
-7. Generate Bootable ISO
-8. Shift To Multiboot2
+7. Generate Bootable ISO ✅
+8. Shift To Multiboot2 ✅
 9. Userspace Mode (Ring 3)
 
 ### 2. Memory Management
 
 1. Physical Memory Manager ✅
-2. Virtual Memory Manager
+2. Virtual Memory Manager ✅
 3. Paging Setup ✅
-4. Heap Allocation
+4. Heap Allocation ✅
 
 ### 3. Drivers
 
 1. VGA Driver ✅
 2. Serial Driver ✅
 3. PS2 Keyboard Driver ✅
-4. Frame Buffer Video
+4. VBE Video ✅
 5. Hard Disk Driver
 6. Implement File System Driver
 
