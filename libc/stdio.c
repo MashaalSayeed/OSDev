@@ -24,6 +24,12 @@ void printf(const char* format, ...) {
                     int_to_ascii(value, buffer);
                     terminal_writestring(buffer);
                     break;
+                case 'b':
+                    int bin_val = va_arg(args, int);
+                    char bin_buffer[24];
+                    bin_to_ascii(bin_val, bin_buffer);
+                    terminal_writestring(bin_buffer);
+                    break;
                 case 'x':
                     int hex = va_arg(args, int);
                     char hex_buffer[24];

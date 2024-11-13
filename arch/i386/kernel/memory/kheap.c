@@ -87,3 +87,18 @@ void kheap_init() {
     free_list->size = KHEAP_INITIAL_SIZE - sizeof(kheap_block_t);
     free_list->next = NULL;
 }
+
+void *calloc(size_t num, size_t size) {
+    size_t total_size = num * size;
+    void *ptr = kmalloc(total_size);
+    
+    if (ptr) {
+        // Initialize allocated memory to 0
+        uint8_t *p = (uint8_t *)ptr;
+        for (size_t i = 0; i < total_size; i++) {
+            p[i] = 0;
+        }
+    }
+    
+    return ptr;
+}

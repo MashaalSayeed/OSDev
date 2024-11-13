@@ -24,3 +24,4 @@ void *kmalloc(size_t size);
 void kfree(void *ptr);
 void print_kheap();
 void kheap_init();
+void *calloc(size_t num, size_t size);

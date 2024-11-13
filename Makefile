@@ -27,20 +27,27 @@ BOOT_SRC=$(wildcard $(ARCH_DIR)/*.s)
 KERNEL_SRC=$(shell find $(KERNEL_DIR) -name "*.c")
 DRIVER_SRC=$(wildcard $(DRIVERS_DIR)/*.c)
 LIBC_SRC=$(wildcard $(LIBC_DIR)/*.c)
+FONT_PSF=resources/fonts/ter-powerline-v32n.psf
 
 # Object files
 KERNEL_OBJ=$(KERNEL_SRC:$(KERNEL_DIR)/%.c=$(BUILD_DIR)/kernel/%.o)
 DRIVER_OBJ=$(DRIVER_SRC:$(DRIVERS_DIR)/%.c=$(BUILD_DIR)/drivers/%.o)
 LIBC_OBJ=$(LIBC_SRC:$(LIBC_DIR)/%.c=$(BUILD_DIR)/libc/%.o)
 ASM_OBJ=$(BOOT_SRC:$(ARCH_DIR)/%.s=$(BUILD_DIR)/%.o)
-OBJS=$(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ)
+FONT_OBJ=$(BUILD_DIR)/font.o
+OBJS=$(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ) $(FONT_OBJ)
 
 # Build rules
 all: $(ISO_IMAGE)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc \
-	         $(BUILD_DIR)/kernel/memory $(BUILD_DIR)/kernel/descriptors
+	         $(BUILD_DIR)/kernel/memory $(BUILD_DIR)/kernel/descriptors \
+			 $(BUILD_DIR)/kernel/gui
+
+$(FONT_OBJ): $(FONT_PSF) | $(BUILD_DIR)
+	@echo "Building font object..."
+	objcopy -O elf32-i386 -B $(ARCH) -I binary $< $@
 
 $(DRIVER_OBJ):
 	make -C drivers/$(ARCH) ARCH=$(ARCH) CFLAGS="$(CFLAGS)" CC=${CC}

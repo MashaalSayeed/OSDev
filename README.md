@@ -32,7 +32,12 @@
 5. Hard Disk Driver
 6. Implement File System Driver
 
-### 4. Others
+### 4. Video Output
+1. VBE Driver
+2. Draw Images
+3. Draw Fonts
+
+### 5. Others
 
 1. libc ✅
 2. Basic printf ✅
@@ -40,7 +45,6 @@
 4. APIC
 5. Exception Handling
 6. Kernel Panics
-
 
 ## Resources
 
