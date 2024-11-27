@@ -1,5 +1,7 @@
 #include "kernel/tests.h"
 #include "system.h"
+#include "libc/stdio.h"
+#include "kernel/kheap.h"
 
 void test_divide_by_zero() {
 	int x = 1;

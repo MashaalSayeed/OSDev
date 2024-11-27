@@ -1,4 +1,4 @@
-ARCH?=i386
+ARCH?=i686
 CFLAGS?=-m32
 
 DRIVER_SRC=$(wildcard *.c)

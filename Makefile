@@ -1,11 +1,12 @@
-ARCH?=i386
+ARCH?=i686
+SCAMARCH?=i386
 TARGET=$(ARCH)-elf
 CC=$(TARGET)-gcc
 LD=$(TARGET)-ld
 AS=$(TARGET)-as
 GDB=$(TARGET)-gdb
 
-PWD=${shell pwd}
+PWD=${shell pwd | sed 's/ /\\ /g'}
 
 # Compiler and linker flags
 CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I${PWD}/include -std=gnu99
@@ -45,9 +46,12 @@ $(BUILD_DIR):
 	         $(BUILD_DIR)/kernel/memory $(BUILD_DIR)/kernel/descriptors \
 			 $(BUILD_DIR)/kernel/gui
 
+
+# Building font objecet for i386 architecture
+
 $(FONT_OBJ): $(FONT_PSF) | $(BUILD_DIR)
 	@echo "Building font object..."
-	objcopy -O elf32-i386 -B $(ARCH) -I binary $< $@
+	i686-elf-objcopy -O elf32-i386 -B i386 -I binary $< $@
 
 $(DRIVER_OBJ):
 	make -C drivers/$(ARCH) ARCH=$(ARCH) CFLAGS="$(CFLAGS)" CC=${CC}
@@ -72,15 +76,15 @@ $(ISO_IMAGE): $(KERNEL_BIN)
 	rm $(ISO_IMAGE) || true
 	mkdir -p iso/boot/grub
 	cp $(KERNEL_BIN) iso/boot/zineos.bin
-	grub-mkrescue -o $(ISO_IMAGE) iso
+	grub/build-grub/grub-mkrescue -o $(ISO_IMAGE) iso
 
 run: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -serial file:serial_output.log -vga std
-	qemu-system-$(ARCH) -cdrom $(ISO_IMAGE) -serial file:serial_output.log -vga std
+	qemu-system-$(SCAMARCH) -cdrom $(ISO_IMAGE) -serial file:serial_output.log -vga std
 
 debug: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -s -S &
-	qemu-system-$(ARCH) $(ISO_IMAGE) -s -S &
+	qemu-system-$(SCAMARCH) $(ISO_IMAGE) -s -S &
 	sleep 1
 	$(GDB) -ex "target remote localhost:1234" -ex "symbol-file $(KERNEL_BIN)"
 

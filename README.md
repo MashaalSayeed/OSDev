@@ -1,7 +1,34 @@
 # OSDev
 
-## Setup
+## Build setup using brew on MacOS
 
+1. First off, clone the repo:
+```bash
+git clone https://github.com/MashaalSayeed/OSDev
+cd OSDev
+```
+2. Run setup.sh to install all dependencies
+```bash
+chmod +x scripts/setup.sh
+scripts/setup.sh
+```
+
+3. Run build.sh to build the OS and build grub
+```bash
+chmod +x scripts/build.sh
+scripts/build.sh
+```
+
+4. Boot the generated ISO file
+```bash
+qemu-system-i386 -cdrom iso/zineos-i686.iso 
+```
+Or, you have a nicer way:
+```bash
+make run
+```
+
+Thank me later 😊
 
 ## TODO List Guide
 
