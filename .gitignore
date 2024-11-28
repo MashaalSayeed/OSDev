@@ -1,5 +1,7 @@
 build/
 notes/
+grub/
+build-grub/
 
 .DS_Store
 
@@ -10,3 +12,7 @@ notes/
 *.hex
 *.out
 *.iso
+
+.vscode
+
+todo.txt

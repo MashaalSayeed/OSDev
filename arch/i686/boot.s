@@ -18,7 +18,7 @@ section .multiboot align=4096
 global multiboot_header
 multiboot_header:
     DD MBOOT_MAGIC             ; Multiboot2 magic number
-    DD MBOOT_ARCH              ; Architecture (0 for i386)
+    DD MBOOT_ARCH              ; Architecture (0 for i686)
     DD MBOOT_HEADER_LENGTH     ; Length of header in bytes
     DD MBOOT_HEADER_CHECKSUM   ; Header checksum
 
