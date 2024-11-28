@@ -1,4 +1,4 @@
-ARCH?=i686
+ARCH?=i386
 SCAMARCH?=i386
 TARGET=$(ARCH)-elf
 CC=$(TARGET)-gcc
@@ -48,7 +48,6 @@ $(BUILD_DIR):
 
 
 # Building font objecet for i386 architecture
-
 $(FONT_OBJ): $(FONT_PSF) | $(BUILD_DIR)
 	@echo "Building font object..."
 	i686-elf-objcopy -O elf32-i386 -B i386 -I binary $< $@
@@ -76,7 +75,7 @@ $(ISO_IMAGE): $(KERNEL_BIN)
 	rm $(ISO_IMAGE) || true
 	mkdir -p iso/boot/grub
 	cp $(KERNEL_BIN) iso/boot/zineos.bin
-	grub/build-grub/grub-mkrescue -o $(ISO_IMAGE) iso
+	grub-mkrescue -o $(ISO_IMAGE) iso
 
 run: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -serial file:serial_output.log -vga std

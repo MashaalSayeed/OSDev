@@ -3,8 +3,8 @@
 #include "kernel/kheap.h"
 #include <limits.h>
 
-extern uint8_t _binary_resources_fonts_ter_powerline_v32n_psf_start;
-extern uint8_t _binary_resources_fonts_ter_powerline_v32n_psf_end;
+extern uint8_t *_binary_resources_fonts_ter_powerline_v32n_psf_start;
+extern uint8_t *_binary_resources_fonts_ter_powerline_v32n_psf_end;
 extern psf_font_t *current_font;
 
 uint16_t *unicode;
@@ -19,7 +19,7 @@ psf_font_t *load_psf_font() {
     printf("Font Glyph Height x Width (%d x %d)\n\n", font->height, font->width);
 
     // Get the offset of the table
-    char *s = (char *)(
+    uint8_t *s = (uint8_t *)(
         (unsigned char*)font +
         font->headersize +
         font->numglyph * font->bytesperglyph

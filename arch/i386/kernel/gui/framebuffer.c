@@ -46,8 +46,8 @@ void draw_char(char c, uint32_t cx, uint32_t cy, uint32_t fg, uint32_t bg) {
     int bytesperline = (current_font->width + 7) / 8;
     unsigned char *glyph = (unsigned char *)current_font + current_font->headersize + (c * current_font->bytesperglyph);
 
-    for (int y = 0; y < current_font->height; y++) {
-        for (int x = 0; x < current_font->width; x++) {
+    for (uint32_t y = 0; y < current_font->height; y++) {
+        for (uint32_t x = 0; x < current_font->width; x++) {
             put_pixel(cx + x, cy + y, is_pixel_set(glyph, x) ? fg : bg);
         }
         glyph += bytesperline;
@@ -74,8 +74,8 @@ void scroll(uint32_t background_color) {
     uint32_t *src = (uint32_t *)(fb.addr + (fb.pitch * current_font->height));
 
     // Move all lines up by one font height
-    for (int y = 0; y < fb.height - current_font->height; y++) {
-        for (int x = 0; x < fb.width; x++) {
+    for (uint32_t y = 0; y < fb.height - current_font->height; y++) {
+        for (uint32_t x = 0; x < fb.width; x++) {
             dest[x] = src[x];
         }
         dest += fb.width;
@@ -83,7 +83,7 @@ void scroll(uint32_t background_color) {
     }
 
     // Clear the last line (new blank line at the bottom)
-    for (int x = 0; x < fb.width; x++) {
+    for (uint32_t x = 0; x < fb.width; x++) {
         put_pixel(x, fb.height - current_font->height, background_color);
     }
 }

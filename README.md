@@ -60,9 +60,9 @@ Thank me later 😊
 6. Implement File System Driver
 
 ### 4. Video Output
-1. VBE Driver
-2. Draw Images
-3. Draw Fonts
+1. VBE Driver ✅
+2. Draw Images ✅
+3. Draw Fonts ✅
 
 ### 5. Others
 

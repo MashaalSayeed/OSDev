@@ -22,12 +22,6 @@ void pmm_init(struct multiboot_tag *mbd, uint32_t mem_size) {
     
     mem_start = (uint8_t*)BLOCK_ALIGN((uint32_t) bitmap + bitmap_size);
     UNUSED(mbd);
-    // print_memory_map(mbd);
-    // printf("mem size:     %d mb\n", mem_size / (1024 * 1024));
-    // printf("total_blocks: %d\n", total_blocks);
-    // printf("bitmap addr:  %x\n", bitmap);
-    // printf("bitmap_size:  %d\n", bitmap_size);
-    // printf("mem_start:    %x\n", mem_start);
 }
 
 uint32_t allocate_block() {
@@ -54,12 +48,4 @@ uint32_t first_free_block() {
 
 void free_block(uint32_t block) {
     CLEARBIT(block);
-}
-
-void print_memory_map(struct multiboot_tag *mbd) {
-    // for (uint32_t i=0; i < mbd->mmap_length; i += sizeof(struct multiboot_mmap_entry)) {
-    //     struct multiboot_mmap_entry *entry = (struct multiboot_mmap_entry*) (mbd->mmap_addr + i);
-    //     printf("Low Addr: %x | High Addr: %x | Low Len: %x | High Len: %x | Size: %d | Type: %d\n", 
-    //         entry->addr_low, entry->addr_high, entry->len_low, entry->len_high, entry->size, entry->type);
-    // }
 }

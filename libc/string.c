@@ -45,6 +45,12 @@ char *strcpy(char *dest, const char *src) {
     return ret;
 }
 
+void strncpy(char *dest, const char *src, uint32_t count) {
+    for (uint32_t i = 0; i < count; i++) {
+        dest[i] = src[i];
+    }
+}
+
 int strcmp(const char *s1, const char *s2) {
     while(*s1 && *s2) {
         if(*s1 != *s2) {
