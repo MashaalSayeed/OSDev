@@ -1,6 +1,6 @@
 ARCH?=i386
 SCAMARCH?=i386
-TARGET=$(ARCH)-elf
+TARGET=i386-elf
 CC=$(TARGET)-gcc
 LD=$(TARGET)-ld
 AS=$(TARGET)-as
@@ -12,6 +12,7 @@ PWD=${shell pwd | sed 's/ /\\ /g'}
 CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I${PWD}/include -std=gnu99
 CFLAGS+=-g # Enable debugging
 LDFLAGS=-nostdlib -T arch/$(ARCH)/linker.ld
+QEMU_FLAGS=-d int,page,cpu_reset
 
 BUILD_DIR=build/$(ARCH)
 KERNEL_BIN=$(BUILD_DIR)/zineos.bin
@@ -79,7 +80,7 @@ $(ISO_IMAGE): $(KERNEL_BIN)
 
 run: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -serial file:serial_output.log -vga std
-	qemu-system-$(SCAMARCH) -cdrom $(ISO_IMAGE) -serial file:serial_output.log -vga std
+	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) $(ISO_IMAGE) -serial file:serial_output.log -vga std
 
 debug: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -s -S &
@@ -92,7 +93,7 @@ clean:
 
 help:
 	@echo "Available targets:"
-	@echo "  make       - Build the kernel"
-	@echo "  run        - Run the kernel in QEMU"
-	@echo "  debug      - Run the kernel in QEMU with GDB server"
+	@echo "  make       - Build the kernel iso file"
+	@echo "  run        - Run the kernel iso in QEMU"
+	@echo "  debug      - Run the kernel iso in QEMU with GDB server"
 	@echo "  clean      - Clean the build directory"

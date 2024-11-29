@@ -10,6 +10,8 @@ process_t *process_list = NULL;
 process_t *current_process = NULL;
 size_t pid_counter = 0;
 
+extern void switch_context(registers_t* context);
+
 // Bump Allocator
 size_t allocate_pid() {
     return pid_counter++;
@@ -22,37 +24,41 @@ void idle_process() {
 }
 
 void scheduler_init() {
-    process_list = create_process("init", &idle_process);
-    process_list->status = RUNNING;
-
-    current_process = process_list;
+    process_t* init_process = create_process("init", &idle_process);
+    add_process(init_process);
 }
 
-registers_t* schedule(registers_t* context) {
-    // Save the context of the current process
-    memcpy(&current_process->context, context, sizeof(registers_t));
+void schedule(registers_t* context) {
+    if (!process_list) return;
+
+    // Save the context of the current processs
+    current_process->context = *context;
+    current_process->status = READY;
+
 
     // Find the next READY process
-    process_t *next_process = current_process->next ? current_process->next : process_list;
+    process_t *next_process = current_process->next;
     while (next_process->status != READY) {
-        next_process = next_process->next ? next_process->next : process_list;
+        next_process = next_process->next;
     }
 
-    // Update the current process
-    current_process = next_process;
-    current_process->status = RUNNING;
+    if (next_process != current_process) {
+        // printf("Switching from '%s' to '%s'\n", current_process->process_name, next_process->process_name);
+        // Update the current process
+        current_process = next_process;
+        current_process->status = RUNNING;
 
-    // Restore context and switch page directory
-    memcpy(context, &current_process->context, sizeof(registers_t));
-    // switch_page_directory(current_process->root_page_table);
-
-    return current_process->context;
+        // Restore context and switch page directory
+        switch_context(&current_process->context);
+    } else {
+        current_process->status = RUNNING;
+    }
 }
-
 
 process_t* create_process(char *process_name, void (*entry_point)()) {
     // Allocate memory for the new process structure
     process_t *new_process = (process_t *)kmalloc(sizeof(process_t));
+
     if (!new_process) {
         printf("Error: Failed to allocate memory for process %s\n", process_name);
         return NULL;
@@ -63,50 +69,53 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     new_process->status = READY;
     strncpy(new_process->process_name, process_name, PROCESS_NAME_MAX_LEN);
 
-    // Allocate kernel stack for the process
-    new_process->context = (registers_t *)kmalloc(sizeof(registers_t));
-    if (!new_process->context) {
-        printf("Error: Failed to allocate memory for process %s stack\n", process_name);
-        kfree(new_process);
-        return NULL;
-    }
+    // Initialize process context
+    new_process->context.eip = (uint32_t)entry_point;
+    new_process->context.eflags = 0x202;                       // Enable interrupts
+    new_process->context.esp = (uint32_t)kmalloc(4096) + 4096; // Allocate and set stack pointer
+    new_process->context.cs = KERNEL_CS;
+    new_process->context.ds = KERNEL_DS;
+    new_process->context.ss = KERNEL_SS;
 
-    // Set up process context
-    memset(new_process->context, 0, sizeof(registers_t)); // Clear the context memory
-    new_process->context->eip = (uint32_t)entry_point;    // Entry point of the process
-    new_process->context->cs = 0x08;                     // Kernel code segment
-    new_process->context->eflags = 0x202;                // Enable interrupts
-    new_process->context->esp = (uint32_t)kmalloc(4096) + 4096; // Allocate and set stack pointer
-    new_process->context->ss = 0x10;                     // Kernel data segment
+    // Initialize other general-purpose registers to 0 (optional but safer)
+    new_process->context.eax = 0;
+    new_process->context.ebx = 0;
+    new_process->context.ecx = 0;
+    new_process->context.edx = 0;
+    new_process->context.edi = 0;
+    new_process->context.esi = 0;
+    new_process->context.ebp = 0;
 
-    // Set up paging for the process (optional, depending on your implementation)
-    // new_process->root_page_table = clone_page_directory();
-    // if (!new_process->root_page_table) {
-    //     printf("Error: Failed to allocate page directory for process %s\n", process_name);
-    //     kfree(new_process->context);
-    //     kfree(new_process);
-    //     return NULL;
-    // }
-
-    // Add the process to the process list
-    if (!process_list) {
-        process_list = new_process;
-    } else {
-        process_t *current = process_list;
-        while (current->next) {
-            current = current->next;
-        }
-        current->next = new_process;
-    }
-    new_process->next = NULL;
-
-    printf("Process %s created with PID %d\n", process_name, new_process->pid);
+    // printf("Process '%s' created with PID %d\n", process_name, new_process->pid);
     return new_process;
+}
+
+void add_process(process_t *process) {
+    if (!process_list) {
+        process_list = process;
+        current_process = process_list;
+    } else {
+        process_t *temp = process_list;
+        while (temp->next != process_list) {
+            temp = temp->next;
+        }
+        temp->next = process;
+    }
+
+    // Circular linked list
+    process->next = process_list;
 }
 
 void kill_process(process_t *process) {
     process->status = TERMINATED;
-    kfree(process->context);
+    kfree((uint32_t *)(process->context.esp - 4096));
     kfree(process);
 }
 
+void print_process_list() {
+    process_t *temp = process_list;
+    do {
+        printf("PID: %d, Name: %s, Status: %d\n", temp->pid, temp->process_name, temp->status);
+        temp = temp->next;
+    } while (temp != process_list);
+}

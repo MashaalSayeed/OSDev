@@ -195,11 +195,11 @@ void paging_init() {
     printf("Last page allocated: %x\n", i);
 
     // Map RSDP
-    i = LOAD_MEMORY_ADDRESS + 0x000E0000;
-    while (i < LOAD_MEMORY_ADDRESS + 0x00100000) {
-        allocate_page(kpage_dir, i, 0x3);
-        i += BLOCK_SIZE;
-    }
+    // i = LOAD_MEMORY_ADDRESS + 0x000E0000;
+    // while (i < LOAD_MEMORY_ADDRESS + 0x00100000) {
+    //     allocate_page(kpage_dir, i, 0x3);
+    //     i += BLOCK_SIZE;
+    // }
 
     // Switch to the new page directory
     switch_page_directory(kpage_dir, 0);

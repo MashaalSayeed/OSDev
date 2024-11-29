@@ -86,8 +86,8 @@ IRQ  15,    47
 
 extern isr_handler
 isr_common_stub:
-    pusha
-    mov eax,ds
+    PUSHA
+    MOV eax,ds
     PUSH eax
 
     MOV ax, 0x10
@@ -113,8 +113,8 @@ isr_common_stub:
 
 extern irq_handler
 irq_common_stub:
-    pusha
-    mov eax,ds
+    PUSHA
+    MOV eax,ds
     PUSH eax
 
     MOV ax, 0x10

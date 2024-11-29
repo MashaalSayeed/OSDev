@@ -1,5 +1,7 @@
 #include "kernel/timer.h"
+#include "kernel/process.h"
 #include "drivers/tty.h"
+#include "libc/stdio.h"
 #include "io.h"
 #include "system.h"
 
@@ -8,11 +10,7 @@ uint32_t timer_freq = 100;
 
 void timer_callback(registers_t *regs) {
     tick++;
-    if (tick % timer_freq == 0) {
-        terminal_writestring("One second has passed\n");
-    }
-
-    UNUSED(regs);
+    schedule(regs);
 }
 
 void init_timer(uint32_t freq) {

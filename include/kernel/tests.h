@@ -4,3 +4,4 @@
 
 void test_divide_by_zero();
 void test_heap();
+void test_scheduler();

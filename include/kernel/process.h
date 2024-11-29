@@ -19,12 +19,14 @@ typedef struct process {
     process_status_t status;
     char process_name[PROCESS_NAME_MAX_LEN];
 
-    registers_t* context;
+    registers_t context;
     void *root_page_table;
     struct process* next;
 } process_t;
 
 void scheduler_init();
-registers_t* schedule(registers_t* context);
+void schedule(registers_t* context);
 process_t* create_process(char *process_name, void (*entry_point)());
+void add_process(process_t *process);
 void kill_process(process_t *process);
+void print_process_list();

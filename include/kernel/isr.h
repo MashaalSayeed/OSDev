@@ -2,6 +2,10 @@
 
 #include <stdint.h>
 
+#define KERNEL_CS 0x08
+#define KERNEL_DS 0x10
+#define KERNEL_SS 0x10
+
 typedef struct idt_entry {
     uint16_t base_low;
     uint16_t sel;

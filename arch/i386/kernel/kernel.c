@@ -11,6 +11,8 @@
 #include "kernel/acpi.h"
 #include "kernel/framebuffer.h"
 #include "kernel/font.h"
+#include "kernel/process.h"
+#include "kernel/tests.h"
 #include "libc/stdio.h"
 
 #include "image.h"
@@ -37,7 +39,6 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	struct multiboot_tag* tag = mbd;
 	struct multiboot_tag_framebuffer fb;
 	mbd->size = sizeof(struct multiboot_tag); // idk why this is needed
-
     for (; tag->type != MULTIBOOT_TAG_TYPE_END; 
          tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7))) 
     {
@@ -72,30 +73,33 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	log_to_serial("Hello, Serial World 1!\n");
 
-	map_physical_to_virtual_region(fb.framebuffer_addr, fb.framebuffer_addr, fb.framebuffer_pitch * fb.framebuffer_height);
-	init_framebuffer(fb.framebuffer_width, fb.framebuffer_height, fb.framebuffer_pitch, fb.framebuffer_bpp, fb.framebuffer_addr);
-	printf("Multiboot Framebuffer Address: %x\n", fb.framebuffer_addr);
+	// map_physical_to_virtual_region(fb.framebuffer_addr, fb.framebuffer_addr, fb.framebuffer_pitch * fb.framebuffer_height);
+	// init_framebuffer(fb.framebuffer_width, fb.framebuffer_height, fb.framebuffer_pitch, fb.framebuffer_bpp, fb.framebuffer_addr);
+	// printf("Multiboot Framebuffer Address: %x\n", fb.framebuffer_addr);
 
-	psf_font_t *font = load_psf_font();
-	if (!font) {
-		printf("Failed to load font\n");
-		return;
-	}
+	// psf_font_t *font = load_psf_font();
+	// if (!font) {
+	// 	printf("Failed to load font\n");
+	// 	return;
+	// }
 
 
-	uint32_t white = 0xFFFFFF;
-	uint32_t black = 0x000000;
-	printf("Font Address: %x\n", font);
-	draw_string_at("Hello World!\nReally?", 0, 0, white, black);
-	scroll(black);
+	// uint32_t white = 0xFFFFFF;
+	// uint32_t black = 0x000000;
+	// printf("Font Address: %x\n", font);
+	// draw_string_at("Hello World!\nReally?", 0, 0, white, black);
+	// scroll(black);
 
 	// draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
 
 	// find_rsdt();
+	printf("Creating processes\n");
+	terminal_clear();
+	scheduler_init();
+	// print_process_list();
+	init_timer(100);
 
-	// init_timer(100);
-	// test_divide_by_zero();
-
+	test_scheduler();
 
 	log_to_serial("Hello, Serial World 2!\n");
 
