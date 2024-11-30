@@ -30,6 +30,7 @@ void scheduler_init() {
 
 void schedule(registers_t* context) {
     if (!process_list) return;
+    asm volatile("cli");
 
     // Save the context of the current processs
     current_process->context = *context;
@@ -43,16 +44,20 @@ void schedule(registers_t* context) {
     }
 
     if (next_process != current_process) {
-        // printf("Switching from '%s' to '%s'\n", current_process->process_name, next_process->process_name);
+        printf("Switching from '%s' to '%s'\n", current_process->process_name, next_process->process_name);
         // Update the current process
         current_process = next_process;
         current_process->status = RUNNING;
 
         // Restore context and switch page directory
         switch_context(&current_process->context);
+        // memcpy(context, &current_process->context, sizeof(registers_t));
+        switch_page_directory(current_process->root_page_table, 1);
     } else {
         current_process->status = RUNNING;
     }
+
+    asm volatile("sti");
 }
 
 process_t* create_process(char *process_name, void (*entry_point)()) {
@@ -66,16 +71,17 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
 
     // Assign process properties
     new_process->pid = allocate_pid();
-    new_process->status = READY;
     strncpy(new_process->process_name, process_name, PROCESS_NAME_MAX_LEN);
 
     // Initialize process context
     new_process->context.eip = (uint32_t)entry_point;
-    new_process->context.eflags = 0x202;                       // Enable interrupts
-    new_process->context.esp = (uint32_t)kmalloc(4096) + 4096; // Allocate and set stack pointer
+    new_process->context.eflags = 0x202;
+    new_process->context.esp = (uint32_t)kmalloc(PROCESS_STACK_SIZE) + PROCESS_STACK_SIZE; // Allocate and set stack pointer
     new_process->context.cs = KERNEL_CS;
     new_process->context.ds = KERNEL_DS;
     new_process->context.ss = KERNEL_SS;
+
+    new_process->root_page_table = initial_page_dir;
 
     // Initialize other general-purpose registers to 0 (optional but safer)
     new_process->context.eax = 0;
@@ -86,7 +92,8 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     new_process->context.esi = 0;
     new_process->context.ebp = 0;
 
-    // printf("Process '%s' created with PID %d\n", process_name, new_process->pid);
+    new_process->status = READY;
+
     return new_process;
 }
 
@@ -108,7 +115,9 @@ void add_process(process_t *process) {
 
 void kill_process(process_t *process) {
     process->status = TERMINATED;
-    kfree((uint32_t *)(process->context.esp - 4096));
+
+    // Free the stack memory
+    kfree((uint32_t *)(process->context.esp - PROCESS_STACK_SIZE));
     kfree(process);
 }
 

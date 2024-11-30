@@ -1,6 +1,5 @@
 global switch_context
 switch_context:
-    CLI
     ; Skip return address, and get the pointer regs
     MOV ebp, [esp+4]
 
@@ -25,8 +24,6 @@ switch_context:
     PUSH DWORD [ebp+44] ; Push EIP
 
     MOV ebp, [ebp+12]
-
-    STI
     IRET
 
 

@@ -5,8 +5,10 @@
 #include "kernel/isr.h"
 
 #define PROCESS_NAME_MAX_LEN 32
+#define PROCESS_STACK_SIZE 4096
 
 typedef enum {
+    INIT,
     READY,
     RUNNING,
     BLOCKED,

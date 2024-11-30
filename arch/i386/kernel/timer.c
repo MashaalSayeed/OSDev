@@ -9,8 +9,20 @@ uint32_t tick = 0;
 uint32_t timer_freq = 100;
 
 void timer_callback(registers_t *regs) {
+    // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second)
     tick++;
-    schedule(regs);
+
+    // Switch to the next process every 10 ticks
+    if (tick % 100 == 0) schedule(regs);
+}
+
+uint32_t get_timer_ticks() {
+    return tick;
+}
+
+void sleep(uint32_t ms) {
+	uint32_t start = get_timer_ticks();
+	while (get_timer_ticks() < start + ms);
 }
 
 void init_timer(uint32_t freq) {

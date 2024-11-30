@@ -153,6 +153,7 @@ void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_st
 }
 
 void switch_page_directory(page_directory_t *dir, uint32_t phys) {
+    // Set the CR3 register to the physical address of the page directory
     uint32_t t = (uint32_t) dir;
     if (!phys) {
         t = (uint32_t)virtual2physical(initial_page_dir, (void*)t);
