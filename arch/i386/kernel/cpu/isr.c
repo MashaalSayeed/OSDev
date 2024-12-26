@@ -93,6 +93,8 @@ void isr_install() {
     idt_set_entry(177, (uint32_t)isr177, 0x08, 0x8E);
 
     idt_flush((uint32_t)&idtp);
+
+    register_interrupt_handler(0x80, syscall_handler);
 }
 
 char *exception_messages[] = {
@@ -147,18 +149,22 @@ void isr_handler(registers_t *r) {
 }
 
 void irq_handler(registers_t *r) {
-    // terminal_writestring("Received IRQ: ");
-    // char s[24];
-    // int_to_ascii(r->int_no, s);
-    // terminal_writestring(s);
-    // terminal_putchar('\n');
-
     if (r->int_no >= 40) outb(0xA0, 0x20); // Send reset signal to slave
     outb(0x20, 0x20); // Send reset signal to master
 
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];
         handler(r);
+    }
+}
+
+void syscall_handler(registers_t *regs) {
+    switch (regs->eax) {
+        case 1: // Syscall print
+            printf((const char *)regs->ebx);
+            break;
+        default:
+            printf("Unknown syscall: %d\n", regs->eax);
     }
 }
 

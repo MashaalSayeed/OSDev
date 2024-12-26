@@ -5,6 +5,8 @@
 #define KERNEL_CS 0x08
 #define KERNEL_DS 0x10
 #define KERNEL_SS 0x10
+#define USER_CS 0x1B
+#define USER_DS 0x23
 
 typedef struct idt_entry {
     uint16_t base_low;
@@ -86,6 +88,7 @@ void idt_set_entry(int num, uint32_t base, uint16_t sel, uint8_t flags);
 void isr_install();
 void isr_handler(registers_t *regs);
 void irq_handler(registers_t *regs);
+void syscall_handler(registers_t *regs);
 
 typedef void (*isr_t)(registers_t*);
 void register_interrupt_handler(uint8_t n, isr_t handler);
