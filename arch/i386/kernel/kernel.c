@@ -14,10 +14,60 @@
 #include "kernel/process.h"
 #include "kernel/tests.h"
 #include "libc/stdio.h"
-
+#include <stdbool.h>
 #include "image.h"
 
+
+#define USER_PROGRAM_START 0x40000000
+#define USER_STACK_START 0xC0000000
+#define USER_STACK_SIZE 0x1000
+
+uint8_t program_binary[] = {0xf4, 0xeb, 0xfd};
+size_t program_binary_size = sizeof(program_binary);
 extern page_directory_t *kpage_dir;
+
+framebuffer_t* framebuffer;
+bool is_gui_enabled = false;
+
+void multiboot2_init(struct multiboot_tag* mbd) {
+	struct multiboot_tag* tag = mbd;
+	struct multiboot_tag_framebuffer* fb;
+	struct multiboot_tag_string* boot_loader_name;
+	struct multiboot_tag_mmap* mmap_tag;
+
+	mbd->size = sizeof(struct multiboot_tag); // idk why this is needed
+	for (; tag->type != MULTIBOOT_TAG_TYPE_END; 
+		 tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7))) 
+	{
+		if (tag->type == MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME) {
+			struct multiboot_tag_string* boot_loader_name = (struct multiboot_tag_string*) tag;
+			printf("Bootloader Name: %s\n", boot_loader_name->string);
+		}
+		else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
+			fb = (struct multiboot_tag_framebuffer*) tag;
+			printf("Framebuffer type: %d\n", fb->framebuffer_type);
+			printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",
+				   fb->framebuffer_pitch, fb->framebuffer_width,
+				   fb->framebuffer_height, fb->framebuffer_bpp);
+			printf("Framebuffer address: %x\n", fb->framebuffer_addr);
+
+			framebuffer = init_framebuffer(fb->framebuffer_width, fb->framebuffer_height, fb->framebuffer_pitch, fb->framebuffer_bpp, fb->framebuffer_addr);
+			is_gui_enabled = fb->framebuffer_type == MULTIBOOT_FRAMEBUFFER_TYPE_RGB;
+		}
+		else if (tag->type == MULTIBOOT_TAG_TYPE_MMAP) {
+			mmap_tag = (struct multiboot_tag_mmap*) tag;
+			struct multiboot_mmap_entry * entry = mmap_tag->entries;
+			while ((uint32_t)entry < (uint32_t)mmap_tag + mmap_tag->size) {
+				// printf("Memory: %x - %x, Type: %d\n", entry->addr, entry->addr + entry->len, entry->type);
+				// if (entry->type == MULTIBOOT_MEMORY_AVAILABLE) {
+				// 	add_memory_region(entry->addr, entry->len); // Add memory region to the bitmap
+				// }
+
+				entry = (struct multiboot_mmap_entry*)((uint32_t)entry + mmap_tag->entry_size);
+			}
+		}
+	}
+}
 
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
@@ -36,25 +86,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
         return;
     }
 
-	struct multiboot_tag* tag = mbd;
-	struct multiboot_tag_framebuffer fb;
-	mbd->size = sizeof(struct multiboot_tag); // idk why this is needed
-    for (; tag->type != MULTIBOOT_TAG_TYPE_END; 
-         tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7))) 
-    {
-        if (tag->type == MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME) {
-            struct multiboot_tag_string* boot_loader_name = (struct multiboot_tag_string*) tag;
-            printf("Bootloader Name: %s\n", boot_loader_name->string);
-        }
-        else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
-			struct multiboot_tag_framebuffer *fb_tag = (struct multiboot_tag_framebuffer*) tag;
-            printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",
-                   fb_tag->framebuffer_pitch, fb_tag->framebuffer_width,
-                   fb_tag->framebuffer_height, fb_tag->framebuffer_bpp);
-			printf("Framebuffer address: %x\n", fb_tag->framebuffer_addr);
-			fb = *fb_tag;
-        }
-    }
+	multiboot2_init(mbd);
 
 	printf("\n");
 	init_keyboard();
@@ -64,44 +96,71 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	pmm_init(mbd, 1096 * 0x100000);
 	printf("Initialized Physical Memory Management\n\n");
 
-	printf("Initializing Paging\n");
 	paging_init();
 	kheap_init();
 	printf("Initialized Paging!!\n\n");
 	
 	// acpi_init();
 
+	map_physical_to_virtual_region(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height);
 	log_to_serial("Hello, Serial World 1!\n");
 
-	// map_physical_to_virtual_region(fb.framebuffer_addr, fb.framebuffer_addr, fb.framebuffer_pitch * fb.framebuffer_height);
-	// init_framebuffer(fb.framebuffer_width, fb.framebuffer_height, fb.framebuffer_pitch, fb.framebuffer_bpp, fb.framebuffer_addr);
-	// printf("Multiboot Framebuffer Address: %x\n", fb.framebuffer_addr);
+	if (is_gui_enabled) {
+		psf_font_t *font = load_psf_font();
+		fill_screen(0x000000);
+		draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
+		draw_string_at("Hello, GUI World!", 0, 0, 0xFFFFFF, 0x000000);
+	} else {
+		printf("No GUI\n");
+	}
 
-	// psf_font_t *font = load_psf_font();
-	// if (!font) {
-	// 	printf("Failed to load font\n");
-	// 	return;
-	// }
-
-
-	// uint32_t white = 0xFFFFFF;
-	// uint32_t black = 0x000000;
-	// printf("Font Address: %x\n", font);
-	// draw_string_at("Hello World!\nReally?", 0, 0, white, black);
-	// scroll(black);
-
-	// draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
 
 	// find_rsdt();
-	printf("Creating processes\n");
-	terminal_clear();
+	// printf("Creating processes\n");
+	// terminal_clear();
 	scheduler_init();
 	// print_process_list();
-	init_timer(100);
+	// init_timer(100);
 
-	test_scheduler();
+	// test_scheduler();
+
+	vfs_init();
+
+	// load_program_to_userspace(program_binary, program_binary_size);
+	// printf("%d\n", USER_PROGRAM_START);
+	// switch_to_user_mode(USER_STACK_START, USER_PROGRAM_START);
 
 	log_to_serial("Hello, Serial World 2!\n");
 
 	for (;;) ;
+}
+
+void load_program_to_userspace(void* program_binary, size_t size) {
+    uint32_t addr = USER_PROGRAM_START;
+    uint8_t* binary = (uint8_t*)program_binary;
+
+    for (size_t i = 0; i < size; i += BLOCK_SIZE) {
+        uint32_t phys_page = allocate_block();
+		map_physical_to_virtual(addr + i, phys_page);
+        memcpy((void*)(addr + i), binary + i, BLOCK_SIZE); // Assuming identity map for kernel
+    }
+
+	// Map memory for the user stack
+    for (uint32_t addr = USER_STACK_START - USER_STACK_SIZE; addr < USER_STACK_START; addr += BLOCK_SIZE) {
+		map_physical_to_virtual(addr, allocate_block());
+    }
+}
+
+__attribute__((naked, noreturn))
+void switch_to_user_mode(uint32_t stack_addr, uint32_t code_addr) {
+    asm volatile (
+		"push $0x23\n"
+		"push %0\n"
+		"push $0x202\n"
+		"push $0x1B\n"
+		"push %1\n"
+		"iret \n"
+		:
+		: "r"(stack_addr), "r"(code_addr)
+	);
 }

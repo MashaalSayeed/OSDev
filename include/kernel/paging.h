@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include "kernel/isr.h"
 
+#define PAGE_SIZE       0x1000
+
 #define ERR_PRESENT     0x1
 #define ERR_RW          0x2
 #define ERR_USER        0x4
@@ -10,7 +12,7 @@
 #define ERR_INST        0x10
 
 #define IS_ALIGN(addr) ((((uint32_t)(addr)) | 0xFFFFF000) == 0)
-#define PAGE_ALIGN(addr) ((((uint32_t)(addr)) & 0xFFFFF000) + 0x1000)
+#define PAGE_ALIGN(addr) ((((uint32_t)(addr)) & 0xFFFFF000) + PAGE_SIZE)
 
 typedef struct page_directory_entry {
     unsigned int present    : 1;

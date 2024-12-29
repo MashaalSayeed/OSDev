@@ -1,4 +1,5 @@
 #include "libc/string.h"
+#include "kernel/kheap.h"
 
 void memset(void *dest, char val, uint32_t count){
     char *temp = (char*) dest;
@@ -62,6 +63,15 @@ int strcmp(const char *s1, const char *s2) {
     return *s1 - *s2;
 }
 
+int strncmp(const char *s1, const char *s2, uint32_t count) {
+    for (uint32_t i = 0; i < count; i++) {
+        if (s1[i] != s2[i]) {
+            return s1[i] - s2[i];
+        }
+    }
+    return 0;
+}
+
 void reverse(char s[]) {
     int c, i, j;
     for (i = 0, j = strlen(s)-1; i < j; i++, j--) {
@@ -69,6 +79,60 @@ void reverse(char s[]) {
         s[i] = s[j];
         s[j] = c;
     }
+}
+
+char *strdup(const char *s) {
+    size_t len = strlen(s);
+    char *ret = (char *)kmalloc(len + 1);
+    strcpy(ret, s);
+    return ret;
+}
+
+char *strchr(const char *s, char c) {
+    while (*s) {
+        if (*s == c) {
+            return (char *)s; // Return pointer to the first occurrence
+        }
+        s++;
+    }
+    return NULL; // Return NULL if character not found
+}
+
+char *strtok(char *str, const char *delim) {
+    static char *last = NULL;
+    if (delim == NULL) return NULL;
+
+    if (str) {
+        last = str;
+    } else if (!last) {
+        return NULL; // If both str and last are NULL, return NULL
+    }
+
+    // Skip leading delimiters
+    str = last;
+    while (*str && strchr(delim, *str)) {
+        str++;
+    }
+
+    if (*str == '\0') {
+        last = NULL; // No more tokens
+        return NULL;
+    }
+
+    // Find the end of the current token
+    char *token_start = str;
+    while (*str && !strchr(delim, *str)) {
+        str++;
+    }
+
+    if (*str) {
+        *str = '\0';   // Null-terminate the token
+        last = str + 1; // Update last to point to the next character
+    } else {
+        last = NULL; // No more tokens
+    }
+
+    return token_start;
 }
 
 void int_to_ascii(uint32_t num, char *buffer) {

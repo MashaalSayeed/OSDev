@@ -140,12 +140,12 @@ void map_physical_to_virtual(uint32_t virtual, uint32_t physical) {
 
 void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_start, uint32_t size) {
     // Calculate the number of pages to map
-    uint32_t num_pages = (size + 0xFFF) / 0x1000;
-
+    uint32_t num_pages = (size + 0xFFF) / PAGE_SIZE;
+    printf("Mapping %d pages from %x to %x\n", num_pages, physical_start, virtual_start);
     for (uint32_t i = 0; i < num_pages; i++) {
         // Calculate the virtual and physical addresses for the current page
-        uint32_t virtual_addr = virtual_start + (i * 0x1000);
-        uint32_t physical_addr = physical_start + (i * 0x1000);
+        uint32_t virtual_addr = virtual_start + (i * PAGE_SIZE);
+        uint32_t physical_addr = physical_start + (i * PAGE_SIZE);
 
         // Map each page individually
         map_physical_to_virtual(virtual_addr, physical_addr);

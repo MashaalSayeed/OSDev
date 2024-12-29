@@ -1,17 +1,20 @@
 #include "kernel/framebuffer.h"
 #include "kernel/font.h"
+#include <stddef.h>
 
 framebuffer_t fb;
 
 extern uint16_t *unicode;
-psf_font_t *current_font;
+psf_font_t *current_font = NULL;
 
-void init_framebuffer(uint32_t width, uint32_t height, uint32_t pitch, uint32_t bpp, uint32_t addr) {
+framebuffer_t * init_framebuffer(uint32_t width, uint32_t height, uint32_t pitch, uint32_t bpp, uint32_t addr) {
     fb.width = width;
     fb.height = height;
     fb.pitch = pitch;
     fb.bpp = bpp;
     fb.addr = addr;
+
+    return &fb;
 }
 
 void put_pixel(uint32_t x, uint32_t y, uint32_t color) {

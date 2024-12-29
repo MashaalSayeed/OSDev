@@ -73,6 +73,9 @@ struct multiboot_tag_framebuffer {
     uint32_t framebuffer_height;
     uint8_t framebuffer_bpp;
     uint8_t framebuffer_type;
+    #define MULTIBOOT_FRAMEBUFFER_TYPE_INDEXED 0
+    #define MULTIBOOT_FRAMEBUFFER_TYPE_RGB 1
+    #define MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT 2
     uint8_t reserved;
 };
 

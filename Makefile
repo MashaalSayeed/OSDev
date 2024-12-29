@@ -45,7 +45,7 @@ all: $(ISO_IMAGE)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc \
 	         $(BUILD_DIR)/kernel/memory $(BUILD_DIR)/kernel/cpu \
-			 $(BUILD_DIR)/kernel/gui
+			 $(BUILD_DIR)/kernel/gui $(BUILD_DIR)/kernel/fs
 
 
 # Building font objecet for i386 architecture
