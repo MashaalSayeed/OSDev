@@ -16,7 +16,10 @@ int strncmp(const char *s1, const char *s2, uint32_t count);
 void reverse(char s[]);
 
 char *strdup(const char *s);
+char *strndup(const char *s, size_t n);
+
 char *strchr(const char *s, char c);
+char *strrchr(const char *s, char c);
 char *strtok(char *str, const char *delim);
 
 void int_to_ascii(uint32_t num, char *buffer);

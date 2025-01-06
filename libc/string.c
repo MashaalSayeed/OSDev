@@ -88,6 +88,13 @@ char *strdup(const char *s) {
     return ret;
 }
 
+char *strndup(const char *s, size_t n) {
+    char *ret = (char *)kmalloc(n + 1);
+    strncpy(ret, s, n);
+    ret[n] = '\0';
+    return ret;
+}
+
 char *strchr(const char *s, char c) {
     while (*s) {
         if (*s == c) {
@@ -96,6 +103,17 @@ char *strchr(const char *s, char c) {
         s++;
     }
     return NULL; // Return NULL if character not found
+}
+
+char *strrchr(const char *s, char c) {
+    char *last = NULL;
+    while (*s) {
+        if (*s == c) {
+            last = (char *)s;
+        }
+        s++;
+    }
+    return last;
 }
 
 char *strtok(char *str, const char *delim) {
