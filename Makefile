@@ -17,6 +17,8 @@ QEMU_FLAGS=-d int,page,cpu_reset
 BUILD_DIR=build/$(ARCH)
 KERNEL_BIN=$(BUILD_DIR)/zineos.bin
 ISO_IMAGE=iso/zineos-$(ARCH).iso
+DISK_IMAGE=iso/zdisk.img
+LOG_FILE=serial_output.log
 
 # Directories
 ARCH_DIR=arch/$(ARCH)
@@ -78,9 +80,17 @@ $(ISO_IMAGE): $(KERNEL_BIN)
 	cp $(KERNEL_BIN) iso/boot/zineos.bin
 	grub-mkrescue -o $(ISO_IMAGE) iso
 
-run: $(ISO_IMAGE)
-# qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -serial file:serial_output.log -vga std
-	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) $(ISO_IMAGE) -serial file:serial_output.log -vga std
+$(DISK_IMAGE):
+	dd if=/dev/zero of=$(DISK_IMAGE) bs=1M count=64
+	mkfs.fat -F 32 $(DISK_IMAGE)
+
+run: $(ISO_IMAGE) $(DISK_IMAGE)
+	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) \
+		-cdrom $(ISO_IMAGE) \
+		-serial file:$(LOG_FILE) \
+		-hda $(DISK_IMAGE) \
+		-boot d \
+		-vga std
 
 debug: $(ISO_IMAGE)
 # qemu-system-$(ARCH) -kernel $(KERNEL_BIN) -s -S &

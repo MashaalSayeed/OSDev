@@ -214,3 +214,5 @@ else
         exit 1
     fi
 fi
+
+brew install dosfstools

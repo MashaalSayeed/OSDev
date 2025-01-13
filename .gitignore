@@ -12,6 +12,7 @@ build-grub/
 *.hex
 *.out
 *.iso
+*.img
 
 .vscode
 

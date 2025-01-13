@@ -24,4 +24,4 @@ static int ramfs_mkdir(vfs_inode_t* dir, const char* name, uint32_t mode);
 static int ramfs_rmdir(vfs_inode_t* dir, const char* name);
 static vfs_inode_t* ramfs_readdir(vfs_inode_t* dir, uint32_t index);
 
-vfs_superblock_t* ramfs_mount(const char* path, block_device_t *block_device);
+vfs_superblock_t* ramfs_mount(const char* path, block_device_t *device);

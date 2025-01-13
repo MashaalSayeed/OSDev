@@ -128,7 +128,7 @@ static int ramfs_mkdir(vfs_inode_t *dir, const char *name, uint32_t mode) {
 }
 
 
-vfs_superblock_t *ramfs_mount(const char *device) {
+vfs_superblock_t *ramfs_mount(const char *path, block_device_t *device) {
     ramfs_root = (ramfs_node_t *)kmalloc(sizeof(ramfs_node_t));
     if (!ramfs_root) {
         return NULL;

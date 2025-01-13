@@ -72,6 +72,20 @@ int strncmp(const char *s1, const char *s2, uint32_t count) {
     return 0;
 }
 
+char *strncat(char *dest, const char *src, uint32_t count) {
+    char *ret = dest;
+    while (*dest) {
+        dest++;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        *dest = *src;
+        dest++;
+        src++;
+    }
+    *dest = '\0';
+    return ret;
+}
+
 void reverse(char s[]) {
     int c, i, j;
     for (i = 0, j = strlen(s)-1; i < j; i++, j--) {
@@ -151,6 +165,13 @@ char *strtok(char *str, const char *delim) {
     }
 
     return token_start;
+}
+
+char toupper(char c) {
+    if (c >= 'a' && c <= 'z') {
+        return c - 'a' + 'A';
+    }
+    return c;
 }
 
 void int_to_ascii(uint32_t num, char *buffer) {

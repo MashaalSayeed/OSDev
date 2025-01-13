@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "drivers/keyboard.h"
@@ -14,7 +16,9 @@
 #include "kernel/process.h"
 #include "kernel/tests.h"
 #include "libc/stdio.h"
-#include <stdbool.h>
+#include "kernel/vfs.h"
+#include "drivers/pci.h"
+#include "drivers/ata.h"
 #include "image.h"
 
 
@@ -100,7 +104,10 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	kheap_init();
 	printf("Initialized Paging!!\n\n");
 	
+	// pci_init();
+	ata_init();
 	// acpi_init();
+	printf("\n");
 
 	map_physical_to_virtual_region(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height);
 	log_to_serial("Hello, Serial World 1!\n");
@@ -154,11 +161,12 @@ void load_program_to_userspace(void* program_binary, size_t size) {
 __attribute__((naked, noreturn))
 void switch_to_user_mode(uint32_t stack_addr, uint32_t code_addr) {
     asm volatile (
-		"push $0x23\n"
-		"push %0\n"
-		"push $0x202\n"
-		"push $0x1B\n"
-		"push %1\n"
+		"cli\n"           // Disable interrupts
+		"push $0x23\n"   // Data segment selector
+		"push %0\n"      // Stack pointer
+		"push $0x202\n"  // EFlags
+		"push $0x1B\n"   // Code segment selector
+		"push %1\n"      // Instruction pointer
 		"iret \n"
 		:
 		: "r"(stack_addr), "r"(code_addr)
