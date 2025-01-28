@@ -91,6 +91,17 @@ typedef struct {
     uint32_t size;
 } __attribute__((packed)) fat32_dir_entry_t;
 
+typedef struct {
+    uint8_t order;
+    uint16_t name1[5];
+    uint8_t attributes;
+    uint8_t type;
+    uint8_t checksum;
+    uint16_t name2[6];
+    uint16_t first_cluster;
+    uint16_t name3[2];
+} __attribute__((packed)) fat32_long_dir_entry_t;
+
 typedef struct fat32_inode {
     uint32_t cluster;
     uint32_t size;

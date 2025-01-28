@@ -13,6 +13,7 @@ build-grub/
 *.out
 *.iso
 *.img
+*.dmg
 
 .vscode
 

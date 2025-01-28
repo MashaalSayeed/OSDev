@@ -338,6 +338,18 @@ void test_vfs(vfs_superblock_t *root_sb) {
     for (int i = 0; i < file_count; i++) {
         printf("  %s\n", entries[i].name);
     }
+
+    int fd = vfs_open("/rupa.txt", 0);
+    if (fd < 0) {
+        printf("Failed to open file\n");
+        return;
+    }
+
+    char buf[32];
+    int count = vfs_read(fd, buf, 32);
+    buf[count] = '\0';
+
+    printf("Read from file: %s\n", buf);
 }
 
 void ramfs_init() {

@@ -75,6 +75,7 @@ void *physical2virtual(page_directory_t *dir, void *physical) {
     return (void *)((pd_index << 22) + (pt_index << 12) + page_frame_offset);
 }
 
+// Allocates a page in the page directory and page table for a given virtual address.
 void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags) {
     uint32_t pd_index = virtual >> 22;
     uint32_t pt_index = (virtual >> 12) & 0x3FF;
@@ -119,8 +120,14 @@ void free_page(page_directory_t *dir, uint32_t virtual) {
     }
 }
 
+// Map a physical address to a virtual address by creating a new page table entry
 void map_physical_to_virtual(uint32_t virtual, uint32_t physical) {
-    allocate_page(kpage_dir, virtual, 0x3);
+    if (!IS_ALIGN(physical)) {
+        // printf("Error: Physical address is not page aligned %x to %x\n", physical, PAGE_ALIGN(physical));
+        physical = PAGE_ALIGN(physical);
+    }
+
+    allocate_page(kpage_dir, virtual, 0x6);
 
     uint32_t pd_index = virtual >> 22;
     uint32_t pt_index = (virtual >> 12) & 0x3FF;
@@ -205,6 +212,21 @@ void paging_init() {
     // Switch to the new page directory
     switch_page_directory(kpage_dir, 0);
     enable_paging();
+}
+
+void debug_page_mapping(uint32_t virtual_address) {
+    uint32_t pd_index = virtual_address >> 22;
+    uint32_t pt_index = (virtual_address >> 12) & 0x3FF;
+
+    page_table_t *pt = kpage_dir->ref_tables[pd_index];
+    if (pt) {
+        uint32_t frame = pt->pages[pt_index].frame << 12;
+        printf("Page Table Entry for %x: Physical Frame = %x, Present = %d, RW = %d, User = %d\n",
+               virtual_address, frame, pt->pages[pt_index].present,
+               pt->pages[pt_index].rw, pt->pages[pt_index].user);
+    } else {
+        printf("Page Table not found for virtual address %x\n", virtual_address);
+    }
 }
 
 void page_fault_handler(registers_t *regs) {

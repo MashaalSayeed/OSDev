@@ -16,22 +16,28 @@
 #include "kernel/process.h"
 #include "kernel/tests.h"
 #include "libc/stdio.h"
+#include "libc/string.h"
 #include "kernel/vfs.h"
 #include "drivers/pci.h"
 #include "drivers/ata.h"
 #include "image.h"
 
+#define USER_PROGRAM_START 0xB0000000
 
-#define USER_PROGRAM_START 0x40000000
-#define USER_STACK_START 0xC0000000
-#define USER_STACK_SIZE 0x1000
+typedef void (*user_func_t)(void);
 
-uint8_t program_binary[] = {0xf4, 0xeb, 0xfd};
-size_t program_binary_size = sizeof(program_binary);
 extern page_directory_t *kpage_dir;
+extern void jump_usermode(uint32_t user_stack_top, void *user_program);
+// extern void test_user_function();
+extern void _user_main();
 
 framebuffer_t* framebuffer;
 bool is_gui_enabled = false;
+
+
+// void test_user_function() {
+// 	for (;;) ;
+// }
 
 void multiboot2_init(struct multiboot_tag* mbd) {
 	struct multiboot_tag* tag = mbd;
@@ -70,6 +76,9 @@ void multiboot2_init(struct multiboot_tag* mbd) {
 				entry = (struct multiboot_mmap_entry*)((uint32_t)entry + mmap_tag->entry_size);
 			}
 		}
+		else {
+			// printf("Unknown tag: %d\n", tag->type);
+		}
 	}
 }
 
@@ -104,7 +113,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	kheap_init();
 	printf("Initialized Paging!!\n\n");
 	
-	// pci_init();
+	pci_init();
 	ata_init();
 	// acpi_init();
 	printf("\n");
@@ -133,9 +142,6 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	vfs_init();
 
-	// load_program_to_userspace(program_binary, program_binary_size);
-	// printf("%d\n", USER_PROGRAM_START);
-	// switch_to_user_mode(USER_STACK_START, USER_PROGRAM_START);
 
 	log_to_serial("Hello, Serial World 2!\n");
 
@@ -144,31 +150,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 void load_program_to_userspace(void* program_binary, size_t size) {
     uint32_t addr = USER_PROGRAM_START;
-    uint8_t* binary = (uint8_t*)program_binary;
-
     for (size_t i = 0; i < size; i += BLOCK_SIZE) {
-        uint32_t phys_page = allocate_block();
-		map_physical_to_virtual(addr + i, phys_page);
-        memcpy((void*)(addr + i), binary + i, BLOCK_SIZE); // Assuming identity map for kernel
+		map_physical_to_virtual(addr + i, program_binary + i);
     }
-
-	// Map memory for the user stack
-    for (uint32_t addr = USER_STACK_START - USER_STACK_SIZE; addr < USER_STACK_START; addr += BLOCK_SIZE) {
-		map_physical_to_virtual(addr, allocate_block());
-    }
-}
-
-__attribute__((naked, noreturn))
-void switch_to_user_mode(uint32_t stack_addr, uint32_t code_addr) {
-    asm volatile (
-		"cli\n"           // Disable interrupts
-		"push $0x23\n"   // Data segment selector
-		"push %0\n"      // Stack pointer
-		"push $0x202\n"  // EFlags
-		"push $0x1B\n"   // Code segment selector
-		"push %1\n"      // Instruction pointer
-		"iret \n"
-		:
-		: "r"(stack_addr), "r"(code_addr)
-	);
 }

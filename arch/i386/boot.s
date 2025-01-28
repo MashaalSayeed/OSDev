@@ -56,6 +56,7 @@ initial_page_dir:
 ; Stack Section
 section .bss
 align 16
+global stack_top
 stack_bottom:
     RESB 16384 * 8  ; Reserve 16KB stack
 stack_top:
@@ -99,3 +100,24 @@ higher_half:
 halt:
     HLT                ; Halt the system (in case of failure)
     JMP halt           ; Infinite loop
+
+
+global jump_usermode
+jump_usermode:
+    mov ebx, [esp+8]  ; Get the address of the user function
+
+    mov ax, (4 * 8) | 3  ; User data segment selector
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    ; mov eax, esp
+
+    ; Set up the stack frame for iret
+    push (4 * 8) | 3      ; User data segment selector
+    push esp              ; User space stack pointer
+    pushf                 ; Push EFLAGS
+    push (3 * 8) | 3      ; User code segment selector
+    push ebx              ; Address of the user function
+    iret

@@ -134,6 +134,7 @@ char *exception_messages[] = {
 
 isr_t interrupt_handlers[256];
 void isr_handler(registers_t *r) {
+    printf("Received interrupt: %d\n", r->int_no);
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];
         handler(r);

@@ -30,6 +30,15 @@ struct multiboot_tag_string {
     char string[0];
 };
 
+struct multiboot_tag_module
+{
+  uint32_t type;
+  uint32_t size;
+  uint32_t mod_start;
+  uint32_t mod_end;
+  char cmdline[0];
+};
+
 struct multiboot_tag_basic_meminfo {
     uint32_t type;
     uint32_t size;
@@ -62,6 +71,25 @@ struct multiboot_tag_mmap {
     uint32_t entry_size;
     uint32_t entry_version;
     struct multiboot_mmap_entry entries[0];
+};
+
+struct multiboot_vbe_info_block {
+    uint8_t external_specification[512];
+};
+
+struct multiboot_vbe_mode_info_block {
+    uint8_t external_specification[256];
+};
+
+struct multiboot_tag_vbe {
+    uint32_t type;
+    uint32_t size;
+    uint16_t vbe_mode;
+    uint16_t vbe_interface_seg;
+    uint16_t vbe_interface_off;
+    uint16_t vbe_interface_len;
+    struct multiboot_vbe_info_block vbe_control_info;
+    struct multiboot_vbe_mode_info_block vbe_mode_info;
 };
 
 struct multiboot_tag_framebuffer {

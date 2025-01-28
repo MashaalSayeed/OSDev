@@ -12,7 +12,8 @@
 #define ERR_INST        0x10
 
 #define IS_ALIGN(addr) ((((uint32_t)(addr)) | 0xFFFFF000) == 0)
-#define PAGE_ALIGN(addr) ((((uint32_t)(addr)) & 0xFFFFF000) + PAGE_SIZE)
+// #define PAGE_ALIGN(addr) ((((uint32_t)(addr)) & 0xFFFFF000))
+#define PAGE_ALIGN(addr) ((uint32_t)(addr) & ~(PAGE_SIZE - 1))
 
 typedef struct page_directory_entry {
     unsigned int present    : 1;
@@ -56,4 +57,5 @@ void * physical2virtual(page_directory_t *dir, void *physical);
 void * virtual2physical(page_directory_t *dir, void *virtual);
 void map_physical_to_virtual(uint32_t virtual, uint32_t physical);
 void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_start, uint32_t size);
+void debug_page_mapping(uint32_t virtual_address);
 void page_fault_handler(registers_t *regs);

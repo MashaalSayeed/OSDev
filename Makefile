@@ -12,12 +12,13 @@ PWD=${shell pwd | sed 's/ /\\ /g'}
 CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I${PWD}/include -std=gnu99
 CFLAGS+=-g # Enable debugging
 LDFLAGS=-nostdlib -T arch/$(ARCH)/linker.ld
-QEMU_FLAGS=-d int,page,cpu_reset
+QEMU_FLAGS=-d int,page,cpu_reset,guest_errors -no-reboot -no-shutdown
 
 BUILD_DIR=build/$(ARCH)
 KERNEL_BIN=$(BUILD_DIR)/zineos.bin
 ISO_IMAGE=iso/zineos-$(ARCH).iso
-DISK_IMAGE=iso/zdisk.img
+# DISK_IMAGE=iso/zdisk.img
+DISK_IMAGE=iso/ZDisk-mac.img.dmg
 LOG_FILE=serial_output.log
 
 # Directories
@@ -87,8 +88,8 @@ $(DISK_IMAGE):
 run: $(ISO_IMAGE) $(DISK_IMAGE)
 	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) \
 		-cdrom $(ISO_IMAGE) \
+		-drive file=$(DISK_IMAGE),format=raw \
 		-serial file:$(LOG_FILE) \
-		-hda $(DISK_IMAGE) \
 		-boot d \
 		-vga std
 

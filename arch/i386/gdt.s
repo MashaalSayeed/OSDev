@@ -1,5 +1,4 @@
 global gdt_flush
-
 gdt_flush:
     MOV eax, [esp+4]
     LGDT [eax]

@@ -25,7 +25,7 @@ dd if=/dev/zero of=zdisk.img bs=1M count=64
 mkfs.fat -F 32 zdisk.img
 ```
 
-1. Boot the generated ISO file
+5. Boot the generated ISO file
 ```bash
 qemu-system-i386 -cdrom iso/zineos-i686.iso -hda iso/zdisk.img
 ```

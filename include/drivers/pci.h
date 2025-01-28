@@ -2,7 +2,10 @@
 
 #include <stdint.h>
 
-typedef struct pci_device {
+#define PCI_CONFIG_ADDRESS 0xCF8
+#define PCI_CONFIG_DATA 0xCFC
+
+typedef struct {
     uint8_t bus;
     uint8_t slot;
     uint8_t function;
