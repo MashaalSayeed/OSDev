@@ -69,3 +69,7 @@ void test_scheduler() {
 
 	print_process_list();
 }
+
+void test_elf_loader() {
+	// void *elf_file = 
+}

@@ -31,7 +31,6 @@ typedef struct {
     uint8_t fat_count;
     uint32_t fat_size;
     uint32_t root_cluster;
-    uint32_t root_sector;
     uint32_t root_entries;
     uint16_t reserved_sectors;
     uint8_t sectors_per_cluster;

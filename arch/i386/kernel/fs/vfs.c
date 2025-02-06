@@ -204,7 +204,7 @@ int vfs_create(const char *path, uint32_t mode) {
         return -1;
     }
 
-    int result = dir->inode_ops->create(dir, filename, mode);
+    int result = dir->inode_ops->create(dir, filename, VFS_MODE_FILE);
     kfree(filename);
     return result;
 }
@@ -288,6 +288,8 @@ int vfs_readdir(const char *path, vfs_dir_entry_t *entries, size_t max_entries) 
     return dir->inode_ops->readdir(dir, entries, max_entries);
 }
 
+// void * vfs_load
+
 int vfs_register_fs_type(vfs_fs_type_t *fs_type) {
     // TODO: Implement
     // Set in hash table
@@ -295,61 +297,35 @@ int vfs_register_fs_type(vfs_fs_type_t *fs_type) {
 }
 
 void test_vfs(vfs_superblock_t *root_sb) {
-    // root_sb->
-    // if (vfs_create("/example.txt", 0644) != 0) {
-    //     printf("Failed to create file\n");
-    //     return;
-    // }
-    // printf("Created file\n");
-
-    // if (vfs_mkdir("/example_dir", 0755) != 0) {
-    //     printf("Failed to create directory\n");
-    //     return;
-    // }
-
-    // if (vfs_create("/example_dir/example.txt", 0644) != 0) {
-    //     printf("Failed to create file\n");
-    //     return;
-    // }
-
-    // int fd = vfs_open("/example.txt", 0);
-    // if (fd < 0) {
-    //     printf("Failed to open file\n");
-    //     return;
-    // }
-
-    // int written = vfs_write(fd, "Hello, World!\n", 14);
-    // printf("Wrote %d bytes to file\n", written);
-    // vfs_close(fd);
-
-    // fd = vfs_open("/example.txt", 0);
-    // char buf[32];
-    // int count = vfs_read(fd, buf, 32);
-    // buf[count] = '\0';
-    // printf("Read from file: %s\n", buf);
-
-    // vfs_close(fd);
-    // vfs_unlink("/example.txt");
-    // printf("Deleted file\n");
-
     vfs_dir_entry_t entries[16];
     int file_count = vfs_readdir("/", &entries, 16);
-    printf("Files in root:\n");
+    printf("Files in root (%d):\n", file_count);
     for (int i = 0; i < file_count; i++) {
-        printf("  %s\n", entries[i].name);
+        if (entries[i].type == VFS_MODE_DIR) {
+            printf(">  %s\n", entries[i].name);
+        } else {
+            printf("   %s\n", entries[i].name);
+        }
     }
 
-    int fd = vfs_open("/rupa.txt", 0);
+    int fd = vfs_open("/sofa.txt", 0);
     if (fd < 0) {
         printf("Failed to open file\n");
         return;
     }
 
-    char buf[32];
-    int count = vfs_read(fd, buf, 32);
+    char buf[100];
+    int count = vfs_read(fd, buf, 100);
     buf[count] = '\0';
+    printf("Read %d bytes from file: %s\n", count, buf);
+    
+    // if (vfs_create("/sofa.txt", 0644) != 0) {
+    //     printf("Failed to create file\n");
+    //     return;
+    // }
 
-    printf("Read from file: %s\n", buf);
+    // printf("Created file: /sofa.txt\n");
+
 }
 
 void ramfs_init() {

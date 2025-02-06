@@ -185,17 +185,17 @@ static int fat32_prepare_entry(const char *name, fat32_dir_entry_t *entry, uint3
 
     int i;
     for (i = 0; i < 8 && name[i] != '.' && name[i] != '\0'; i++) {
-        entry->filename[i] = toupper(name[i]);
+        entry->filename[i] = name[i];
     }
     for (int j = 0; j < 3 && name[i + 1 + j] != '\0'; j++) {
-        entry->ext[j] = toupper(name[i + 1 + j]);
+        entry->ext[j] = name[i + 1 + j];
     }
 
     entry->attributes = (mode & VFS_MODE_DIR) ? FAT32_ATTR_DIRECTORY : FAT32_ATTR_ARCHIVE;
     return 0;
 }
 
-static int fat32_find_free_entry(fat32_superblock_t *sb, uint32_t cluster, fat32_dir_entry_t **entry, uint32_t *buffer) {
+static int fat32_find_free_entry(fat32_superblock_t *sb, uint32_t cluster, fat32_dir_entry_t **entry, uint8_t *buffer) {
     while (cluster < FAT32_CLUSTER_LAST) {
         if (cluster == FAT32_CLUSTER_BAD) return -1;
         if (fat32_read_cluster(sb, cluster, buffer) != 0) return -1;
@@ -298,7 +298,6 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
         cluster = fat32_get_next_cluster(sb, cluster);
     }
 
-    printf("Error: File not found:  %s\n", name);
     return NULL;
 }
 
@@ -448,6 +447,7 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
     while (read < count) {
         uint32_t cluster_offset = offset % sb->cluster_size;
         uint32_t to_read = sb->cluster_size - cluster_offset;
+        printf("Cluster offset: %d, to_read: %d\n", cluster_offset, to_read);
         if (to_read > count - read) {
             to_read = count - read;
         }
@@ -483,6 +483,17 @@ uint32_t fat32_entry_to_inode_number(fat32_dir_entry_t *entry, uint32_t entry_of
     return (start_cluster << 12) | entry_offset & 0xFFF;
 }
 
+char fat32_extract_lfn_char(fat32_long_dir_entry_t *entry, int index) {
+    if (index < 5) {
+        return entry->name1[index * 2]; // First 5 characters (Unicode, skip high byte)
+    } else if (index < 11) {
+        return entry->name2[(index - 5) * 2]; // Next 6 characters
+    } else if (index < 13) {
+        return entry->name3[(index - 11) * 2]; // Last 2 characters
+    }
+    return '\0'; // Out of range
+}
+
 static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_entries) {
     if (!dir || !entries) return -1;
 
@@ -502,32 +513,46 @@ static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_
         for (int i = 0; i < sb->cluster_size / sizeof(fat32_dir_entry_t); i++) {
             fat32_dir_entry_t *entry = (fat32_dir_entry_t*)(buffer + i * sizeof(fat32_dir_entry_t));
             if (entry->filename[0] == FAT32_LAST_ENTRY) return entry_count;
+            if (entry->filename[0] == FAT32_DELETED_ENTRY) continue;
 
-            if (entry->filename[0] != FAT32_DELETED_ENTRY) {
-                if (entry->attributes == FAT32_ATTR_LONG_NAME) {
-                    fat32_long_dir_entry_t *lfn_entry = (fat32_long_dir_entry_t*)entry;
-                    int lfn_index = (lfn_entry->order & 0x1F) - 1;
-                    size_t lfn_offset = lfn_index * 13;
-
-                    for (int j = 0; j < 13; j++) {
-                        lfn_buffer[lfn_offset * 13 + j] = lfn_entry->name1[j] & 0xFF;
-                    }
-
+            if (entry->attributes == FAT32_ATTR_LONG_NAME) {
+                fat32_long_dir_entry_t *lfn_entry = (fat32_long_dir_entry_t*)entry;
+                if (lfn_entry->order & 0x40) {
+                    lfn_length = 0;
                 }
 
-                vfs_dir_entry_t *vfs_entry = &entries[entry_count];
-                strncpy(vfs_entry->name, (char*)entry->filename, 8);
-                if (entry->ext[0] != ' ') {
-                    strncat(vfs_entry->name, ".", 1);
-                    strncat(vfs_entry->name, (char*)entry->ext, 3);
+                for (int j = 0; j < 13; j++) {
+                    char c = fat32_extract_lfn_char(lfn_entry, j);
+                    if (c == '\0') break;
+                    lfn_buffer[lfn_length++] = c;
                 }
 
-                vfs_entry->type = (entry->attributes & FAT32_ATTR_DIRECTORY) ? VFS_MODE_DIR : VFS_MODE_FILE;
-                vfs_entry->inode_number = fat32_entry_to_inode_number(entry, i);
-
-                entry_count++;
-                if (entry_count >= max_entries) return entry_count;
+                continue;
             }
+
+            vfs_dir_entry_t *vfs_entry = &entries[entry_count];
+            if (lfn_length > 0) {
+                // Use long file name if available
+                strncpy(vfs_entry->name, lfn_buffer, sizeof(vfs_entry->name) - 1);
+                memset(lfn_buffer, 0, sizeof(lfn_buffer));
+                lfn_length = 0;
+            } else {
+                // Use 8.3 file name
+                strncpy(vfs_entry->name, (char *)entry->filename, 8);
+                vfs_entry->name[8] = '\0'; // Ensure null-termination
+                char *ext = vfs_entry->name + strlen(vfs_entry->name);
+                if (entry->ext[0] != ' ') {
+                    if (strlen(vfs_entry->name) < sizeof(vfs_entry->name) - 1) {
+                        strncat(vfs_entry->name, ".", sizeof(vfs_entry->name) - strlen(vfs_entry->name) - 1);
+                        strncat(vfs_entry->name, (char *)entry->ext, 3);
+                    }
+                }
+            }
+
+            vfs_entry->type = (entry->attributes & FAT32_ATTR_DIRECTORY) ? VFS_MODE_DIR : VFS_MODE_FILE;
+            vfs_entry->inode_number = fat32_entry_to_inode_number(entry, i);
+
+            if (++entry_count >= max_entries) return entry_count;
         }
 
         cluster = fat32_get_next_cluster(sb, cluster);
@@ -605,10 +630,9 @@ vfs_superblock_t * fat32_mount(const char *device) {
     sb->bytes_per_sector = boot_sector->bytes_per_sector;
     sb->sectors_per_cluster = boot_sector->sectors_per_cluster;
     sb->reserved_sectors = boot_sector->reserved_sectors;
-    sb->data_sector = boot_sector->reserved_sectors + (boot_sector->fat_count * boot_sector->sectors_per_fat);
-    sb->root_sector = boot_sector->root_cluster;
-    sb->root_cluster = 2;
-    sb->data_clusters = (boot_sector->total_sectors - sb->data_sector) / boot_sector->sectors_per_cluster;
+    sb->data_sector = boot_sector->reserved_sectors + (boot_sector->fat_count * boot_sector->sectors_per_fat_large);
+    sb->root_cluster = boot_sector->root_cluster;
+    sb->data_clusters = (boot_sector->total_sectors_large - sb->data_sector) / boot_sector->sectors_per_cluster;
     sb->cluster_size = boot_sector->sectors_per_cluster * boot_sector->bytes_per_sector;
     sb->device = bd;
 

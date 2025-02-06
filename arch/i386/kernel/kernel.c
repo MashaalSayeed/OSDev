@@ -141,7 +141,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// test_scheduler();
 
 	vfs_init();
-
+	test_elf_loader();
 
 	log_to_serial("Hello, Serial World 2!\n");
 

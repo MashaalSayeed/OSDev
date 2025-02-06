@@ -130,17 +130,17 @@ void ata_init() {
         register_block_device(&ata);
     }
 
-    // if (ata_identify(ATA_PRIMARY_BASE_PORT, ATA_SLAVE) == 0) {
-    //     printf("No primary slave ATA device found\n");
-    // }
+    if (ata_identify(ATA_PRIMARY_BASE_PORT, ATA_SLAVE) != ATA_SUCCESS) {
+        printf("No primary slave ATA device found\n");
+    }
 
-    // if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_MASTER) == 0) {
-    //     printf("No secondary master ATA device found\n");
-    // }
+    if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_MASTER) != ATA_SUCCESS) {
+        printf("No secondary master ATA device found\n");
+    }
 
-    // if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_SLAVE) == 0) {
-    //     printf("No secondary slave ATA device found\n");
-    // }
+    if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_SLAVE) != ATA_SUCCESS) {
+        printf("No secondary slave ATA device found\n");
+    }
 
     register_interrupt_handler(14, ata_irq_handler);
     register_interrupt_handler(15, ata_irq_handler);
