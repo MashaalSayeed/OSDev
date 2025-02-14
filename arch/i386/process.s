@@ -1,29 +1,29 @@
 global switch_context
 switch_context:
-    ; Skip return address, and get the pointer regs
-    MOV ebp, [esp+4]
+    CLI
 
     ; Load the new context
-    MOV eax, [ebp+0]
-    MOV ds, eax
-    MOV es, eax
-    MOV fs, eax
-    MOV gs, eax
+    MOV ds, [eax]
+    MOV es, [eax]
+    MOV fs, [eax]
+    MOV gs, [eax]
 
-    MOV edi, [ebp+4]
-    MOV esi, [ebp+8]
-    MOV ebx, [ebp+20]
-    MOV edx, [ebp+24]
-    MOV ecx, [ebp+28]
-    MOV eax, [ebp+32]
+    MOV edi, [eax+4]
+    MOV esi, [eax+8]
+    MOV ebp, [eax+12]
+    MOV ebx, [eax+20]
+    MOV edx, [eax+24]
+    MOV ecx, [eax+28]
 
-    PUSH DWORD [ebp+60] ; Push SS
-    PUSH DWORD [ebp+56] ; Push ESP
-    PUSH DWORD [ebp+52] ; Push EFLAGS
-    PUSH DWORD [ebp+48] ; Push CS
-    PUSH DWORD [ebp+44] ; Push EIP
+    PUSH DWORD [eax+60] ; Push SS
+    PUSH DWORD [eax+56] ; Push ESP
+    PUSH DWORD [eax+52] ; Push EFLAGS
+    PUSH DWORD [eax+48] ; Push CS
+    PUSH DWORD [eax+44] ; Push EIP
 
-    MOV ebp, [ebp+12]
+    MOV eax, [eax+32] ; Restore EAX
+
+    STI
     IRET
 
 

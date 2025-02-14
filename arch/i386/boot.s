@@ -7,6 +7,8 @@ MBOOT_HEADER_CHECKSUM EQU -(MBOOT_MAGIC + MBOOT_ARCH + MBOOT_HEADER_LENGTH)
 ; Multiboot2 Tag Types
 HEADER_TAG_END     EQU 0
 HEADER_TAG_OPTIONAL EQU 1
+HEADER_TAG_CMDLINE EQU 2
+HEADER_TAG_MODULES EQU 3
 HEADER_TAG_FRAMEBUFFER EQU 5
 
 ; Constants for loading higher half kernel
@@ -14,7 +16,7 @@ VM_BASE            EQU 0xC0000000
 PDE_INDEX          EQU (VM_BASE >> 22)
 
 ; Multiboot Header Section
-section .multiboot align=4096
+section .multiboot align=8
 global multiboot_header
 multiboot_header:
     DD MBOOT_MAGIC             ; Multiboot2 magic number
@@ -30,6 +32,11 @@ multiboot_header:
 ;     DD 768
 ;     DD 32
 ; mb2_tag_framebuffer_end:
+
+    align 8
+    dw 6                        ; Tag type 6 (module alignment)
+    dw 0                        ; Flags (0)
+    dd 8                        ; Size of this tag (8 bytes)
 
     ; End tag
     align 8

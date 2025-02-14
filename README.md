@@ -19,7 +19,7 @@ chmod +x scripts/build.sh
 scripts/build.sh
 ```
 
-4. Create a harddisk for your system
+4. Create a virtual disk for your system
 ```bash
 dd if=/dev/zero of=zdisk.img bs=1M count=64
 mkfs.fat -F 32 zdisk.img
@@ -49,9 +49,10 @@ Thank me later 😊
 8. Shift To Multiboot2 ✅
 9. Process Scheduling ✅
 10. Virtual File System ✅
-11. Multithreading
-12. Userspace Mode (Ring 3)
-13. Shell
+11. Make a [Complete ISO](https://wiki.osdev.org/GRUB#Disk_image_instructions) (GRUB + Kernel + Disk Image)
+12. Multithreading
+13. Userspace Mode (Ring 3)
+14. Shell
 
 ### 2. Memory Management
 
@@ -103,3 +104,4 @@ Thank me later 😊
 2. http://www.osdever.net/tutorials/
 3. https://github.com/dreamportdev/Osdev-Notes
 4. https://github.com/szhou42/osdev
+5. https://forum.osdev.org/viewtopic.php?t=30577

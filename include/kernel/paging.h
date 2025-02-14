@@ -49,7 +49,7 @@ extern page_directory_t * initial_page_dir;
 extern uint32_t _kernel_start;
 
 void paging_init();
-void switch_page_directory(page_directory_t *dir, uint32_t phys);
+void switch_page_directory(page_directory_t *dir);
 void enable_paging();
 void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags);
 void free_page(page_directory_t *dir, uint32_t virtual);
@@ -57,5 +57,6 @@ void * physical2virtual(page_directory_t *dir, void *physical);
 void * virtual2physical(page_directory_t *dir, void *virtual);
 void map_physical_to_virtual(uint32_t virtual, uint32_t physical);
 void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_start, uint32_t size);
-void debug_page_mapping(uint32_t virtual_address);
+void debug_page_mapping(page_directory_t *dir, uint32_t virtual_address);
+void dump_page_directory(page_directory_t *dir);
 void page_fault_handler(registers_t *regs);

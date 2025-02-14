@@ -1,6 +1,11 @@
 #include "kernel/gdt.h"
 #include "libc/string.h"
 
+#define KERNEL_STACK_SIZE 4096
+
+// TODO: Use the existing kernel stack
+uint8_t kernel_stack[KERNEL_STACK_SIZE] __attribute__((aligned(16)));
+
 extern void gdt_flush(void* addr);
 extern void tss_flush();
 
@@ -23,7 +28,7 @@ void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_
 
 void load_tss(uint32_t num, uint16_t ss0, uint32_t esp0) {
     uint32_t base = (uint32_t)&tss_entry;
-    uint32_t limit = sizeof(struct tss_entry);
+    uint32_t limit = sizeof(struct tss_entry) - 1;
 
     gdt_set_gate(num, base, limit, 0x89, 0x00);
     memset(&tss_entry, 0, sizeof(struct tss_entry));
@@ -32,7 +37,7 @@ void load_tss(uint32_t num, uint16_t ss0, uint32_t esp0) {
     tss_entry.ss0 = ss0;
     tss_entry.cs = 0x08;
     tss_entry.ss = tss_entry.ds = tss_entry.es = tss_entry.fs = tss_entry.gs = 0x10;
-    tss_entry.trap = 0x8;
+    tss_entry.trap = 0x0;
 }
 
 void gdt_install() {
@@ -44,11 +49,9 @@ void gdt_install() {
     gdt_set_gate(2, 0, 0xFFFFFFFF, 0x92, 0xCF);  // Kernel Data segment 0x10
     gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);  // User Code segment   0x1B
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);  // User Data segment   0x23
-    load_tss(5, 0x10, 0x0);                      // TSS segment         0x28
+    // TSS segment         0x28
+    load_tss(5, 0x10, (uint32_t)(kernel_stack + KERNEL_STACK_SIZE)); 
 
-    asm volatile ("lgdt %0" : : "m"(gp));
-    asm volatile ("mov $0x10, %ax; mov %ax, %ds; mov %ax, %es; mov %ax, %fs; mov %ax, %gs; ljmp $0x08, $next; next:");
-    
     gdt_flush(&gp);
     tss_flush();
 }

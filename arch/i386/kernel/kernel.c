@@ -27,17 +27,8 @@
 typedef void (*user_func_t)(void);
 
 extern page_directory_t *kpage_dir;
-extern void jump_usermode(uint32_t user_stack_top, void *user_program);
-// extern void test_user_function();
-extern void _user_main();
-
 framebuffer_t* framebuffer;
 bool is_gui_enabled = false;
-
-
-// void test_user_function() {
-// 	for (;;) ;
-// }
 
 void multiboot2_init(struct multiboot_tag* mbd) {
 	struct multiboot_tag* tag = mbd;
@@ -55,11 +46,11 @@ void multiboot2_init(struct multiboot_tag* mbd) {
 		}
 		else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
 			fb = (struct multiboot_tag_framebuffer*) tag;
-			printf("Framebuffer type: %d\n", fb->framebuffer_type);
-			printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",
-				   fb->framebuffer_pitch, fb->framebuffer_width,
-				   fb->framebuffer_height, fb->framebuffer_bpp);
-			printf("Framebuffer address: %x\n", fb->framebuffer_addr);
+			// printf("Framebuffer type: %d\n", fb->framebuffer_type);
+			// printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",
+			// 	   fb->framebuffer_pitch, fb->framebuffer_width,
+			// 	   fb->framebuffer_height, fb->framebuffer_bpp);
+			// printf("Framebuffer address: %x\n", fb->framebuffer_addr);
 
 			framebuffer = init_framebuffer(fb->framebuffer_width, fb->framebuffer_height, fb->framebuffer_pitch, fb->framebuffer_bpp, fb->framebuffer_addr);
 			is_gui_enabled = fb->framebuffer_type == MULTIBOOT_FRAMEBUFFER_TYPE_RGB;
@@ -75,6 +66,20 @@ void multiboot2_init(struct multiboot_tag* mbd) {
 
 				entry = (struct multiboot_mmap_entry*)((uint32_t)entry + mmap_tag->entry_size);
 			}
+		}
+		else if (tag->type == MULTIBOOT_TAG_TYPE_MODULE) {
+			struct multiboot_tag_module* module = (struct multiboot_tag_module*) tag;
+			printf("Module: %s\n", module->cmdline);
+			printf("Module start: %x, end: %x\n", module->mod_start, module->mod_end);
+			// load_program_to_userspace((void*)module->mod_start, module->mod_end - module->mod_start);
+		}
+		else if (tag->type == MULTIBOOT_TAG_TYPE_ELF_SECTIONS) {
+			struct multiboot_tag_elf_sections* elf_sections = (struct multiboot_tag_elf_sections*) tag;
+			printf("ELF Sections: %d\n", elf_sections->num);
+		}
+		else if (tag->type == MULTIBOOT_TAG_TYPE_BASIC_MEMINFO) {
+			struct multiboot_tag_basic_meminfo* meminfo = (struct multiboot_tag_basic_meminfo*) tag;
+			printf("Memory: %dKB lower, %dKB upper\n", meminfo->mem_lower, meminfo->mem_upper);
 		}
 		else {
 			// printf("Unknown tag: %d\n", tag->type);
@@ -111,6 +116,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	paging_init();
 	kheap_init();
+
 	printf("Initialized Paging!!\n\n");
 	
 	pci_init();
@@ -118,8 +124,12 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// acpi_init();
 	printf("\n");
 
+	debug_page_mapping(kpage_dir, 0xC0013346);
+	debug_page_mapping(kpage_dir, 0xC00143aa);
+
 	map_physical_to_virtual_region(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height);
 	log_to_serial("Hello, Serial World 1!\n");
+
 
 	if (is_gui_enabled) {
 		psf_font_t *font = load_psf_font();
@@ -136,12 +146,11 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// terminal_clear();
 	scheduler_init();
 	// print_process_list();
-	// init_timer(100);
+	init_timer(100);
+	test_scheduler();
 
-	// test_scheduler();
-
-	vfs_init();
-	test_elf_loader();
+	// vfs_init();
+	// test_elf_loader();
 
 	log_to_serial("Hello, Serial World 2!\n");
 

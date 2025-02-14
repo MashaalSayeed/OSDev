@@ -16,13 +16,9 @@ void timer_callback(registers_t *regs) {
     if (tick % 100 == 0) schedule(regs);
 }
 
-uint32_t get_timer_ticks() {
-    return tick;
-}
-
 void sleep(uint32_t ms) {
-	uint32_t start = get_timer_ticks();
-	while (get_timer_ticks() < start + ms);
+	uint32_t start = tick;
+	while ((uint32_t)(tick - start) < ms);
 }
 
 void init_timer(uint32_t freq) {

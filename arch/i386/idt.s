@@ -9,7 +9,7 @@ idt_flush:
     global isr%1
     isr%1:
         CLI
-        PUSH LONG 0
+        PUSH LONG 0 ; Push a dummy error code
         PUSH LONG %1
         JMP isr_common_stub
 %endmacro
@@ -18,6 +18,7 @@ idt_flush:
     global isr%1
     isr%1:
         CLI
+        ; Error code is pushed by the CPU
         PUSH LONG %1
         JMP isr_common_stub
 %endmacro
@@ -96,18 +97,18 @@ isr_common_stub:
     MOV fs, ax
     MOV gs, ax
 
-    PUSH esp
+    PUSH esp   ; Push the stack pointer
     CALL isr_handler
 
-    ADD esp, 8
-    POP ebx
-    MOV ds, bx
-    MOV es, bx
-    MOV fs, bx
-    MOV gs, bx
+    ADD esp, 4 ; Remove stack pointer
+    POP eax
+    MOV ds, ax
+    MOV es, ax
+    MOV fs, ax
+    MOV gs, ax
 
     POPA
-    ADD esp, 8
+    ADD esp, 8 ; Remove error code and interrupt number
     STI
     IRET
 

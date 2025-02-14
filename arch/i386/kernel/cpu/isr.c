@@ -4,6 +4,7 @@
 #include "drivers/serial.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
+#include "kernel/exceptions.h"
 
 static idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -89,12 +90,13 @@ void isr_install() {
     idt_set_entry(47, (uint32_t)irq15, 0x08, 0x8E);
 
     // Install the system calls
-    idt_set_entry(128, (uint32_t)isr128, 0x08, 0x8E);
+    idt_set_entry(128, (uint32_t)isr128, 0x08, 0xEE);
     idt_set_entry(177, (uint32_t)isr177, 0x08, 0x8E);
 
     idt_flush((uint32_t)&idtp);
 
     register_interrupt_handler(0x80, syscall_handler);
+    exceptions_install();
 }
 
 char *exception_messages[] = {
@@ -134,10 +136,11 @@ char *exception_messages[] = {
 
 isr_t interrupt_handlers[256];
 void isr_handler(registers_t *r) {
-    printf("Received interrupt: %d\n", r->int_no);
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];
         handler(r);
+    } else {
+        printf("Received interrupt: %d\n", r->int_no);
     }
 
     if (r->int_no < 32) {
@@ -161,7 +164,7 @@ void irq_handler(registers_t *r) {
 
 void syscall_handler(registers_t *regs) {
     switch (regs->eax) {
-        case 1: // Syscall print
+        case 0: // Syscall print
             printf((const char *)regs->ebx);
             break;
         default:

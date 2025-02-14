@@ -4,12 +4,12 @@
 #include "libc/stdio.h"
 #include "libc/string.h"
 
-#define STACK_SIZE 4096
-
 process_t *process_list = NULL;
 process_t *current_process = NULL;
+process_t *init_process = NULL;
 size_t pid_counter = 0;
 
+extern page_directory_t* kpage_dir;
 extern void switch_context(registers_t* context);
 
 // Bump Allocator
@@ -24,48 +24,59 @@ void idle_process() {
 }
 
 void scheduler_init() {
-    process_t* init_process = create_process("init", &idle_process);
+    init_process = create_process("init", idle_process);
     add_process(init_process);
 }
 
 void schedule(registers_t* context) {
     if (!process_list) return;
-    asm volatile("cli");
 
-    // Save the context of the current processs
-    current_process->context = *context;
-    current_process->status = READY;
+    // // Save the context of the current processs
+    if (current_process != NULL) {
+        current_process->context = *context;
+        current_process->status = READY;
+    }
 
+    process_t *next_process = current_process ? current_process : process_list;
+    do {
+        next_process = next_process->next ? next_process->next : process_list;
+    } while (next_process->status != READY && next_process != current_process);
 
-    // Find the next READY process
-    process_t *next_process = current_process->next;
-    while (next_process->status != READY) {
-        next_process = next_process->next;
+    if (next_process == current_process && (current_process == NULL || current_process->status != READY)) {
+        next_process = init_process;  // Always have a fallback
     }
 
     if (next_process != current_process) {
-        printf("Switching from '%s' to '%s'\n", current_process->process_name, next_process->process_name);
         // Update the current process
+        if (current_process) {
+            printf("Switching from '%s' (%x) to '%s' (%x)\n", current_process->process_name, current_process->context.eip, next_process->process_name, next_process->context.eip);
+        } else {
+            printf("Switching to '%s' (%x)\n", next_process->process_name, next_process->context.eip);
+        }
+
         current_process = next_process;
         current_process->status = RUNNING;
 
         // Restore context and switch page directory
+        switch_page_directory(current_process->root_page_table);
         switch_context(&current_process->context);
-        // memcpy(context, &current_process->context, sizeof(registers_t));
-        switch_page_directory(current_process->root_page_table, 1);
     } else {
         current_process->status = RUNNING;
     }
-
-    asm volatile("sti");
 }
 
 process_t* create_process(char *process_name, void (*entry_point)()) {
     // Allocate memory for the new process structure
     process_t *new_process = (process_t *)kmalloc(sizeof(process_t));
-
     if (!new_process) {
         printf("Error: Failed to allocate memory for process %s\n", process_name);
+        return NULL;
+    }
+
+    void* stack = kmalloc(PROCESS_STACK_SIZE);
+    if (!stack) {
+        printf("Error: Failed to allocate memory for process %s stack\n", process_name);
+        kfree(new_process);
         return NULL;
     }
 
@@ -76,12 +87,12 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     // Initialize process context
     new_process->context.eip = (uint32_t)entry_point;
     new_process->context.eflags = 0x202;
-    new_process->context.esp = (uint32_t)kmalloc(PROCESS_STACK_SIZE) + PROCESS_STACK_SIZE; // Allocate and set stack pointer
-    new_process->context.cs = KERNEL_CS;
-    new_process->context.ds = KERNEL_DS;
-    new_process->context.ss = KERNEL_SS;
+    new_process->context.esp = (uint32_t)stack + PROCESS_STACK_SIZE; // Allocate and set stack pointer
+    new_process->context.cs = USER_CS;
+    new_process->context.ds = USER_DS;
+    new_process->context.ss = USER_SS;
 
-    new_process->root_page_table = initial_page_dir;
+    new_process->root_page_table = clone_page_directory(kpage_dir);
 
     // Initialize other general-purpose registers to 0 (optional but safer)
     new_process->context.eax = 0;
@@ -93,7 +104,6 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     new_process->context.ebp = 0;
 
     new_process->status = READY;
-
     return new_process;
 }
 
@@ -123,6 +133,7 @@ void kill_process(process_t *process) {
 
 void print_process_list() {
     process_t *temp = process_list;
+    if (temp == NULL) return;
     do {
         printf("PID: %d, Name: %s, Status: %d\n", temp->pid, temp->process_name, temp->status);
         temp = temp->next;

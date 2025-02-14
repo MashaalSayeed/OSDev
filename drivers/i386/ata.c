@@ -57,7 +57,7 @@ int ata_identify(uint16_t io_base, uint8_t drive) {
         ptr[i + 1] = tmp;
     }
     ptr[40] = '\0';
-    // printf("ATA Device: %s\n", id->model_number);
+    printf("ATA Device: %s\n", id->model_number);
     return ATA_SUCCESS;
 }
 
@@ -130,18 +130,19 @@ void ata_init() {
         register_block_device(&ata);
     }
 
-    if (ata_identify(ATA_PRIMARY_BASE_PORT, ATA_SLAVE) != ATA_SUCCESS) {
-        printf("No primary slave ATA device found\n");
-    }
+    // if (ata_identify(ATA_PRIMARY_BASE_PORT, ATA_SLAVE) != ATA_SUCCESS) {
+    //     printf("No primary slave ATA device found\n");
+    // }
 
-    if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_MASTER) != ATA_SUCCESS) {
-        printf("No secondary master ATA device found\n");
-    }
+    // if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_MASTER) != ATA_SUCCESS) {
+    //     printf("No secondary master ATA device found\n");
+    // }
 
-    if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_SLAVE) != ATA_SUCCESS) {
-        printf("No secondary slave ATA device found\n");
-    }
+    // if (ata_identify(ATA_SECONDARY_BASE_PORT, ATA_SLAVE) != ATA_SUCCESS) {
+    //     printf("No secondary slave ATA device found\n");
+    // }
 
-    register_interrupt_handler(14, ata_irq_handler);
-    register_interrupt_handler(15, ata_irq_handler);
+    register_interrupt_handler(32 + 14, ata_irq_handler);
+
+    // printf("ATA Initialized\n");
 }

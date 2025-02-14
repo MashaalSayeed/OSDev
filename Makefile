@@ -18,6 +18,7 @@ QEMU_FLAGS = -d int,page,cpu_reset,guest_errors -no-reboot -no-shutdown
 ARCH_DIR = arch/$(ARCH)
 BUILD_DIR = build/$(ARCH)
 KERNEL_DIR = $(ARCH_DIR)/kernel
+USERLAND_DIR = $(ARCH_DIR)/userland
 DRIVERS_DIR = drivers/$(ARCH)
 LIBC_DIR = libc
 ISO_DIR = iso
@@ -50,7 +51,8 @@ all: $(ISO_IMAGE)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc \
 	         $(BUILD_DIR)/kernel/memory $(BUILD_DIR)/kernel/cpu \
-			 $(BUILD_DIR)/kernel/gui $(BUILD_DIR)/kernel/fs
+			 $(BUILD_DIR)/kernel/gui $(BUILD_DIR)/kernel/fs \
+			 $(BUILD_DIR)/kernel/scheduler
 
 $(FONT_OBJ): $(FONT_PSF) | $(BUILD_DIR)
 	@echo "Building font object..."
@@ -71,6 +73,10 @@ $(BUILD_DIR)/kernel/%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 	@echo "Compiling kernel source file $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/userland/%.o: $(USERLAND_DIR)/%.c | $(BUILD_DIR)
+	@echo "Compiling userland source file $<..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(KERNEL_BIN_ARCH): $(OBJS) $(ARCH_DIR)/linker.ld
 	@echo "Linking kernel..."
 	$(LD) $(LDFLAGS) -o $(KERNEL_BIN_ARCH) $(OBJS)
@@ -88,6 +94,7 @@ $(DISK_IMAGE):
 run: $(ISO_IMAGE) $(DISK_IMAGE)
 	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) \
 		-cdrom $(ISO_IMAGE) \
+		-drive file=$(DISK_IMAGE),format=raw \
 		-serial file:$(LOG_FILE) \
 		-boot d \
 		-vga std
