@@ -167,6 +167,12 @@ void syscall_handler(registers_t *regs) {
         case 0: // Syscall print
             printf((const char *)regs->ebx);
             break;
+        case 1:
+            int fd = regs->ebx;
+            const char *buffer = (const char *)regs->ecx;
+            int size = regs->edx;
+            printf("%d | %d | %s\n", fd, size, buffer);
+            break;
         default:
             printf("Unknown syscall: %d\n", regs->eax);
     }

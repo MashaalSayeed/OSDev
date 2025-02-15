@@ -5,6 +5,8 @@
 #include "kernel/locks.h"
 #include "system.h"
 #include "kernel/printf.h"
+#include "kernel/vfs.h"
+#include "kernel/elf.h"
 
 void test_divide_by_zero() {
 	int x = 1;
@@ -87,5 +89,6 @@ void test_scheduler() {
 }
 
 void test_elf_loader() {
-	// void *elf_file = 
+	load_elf("/user.bin");
+	printf("Loaded ELF file\n");
 }

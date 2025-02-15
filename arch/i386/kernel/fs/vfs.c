@@ -241,6 +241,31 @@ uint32_t vfs_read(int fd, void* buf, size_t count) {
     return file->inode->inode_ops->read(file, buf, count);
 }
 
+int vfs_seek(int fd, uint32_t offset, int whence) {
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
+    vfs_file_t *file = vfs_fd_table[fd];
+
+    int new_offset = file->offset;
+    switch (whence) {
+        case VFS_SEEK_SET:
+            new_offset = offset;
+            break;
+        case VFS_SEEK_CUR:
+            new_offset += offset;
+            break;
+        case VFS_SEEK_END:
+            new_offset = file->inode->size + offset;
+            break;
+        default:
+            return -1;
+    }
+
+    if (new_offset < 0) return -1;
+
+    file->offset = new_offset;
+    return 0;
+}
+
 // TODO: Merge with vfs_create
 int vfs_mkdir(const char *path, uint32_t mode) {
     char *dirname, *filename;

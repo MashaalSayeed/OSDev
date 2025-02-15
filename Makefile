@@ -95,7 +95,7 @@ $(DISK_IMAGE):
 	mkfs.fat -F 32 $(DISK_IMAGE)
 
 run: $(ISO_IMAGE) $(DISK_IMAGE)
-	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) \
+	qemu-system-$(SCAMARCH) \
 		-cdrom $(ISO_IMAGE) \
 		-drive file=$(DISK_IMAGE),format=raw \
 		-serial file:$(LOG_FILE) \
@@ -103,7 +103,13 @@ run: $(ISO_IMAGE) $(DISK_IMAGE)
 		-vga std
 
 debug: $(ISO_IMAGE)
-	qemu-system-$(SCAMARCH) $(ISO_IMAGE) -s -S &
+	qemu-system-$(SCAMARCH) -s -S \
+		-cdrom $(ISO_IMAGE) \
+		-drive file=$(DISK_IMAGE),format=raw \
+		-serial file:$(LOG_FILE) \
+		-boot d \
+		-vga std &
+
 	sleep 1
 	$(GDB) -ex "target remote localhost:1234" -ex "symbol-file $(KERNEL_BIN_ARCH)"
 

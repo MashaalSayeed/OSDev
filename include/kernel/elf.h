@@ -4,6 +4,18 @@
 
 #define ELF_MAGIC 0x464C457F
 
+#define PT_NULL 0
+#define PT_LOAD 1
+#define PT_DYNAMIC 2
+#define PT_INTERP 3
+#define PT_NOTE 4
+#define PT_SHLIB 5
+#define PT_PHDR 6
+
+#define PF_X 1
+#define PF_W 2
+#define PF_R 4
+
 typedef struct {
     uint32_t magic;
     uint8_t  elf[12];
@@ -33,6 +45,5 @@ typedef struct {
     uint32_t align;
 } __attribute__((packed)) elf_program_header_t;
 
-
-
-
+int is_valid_elf(elf_header_t *header);
+void load_elf(const char *path);

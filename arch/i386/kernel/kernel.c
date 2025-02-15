@@ -144,22 +144,22 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// find_rsdt();
 	// printf("Creating processes\n");
 	// terminal_clear();
-	scheduler_init();
+	// scheduler_init();
 	// print_process_list();
 	// init_timer(100);
 	// test_scheduler();
 
 	vfs_init();
-	// test_elf_loader();
+	test_elf_loader();
 
 	log_to_serial("Hello, Serial World 2!\n");
 
 	for (;;) ;
 }
 
-void load_program_to_userspace(void* program_binary, size_t size) {
-    uint32_t addr = USER_PROGRAM_START;
-    for (size_t i = 0; i < size; i += BLOCK_SIZE) {
-		map_physical_to_virtual(addr + i, program_binary + i);
-    }
-}
+// void load_program_to_userspace(void* program_binary, size_t size) {
+//     uint32_t addr = USER_PROGRAM_START;
+//     for (size_t i = 0; i < size; i += BLOCK_SIZE) {
+// 		map_physical_to_virtual(addr + i, program_binary + i);
+//     }
+// }

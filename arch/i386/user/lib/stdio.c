@@ -9,6 +9,7 @@ int printf(const char *format, ...) {
     int ret = vsnprintf(buffer, 1024, format, args);
     va_end(args);
 
-    write(1, buffer, ret);
+    // write(1, buffer, ret);
+    syscall(0, (int)buffer);
     return ret;
 }

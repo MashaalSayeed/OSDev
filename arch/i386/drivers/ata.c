@@ -26,7 +26,22 @@ int ata_wait_drq(uint16_t io_base) {
 }
 
 void ata_irq_handler(registers_t *regs) {
-    printf("ATA IRQ\n");
+    uint8_t status = inb(ATA_PRIMARY_BASE_PORT + ATA_REG_STATUS);
+    if (status & ATA_STATUS_ERR) {
+        printf("ATA Error: %x\n", inb(ATA_PRIMARY_BASE_PORT + ATA_REG_ERROR));
+        return;
+    }
+
+    if (status & ATA_STATUS_DRQ) {
+        // printf("ATA IRQ: Data ready\n");
+        // TODO: Read the data if a read operation is in progress.
+        // ata_read_sector_interrupt();
+    } else {
+        printf("ATA IRQ: No data ready\n");
+    }
+
+    // Acknowledge the interrupt
+    inb(ATA_PRIMARY_BASE_PORT + ATA_REG_STATUS);
 }
 
 int ata_identify(uint16_t io_base, uint8_t drive) {

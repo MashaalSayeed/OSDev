@@ -120,6 +120,12 @@ void free_page(page_directory_t *dir, uint32_t virtual) {
     }
 }
 
+void map_pages(page_directory_t *dir, uint32_t virtual, uint32_t size, uint32_t flags) {
+    for (uint32_t i = 0; i < size; i += PAGE_SIZE) {
+        allocate_page(dir, virtual + i, flags);
+    }
+}
+
 // Map a physical address to a virtual address by creating a new page table entry
 void map_physical_to_virtual(uint32_t virtual, uint32_t physical) {
     if (!IS_ALIGN(physical)) {

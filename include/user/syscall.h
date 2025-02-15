@@ -4,7 +4,14 @@
 
 #define SYSCALL_WRITE 0
 
-static inline void syscall(int num, int arg1);
+static inline void syscall(int num, int arg1) {
+    asm volatile (
+        "int $0x80"
+        : // No return value
+        : "a" (num), "b" (arg1)
+        : "memory"
+    );
+}
 
 static inline void write(int fd, const char *buffer, int size) {
     asm volatile (
