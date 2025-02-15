@@ -1,7 +1,7 @@
 #include "kernel/pmm.h"
 #include "kernel/multiboot.h"
 #include "libc/string.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "system.h"
 #include <stdbool.h>
  

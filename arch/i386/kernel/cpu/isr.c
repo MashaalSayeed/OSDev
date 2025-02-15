@@ -3,7 +3,7 @@
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "libc/string.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "kernel/exceptions.h"
 
 static idt_entry_t idt[256];

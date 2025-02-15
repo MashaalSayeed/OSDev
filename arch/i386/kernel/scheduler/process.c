@@ -1,7 +1,7 @@
 #include "kernel/process.h"
 #include "kernel/kheap.h"
 #include "kernel/paging.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "libc/string.h"
 
 process_t *process_list = NULL;
@@ -47,13 +47,6 @@ void schedule(registers_t* context) {
     }
 
     if (next_process != current_process) {
-        // Update the current process
-        if (current_process) {
-            printf("Switching from '%s' (%x) to '%s' (%x)\n", current_process->process_name, current_process->context.eip, next_process->process_name, next_process->context.eip);
-        } else {
-            printf("Switching to '%s' (%x)\n", next_process->process_name, next_process->context.eip);
-        }
-
         current_process = next_process;
         current_process->status = RUNNING;
 
@@ -126,8 +119,9 @@ void add_process(process_t *process) {
 void kill_process(process_t *process) {
     process->status = TERMINATED;
 
-    // Free the stack memory
+    // Free the process stack and process structure
     kfree((uint32_t *)(process->context.esp - PROCESS_STACK_SIZE));
+    free_page_directory(process->root_page_table);
     kfree(process);
 }
 

@@ -1,6 +1,6 @@
 #include "kernel/acpi.h"
 #include "libc/string.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "kernel/paging.h"
 
 static rsdp_descriptor_t *rsdp = NULL;

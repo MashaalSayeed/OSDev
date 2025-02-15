@@ -1,5 +1,5 @@
 #include "kernel/kheap.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 
 uint8_t *kheap_start;
 uint8_t *kheap_end;

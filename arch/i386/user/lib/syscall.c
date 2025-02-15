@@ -1,6 +1,5 @@
-#include "kernel/syscall.h"
+#include "user/syscall.h"
 
-// TODO: Move outside of kernel
 static inline void syscall(int num, int arg1) {
     asm volatile (
         "int $0x80"
@@ -10,7 +9,3 @@ static inline void syscall(int num, int arg1) {
     );
 }
 
-// printf wrapper for user space
-void uprintf(const char *msg) {
-    syscall(SYSCALL_WRITE, (int)msg);
-}

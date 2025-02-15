@@ -1,7 +1,7 @@
 #include <stddef.h>
 
 #include "drivers/pci.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "io.h"
 
 pci_device_t devices[32];

@@ -1,6 +1,6 @@
 #include "kernel/isr.h"
 #include "kernel/exceptions.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 
 // TODO: make implementation of all exception handlers
 void gpf_handler(registers_t *regs) {

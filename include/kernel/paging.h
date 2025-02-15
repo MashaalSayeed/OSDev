@@ -60,3 +60,5 @@ void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_st
 void debug_page_mapping(page_directory_t *dir, uint32_t virtual_address);
 void dump_page_directory(page_directory_t *dir);
 void page_fault_handler(registers_t *regs);
+page_directory_t * clone_page_directory(page_directory_t *src);
+void free_page_directory(page_directory_t *dir);

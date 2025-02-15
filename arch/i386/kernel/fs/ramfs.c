@@ -1,7 +1,6 @@
 #include "kernel/ramfs.h"
 #include "kernel/kheap.h"
 #include "libc/string.h"
-#include "libc/stdio.h"
 
 ramfs_node_t *ramfs_root;
 

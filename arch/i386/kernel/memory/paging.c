@@ -2,7 +2,7 @@
 #include "kernel/paging.h"
 #include "kernel/pmm.h"
 #include "kernel/kheap.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "libc/string.h"
 #include "system.h"
 #include "drivers/serial.h"
@@ -203,6 +203,24 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
     }
 
     return new_dir;
+}
+
+void free_page_directory(page_directory_t *dir) {
+    for (uint32_t i = 0; i < 1024; i++) {
+        if (!dir->tables[i].present) continue;
+
+        page_table_t *table = dir->ref_tables[i];
+        if (!table) continue;
+
+        // for (uint32_t j = 0; j < 1024; j++) {
+        //     if (!table->pages[j].present) continue;
+        //     free_block(table->pages[j].frame);
+        // }
+
+        kfree(table);
+    }
+
+    kfree(dir);
 }
 
 void enable_paging() {

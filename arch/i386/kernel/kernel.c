@@ -15,7 +15,7 @@
 #include "kernel/font.h"
 #include "kernel/process.h"
 #include "kernel/tests.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "libc/string.h"
 #include "kernel/vfs.h"
 #include "drivers/pci.h"
@@ -146,10 +146,10 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// terminal_clear();
 	scheduler_init();
 	// print_process_list();
-	init_timer(100);
-	test_scheduler();
+	// init_timer(100);
+	// test_scheduler();
 
-	// vfs_init();
+	vfs_init();
 	// test_elf_loader();
 
 	log_to_serial("Hello, Serial World 2!\n");

@@ -1,7 +1,7 @@
 #include "kernel/fat32.h"
 #include "kernel/vfs.h"
 #include "kernel/kheap.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "libc/string.h"
 
 static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name);

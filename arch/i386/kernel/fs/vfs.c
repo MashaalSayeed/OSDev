@@ -3,7 +3,7 @@
 #include "kernel/ramfs.h"
 #include "kernel/fat32.h"
 #include "libc/string.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 
 #define MAX_BLOCK_DEVICES 16
 

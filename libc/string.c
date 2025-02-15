@@ -1,5 +1,4 @@
 #include "libc/string.h"
-#include "kernel/kheap.h"
 
 void memset(void *dest, char val, uint32_t count){
     char *temp = (char*) dest;
@@ -93,20 +92,6 @@ void reverse(char s[]) {
         s[i] = s[j];
         s[j] = c;
     }
-}
-
-char *strdup(const char *s) {
-    size_t len = strlen(s);
-    char *ret = (char *)kmalloc(len + 1);
-    strcpy(ret, s);
-    return ret;
-}
-
-char *strndup(const char *s, size_t n) {
-    char *ret = (char *)kmalloc(n + 1);
-    strncpy(ret, s, n);
-    ret[n] = '\0';
-    return ret;
 }
 
 char *strchr(const char *s, char c) {

@@ -1,7 +1,6 @@
 #include "kernel/timer.h"
 #include "kernel/process.h"
 #include "drivers/tty.h"
-#include "libc/stdio.h"
 #include "io.h"
 #include "system.h"
 

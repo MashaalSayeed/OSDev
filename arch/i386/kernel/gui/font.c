@@ -1,5 +1,5 @@
 #include "kernel/font.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "kernel/kheap.h"
 #include <limits.h>
 

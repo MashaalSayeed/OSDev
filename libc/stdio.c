@@ -1,70 +1,62 @@
-#include "kernel/framebuffer.h"
-#include "libc/stdio.h"
-#include "libc/string.h"
-#include "drivers/tty.h"
 #include <stdarg.h>
 #include <stdbool.h>
+#include "libc/string.h"
+#include "libc/stdio.h"
 
-bool is_vbe_enabled = false;
-
-void puts(const char* str) {
-    if (is_vbe_enabled) {
-
-    } else {
-        terminal_writestring(str);
+void str_append(char *buffer, size_t size, size_t *i, const char *str) {
+    while (*str && *i < size - 1) {
+        buffer[*i] = *str;
+        (*i)++;
+        str++;
     }
 }
 
-void putchar(char c) {
-    if (is_vbe_enabled) {
+int vsnprintf(char *buffer, size_t size, const char *format, va_list args) {
+    size_t i = 0;
+    char num_buffer[24];
 
-    } else {
-        terminal_putchar(c);
-    }
-}
-
-// Custom printf implementation
-void printf(const char* format, ...) {
-    va_list args;
-    va_start(args, format);
-    
     while (*format) {
         if (*format == '%') {
             format++;
             switch (*format) {
-                case 'c':
-                    putchar((char)va_arg(args, int));
+                case 'c': {
+                    char c = (char)va_arg(args, int);
+                    if (i < size - 1) buffer[i] = c;
+                    i++;
                     break;
-                case 's':
-                    puts(va_arg(args, char*));
+                }
+                case 's': {
+                    const char *str = va_arg(args, char*);
+                    if (str) str_append(buffer, size, &i, str);
                     break;
-                case 'd':
-                    int value = va_arg(args, int);
-                    char buffer[24];
-                    int_to_ascii(value, buffer);
-                    puts(buffer);
+                }
+                case 'd': {
+                    int_to_ascii(va_arg(args, int), num_buffer);
+                    str_append(buffer, size, &i, num_buffer);
                     break;
-                case 'b':
-                    int bin_val = va_arg(args, int);
-                    char bin_buffer[24];
-                    bin_to_ascii(bin_val, bin_buffer);
-                    puts(bin_buffer);
+                }
+                case 'b': {
+                    bin_to_ascii(va_arg(args, int), num_buffer);
+                    str_append(buffer, size, &i, num_buffer);
                     break;
-                case 'x':
-                    int hex = va_arg(args, int);
-                    char hex_buffer[24];
-                    hex_to_ascii(hex, hex_buffer);
-                    puts(hex_buffer);
+                }
+                case 'x': {
+                    hex_to_ascii(va_arg(args, int), num_buffer);
+                    str_append(buffer, size, &i, num_buffer);
                     break;
+                }
                 default:
-                    putchar(*format);
+                    if (i < size - 1) buffer[i] = *format;
+                    i++;
                     break;
             }
         } else {
-            putchar(*format);
+            if (i < size - 1) buffer[i] = *format;
+            i++;
         }
         format++;
     }
 
-    va_end(args);
+    if (size > 0) buffer[i < size ? i : size - 1] = '\0';
+    return i;
 }

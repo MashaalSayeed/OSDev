@@ -1,10 +1,31 @@
-CFLAGS?=
+ARCH?=i386
 
-LIBC_SRC=$(wildcard *.c)
-LIBC_OBJ=$(LIBC_SRC:%.c=../build/$(ARCH)/libc/%.o)
+CC=i686-elf-gcc
+AR=i686-elf-ar
+RANLIB=i686-elf-ranlib
 
-all: $(LIBC_OBJ)
+CFLAGS?=-ffreestanding -O2 -Wall -Wextra -O0 -I../include -std=gnu99 -g
 
-../build/$(ARCH)/libc/%.o: %.c
+BUILD_DIR=../build/$(ARCH)
+LIBC_BUILD_DIR=$(BUILD_DIR)/libc
+
+LIBC_SRC = $(wildcard *.c)
+LIBC_OBJS = $(LIBC_SRC:%.c=$(LIBC_BUILD_DIR)/%.o)
+LIBC_A = $(LIBC_BUILD_DIR)/libc.a
+
+all: $(LIBC_A)
+
+$(LIBC_BUILD_DIR):
+	mkdir -p $@
+
+$(LIBC_BUILD_DIR)/%.o: %.c
 	@echo "Compiling libc source file $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(LIBC_A): $(LIBC_OBJS) | $(LIBC_BUILD_DIR)
+	@echo "Building libc archive..."
+	$(AR) rcs $@ $^
+	$(RANLIB) $@
+
+clean:
+	rm -f $(LIBC_OBJS) $(LIBC_A)

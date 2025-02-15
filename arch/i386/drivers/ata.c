@@ -3,7 +3,7 @@
 #include "kernel/isr.h"
 #include "kernel/vfs.h"
 #include "kernel/kheap.h"
-#include "libc/stdio.h"
+#include "kernel/printf.h"
 #include "libc/string.h"
 #include "io.h"
 
