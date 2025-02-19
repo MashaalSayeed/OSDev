@@ -27,7 +27,7 @@ mkfs.fat -F 32 zdisk.img
 
 5. Boot the generated ISO file
 ```bash
-qemu-system-i386 -cdrom iso/zineos-i686.iso -hda iso/zdisk.img
+qemu-system-i386 -cdrom iso/zineos-i386.iso -hda iso/zdisk.img
 ```
 Or, you have a nicer way:
 ```bash
@@ -49,9 +49,9 @@ Thank me later 😊
 8. Shift To Multiboot2 ✅
 9. Process Scheduling ✅
 10. Virtual File System ✅
-11. Make a [Complete ISO](https://wiki.osdev.org/GRUB#Disk_image_instructions) (GRUB + Kernel + Disk Image)
-12. Multithreading
-13. Userspace Mode (Ring 3)
+11. Userspace Mode (Ring 3) ✅
+12. Make a [Complete ISO](https://wiki.osdev.org/GRUB#Disk_image_instructions) (GRUB + Kernel + Disk Image)
+13. Multithreading
 14. Shell
 
 ### 2. Memory Management
@@ -65,8 +65,9 @@ Thank me later 😊
 
 1. Virtual File System ✅
 2. FAT32 System ✅
-3. Subdirectory Support
+3. Subdirectory Support ✅
 4. Long Filenames Support
+5. EXT2 ?
 
 ### 4. Drivers
 
@@ -76,9 +77,9 @@ Thank me later 😊
 4. PS2 Keyboard Driver ✅
 5. VBE Video ✅
 6. ATA Driver ✅
-7. PCI Driver ✅
-8. Mouse Driver
-9. RTC (Real Time Clock)
+7. RTC (Real Time Clock) ✅
+8. PCI Driver
+9. Mouse Driver
 10. Network Drivers
 
 ### 5. Video Output
@@ -92,10 +93,10 @@ Thank me later 😊
 1. Libc string functions ✅
 2. Basic printf debugging ✅
 3. ACPI ✅
-4. APIC
-5. Exception Handling
-6. Kernel Panics
-7. ELF Loader
+4. ELF Loader ✅
+5. APIC
+6. Exception Handling
+7. Kernel Panics
 8. Test Cases
 
 ## Resources

@@ -6,6 +6,7 @@
 #include "drivers/keyboard.h"
 #include "libc/string.h"
 #include "io.h"
+#include "kernel/process.h"
 
 static idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -184,6 +185,10 @@ void syscall_handler(registers_t *regs) {
             size = regs->edx;
             // printf("fgets: %x\n", size);
             kgets(buffer, size);
+            break;
+        case 5: // Syscall exit
+            printf("Exiting with status: %d\n", regs->ebx);
+            kill_current_process();
             break;
         default:
             printf("Unknown syscall: %d\n", regs->eax);

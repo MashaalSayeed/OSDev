@@ -20,7 +20,7 @@
 #include "kernel/vfs.h"
 #include "drivers/pci.h"
 #include "drivers/ata.h"
-#include "image.h"
+#include "drivers/rtc.h"
 
 #define USER_PROGRAM_START 0xB0000000
 
@@ -87,6 +87,11 @@ void multiboot2_init(struct multiboot_tag* mbd) {
 	}
 }
 
+void print_time() {
+	rtc_time_t time = rtc_read_time();
+	printf("Current Time: %d:%d:%d %d/%d/%d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
+}
+
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
 	gdt_install();
@@ -98,6 +103,8 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	terminal_initialize();
 	printf("Initialized Terminal\n\n");
+
+	print_time();
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         printf("Invalid magic number: %x\n", magic);
@@ -131,7 +138,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	if (is_gui_enabled) {
 		psf_font_t *font = load_psf_font();
 		fill_screen(0x000000);
-		draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
+		// draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
 		draw_string_at("Hello, GUI World!", 0, 0, 0xFFFFFF, 0x000000);
 	} else {
 		printf("No GUI\n");

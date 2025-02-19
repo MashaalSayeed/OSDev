@@ -36,6 +36,13 @@ int pci_scan(int max_devices) {
                 devices[num_devices].vendor_id = id & 0xFFFF;
                 devices[num_devices].device_id = id >> 16;
 
+                // uint32_t out = pci_read(bus, slot, function, 0x08);
+                // uint8_t class_id = out >> 24;
+                // uint8_t subclass_id = (out >> 16) & 0xFF;
+                // uint8_t prog_if = (out >> 8) & 0xFF;
+
+                // printf("PCI Device: %x:%x:%x | Vendor: %x | Device: %x | Class: %x | Subclass: %x | Prog IF: %x\n",
+                //     bus, slot, function, devices[num_devices].vendor_id, devices[num_devices].device_id, class_id, subclass_id, prog_if);
                 num_devices++;
                 if (num_devices >= max_devices) return num_devices;
             }

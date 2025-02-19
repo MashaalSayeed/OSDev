@@ -19,20 +19,19 @@ size_t allocate_pid() {
 
 void idle_process() {
     while (1) {
-        asm volatile("hlt");
     }
 }
 
 void scheduler_init() {
-    // init_process = create_process("init", idle_process);
-    // add_process(init_process);
+    init_process = create_process("init", idle_process);
+    add_process(init_process);
 }
 
 void schedule(registers_t* context) {
     if (!process_list) return;
 
     // // Save the context of the current processs
-    if (current_process != NULL) {
+    if (current_process != NULL && context != NULL) {
         current_process->context = *context;
         current_process->status = READY;
     }
@@ -67,34 +66,32 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
         return NULL;
     }
 
-    // void* stack = kmalloc(PROCESS_STACK_SIZE) + 8;
-    // printf("Stack: %x\n", stack);
-    // if (!stack) {
-    //     printf("Error: Failed to allocate memory for process %s stack\n", process_name);
-    //     kfree(new_process);
-    //     return NULL;
-    // }
+    void* stack = kmalloc(PROCESS_STACK_SIZE);
+    if (!stack) {
+        printf("Error: Failed to allocate memory for process %s stack\n", process_name);
+        kfree(new_process);
+        return NULL;
+    }
 
     new_process->pid = allocate_pid();
     strncpy(new_process->process_name, process_name, PROCESS_NAME_MAX_LEN);
     new_process->root_page_table = clone_page_directory(kpage_dir);
     
-    uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
-    allocate_page(new_process->root_page_table, stack - PROCESS_STACK_SIZE, 0x7);
+    // uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
+    // allocate_page(new_process->root_page_table, stack - PROCESS_STACK_SIZE, 0x7);
+
+    new_process->stack = (void *)stack;
 
     // Initialize process context
     new_process->context.eip = (uint32_t)entry_point;
     new_process->context.eflags = 0x202;
     new_process->context.esp = (uint32_t)stack; // Allocate and set stack pointer
-    // new_process->context.esp = ((uint32_t)stack); // Allocate and set stack pointer
+    // new_process->context.esp = ((uint32_t)stack) + PROCESS_STACK_SIZE; // Allocate and set stack pointer
     new_process->context.ebp = new_process->context.esp;
 
     new_process->context.cs = USER_CS;
     new_process->context.ds = USER_DS;
     new_process->context.ss = USER_SS;
-
-    printf("New process esp: %x\n", new_process->context.esp);
-
     new_process->context.eax = 0;
     new_process->context.ebx = 0;
     new_process->context.ecx = 0;
@@ -125,10 +122,30 @@ void add_process(process_t *process) {
 void kill_process(process_t *process) {
     process->status = TERMINATED;
 
+    if (process == process_list) {
+        process_list = process_list->next;
+    }
+
+    process_t *temp = process_list;
+    while (temp->next != process) {
+        temp = temp->next;
+    }
+
+    temp->next = process->next;
+    if (process == current_process) {
+        current_process = NULL;
+    }
+
     // Free the process stack and process structure
-    kfree((uint32_t *)(process->context.esp - PROCESS_STACK_SIZE));
+    // kfree(process->stack);
+    free_page(process->root_page_table, (uint32_t)process->stack);
     free_page_directory(process->root_page_table);
     kfree(process);
+    schedule(NULL);
+}
+
+void kill_current_process() {
+    kill_process(current_process);
 }
 
 void print_process_list() {

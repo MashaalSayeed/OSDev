@@ -5,7 +5,7 @@ LD=i686-elf-ld
 AS=nasm
 
 CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I../../../include -std=gnu99 -g
-LDFLAGS=-nostdlib -ffreestanding -O2 -lgcc
+LDFLAGS=-nostdlib -ffreestanding -O2 -lgcc -T linker.ld
 
 BUILD_DIR=../../../build/$(ARCH)
 USER_BUILD_DIR=$(BUILD_DIR)/user

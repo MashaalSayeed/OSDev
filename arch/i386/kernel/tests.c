@@ -97,19 +97,30 @@ void test_process2() {
 	}
 }
 
+void exit(int arg) {
+	asm volatile (
+		"int $0x80"
+		:
+		: "a"(5), "b"(arg)
+		: "memory"
+	);
+}
+
 void shell() {
 	while (1) {
 		char buffer[80];
 		uprintf("> ");
-		fgets(0, buffer, 80);
-		uprintf("You entered: %s\n", buffer);
+		sleep(80);
+		break;
+		// fgets(0, buffer, 80);
+		// uprintf("You entered: %s\n", buffer);
 
-		if (strcmp(buffer, "exit") == 0) {
-			break;
-		}
+		// if (strcmp(buffer, "exit") == 0) {
+		// 	break;
+		// }
 	}
 
-	uprintf("Exiting shell\n");
+	exit(0);
 }
 
 void test_scheduler() {

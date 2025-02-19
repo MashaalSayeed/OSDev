@@ -31,3 +31,14 @@ int read(int fd, char *buffer, int size) {
 
     return result;  // Return number of bytes read or -1 on error
 }
+
+
+void exit(int status) {
+    asm volatile (
+        "int $0x80"             // Trigger system call
+        :
+        : "a" (SYSCALL_EXIT),   // Syscall number in eax
+          "b" (status)          // Status code in ebx
+        : "memory"
+    );
+}

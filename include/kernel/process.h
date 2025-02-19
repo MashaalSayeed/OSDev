@@ -23,6 +23,7 @@ typedef struct process {
 
     registers_t context;
     void *root_page_table;
+    void *stack;
     struct process* next;
 } process_t;
 
@@ -31,4 +32,5 @@ void schedule(registers_t* context);
 process_t* create_process(char *process_name, void (*entry_point)());
 void add_process(process_t *process);
 void kill_process(process_t *process);
+void kill_current_process();
 void print_process_list();
