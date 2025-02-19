@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "process.h"
 
 #define ELF_MAGIC 0x464C457F
 
@@ -46,4 +47,4 @@ typedef struct {
 } __attribute__((packed)) elf_program_header_t;
 
 int is_valid_elf(elf_header_t *header);
-void load_elf(const char *path);
+process_t* load_elf(const char *path);

@@ -95,7 +95,7 @@ $(DISK_IMAGE):
 	mkfs.fat -F 32 $(DISK_IMAGE)
 
 run: $(ISO_IMAGE) $(DISK_IMAGE)
-	qemu-system-$(SCAMARCH) \
+	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) \
 		-cdrom $(ISO_IMAGE) \
 		-drive file=$(DISK_IMAGE),format=raw \
 		-serial file:$(LOG_FILE) \

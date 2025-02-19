@@ -124,9 +124,6 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// acpi_init();
 	printf("\n");
 
-	debug_page_mapping(kpage_dir, 0xC0013346);
-	debug_page_mapping(kpage_dir, 0xC00143aa);
-
 	map_physical_to_virtual_region(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height);
 	log_to_serial("Hello, Serial World 1!\n");
 
@@ -144,13 +141,18 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// find_rsdt();
 	// printf("Creating processes\n");
 	// terminal_clear();
-	// scheduler_init();
+	scheduler_init();
 	// print_process_list();
-	// init_timer(100);
-	// test_scheduler();
+	init_timer(100);
+	test_scheduler();
 
 	vfs_init();
-	test_elf_loader();
+	// test_elf_loader();
+
+	// printf("Enter a string: ");
+	// char buffer[100];
+	// kgets(buffer, 100);
+	// printf("You entered: %s\n", buffer);
 
 	log_to_serial("Hello, Serial World 2!\n");
 

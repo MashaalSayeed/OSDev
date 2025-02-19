@@ -13,6 +13,11 @@ vfs_file_t* vfs_fd_table[MAX_OPEN_FILES];
 vfs_mount_t* vfs_mount_list = NULL;
 vfs_mount_t* root_mount = NULL;
 
+vfs_file_t* vfs_get_file(int fd) {
+    if (fd < 0 || fd >= MAX_OPEN_FILES) return NULL;
+    return vfs_fd_table[fd];
+}
+
 int register_block_device(block_device_t *device) {
     for (int i = 0; i < MAX_BLOCK_DEVICES; i++) {
         if (!block_device_table[i]) {
@@ -408,5 +413,5 @@ void vfs_init() {
         return;
     }
 
-    test_vfs(sb);
+    // test_vfs(sb);
 }

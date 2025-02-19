@@ -1,10 +1,11 @@
 #include "kernel/isr.h"
-#include "io.h"
+#include "kernel/exceptions.h"
+#include "kernel/printf.h"
 #include "drivers/tty.h"
 #include "drivers/serial.h"
+#include "drivers/keyboard.h"
 #include "libc/string.h"
-#include "kernel/printf.h"
-#include "kernel/exceptions.h"
+#include "io.h"
 
 static idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -163,15 +164,26 @@ void irq_handler(registers_t *r) {
 }
 
 void syscall_handler(registers_t *regs) {
+    int fd, size;
+    char *buffer;
+    // printf("Syscall: %d\n", regs->eax);
     switch (regs->eax) {
-        case 0: // Syscall print
+        case 0:
             printf((const char *)regs->ebx);
             break;
-        case 1:
-            int fd = regs->ebx;
-            const char *buffer = (const char *)regs->ecx;
-            int size = regs->edx;
-            printf("%d | %d | %s\n", fd, size, buffer);
+        case 1: // Syscall write
+            fd = regs->ebx;
+            buffer = (const char *)regs->ecx;
+            size = regs->edx;
+            printf("%s", buffer);
+            // printf("| %x | %s | %x | %x\n", regs->ecx, buffer, size, fd);
+            break;
+        case 2: // Syscall read
+            fd = regs->ebx;
+            buffer = (char *)regs->ecx;
+            size = regs->edx;
+            // printf("fgets: %x\n", size);
+            kgets(buffer, size);
             break;
         default:
             printf("Unknown syscall: %d\n", regs->eax);

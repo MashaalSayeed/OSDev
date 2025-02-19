@@ -86,7 +86,7 @@ void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags) {
         pt = (page_table_t*) dumb_kmalloc(sizeof(page_table_t), 1);
         memset(pt, 0, sizeof(page_table_t));
 
-        uint32_t t = (uint32_t) virtual2physical(kpage_dir, pt);
+        uint32_t t = (uint32_t) virtual2physical(dir, pt);
         dir->tables[pd_index].present = 1;
         dir->tables[pd_index].rw = (flags & 0x2) ? 1 : 0;
         dir->tables[pd_index].user = (flags & 0x4) ? 1 : 0;
@@ -122,6 +122,7 @@ void free_page(page_directory_t *dir, uint32_t virtual) {
 
 void map_pages(page_directory_t *dir, uint32_t virtual, uint32_t size, uint32_t flags) {
     for (uint32_t i = 0; i < size; i += PAGE_SIZE) {
+        // printf("Mapping page %x | %x\n", virtual + i);
         allocate_page(dir, virtual + i, flags);
     }
 }
@@ -326,6 +327,7 @@ void page_fault_handler(registers_t *regs) {
 
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);
+    printf("At Instruction %x\n", regs->eip);
 
     uint32_t present = regs->err_code & ERR_PRESENT;
     uint32_t rw = regs->err_code & ERR_RW;

@@ -6,12 +6,15 @@
 #include "io.h"
 #include "system.h"
 
+#define KEYBOARD_DATA_PORT 0x60
+
 const uint32_t UNKNOWN = 0xFFFFFFFF;
 const uint32_t ESC = 0xFFFFFFFF - 1;
 const uint32_t CTRL = 0xFFFFFFFF - 2;
 const uint32_t LSHFT = 0xFFFFFFFF - 3;
 const uint32_t RSHFT = 0xFFFFFFFF - 4;
 const uint32_t ALT = 0xFFFFFFFF - 5;
+const uint32_t ENTER = 0x0D;
 const uint32_t F1 = 0xFFFFFFFF - 6;
 const uint32_t F2 = 0xFFFFFFFF - 7;
 const uint32_t F3 = 0xFFFFFFFF - 8;
@@ -64,69 +67,131 @@ const uint32_t keyboard_map_shift[128] = {
 };
 
 
-
 int shift_on;
 int caps_lock;
 
+#define BUFFER_SIZE 256
+char keyboard_buffer[BUFFER_SIZE];
+
+size_t buffer_start, buffer_end;
+
 void keyboard_callback(registers_t *regs) {
-    unsigned char scancode = inb(0x60) & 0x7F;
-    char press = inb(0x60) & 0x80;
-
-    // char s[3];
-    // int_to_ascii(scancode, s);
-    // terminal_writestring("Scancode: ");
-    // terminal_writestring(s);
-    // terminal_putchar('\n');
-
-    switch (scancode) {
-        case 1:
-            terminal_writestring("ESC");
-            break;
-        case 29:
-            terminal_writestring("CTRL");
-            break;
-        case 56:
-            terminal_writestring("ALT");
-            break;
-        case 59:
-        case 60:
-        case 61:
-        case 62:
-        case 63:
-        case 64:
-        case 65:
-        case 66:
-        case 67:
-        case 68:
-        case 87:
-        case 88:
-            terminal_writestring("Function Keys");
-            break;
-        case 42:
-        case 54:
-            if (press == 0) shift_on = 1;
-            else shift_on = 0;
-            break;
-        case 58:
-            if (!caps_lock && press == 0) caps_lock = 1;
-            else if (caps_lock && press == 0) caps_lock = 0;
-            break;
-        default:
-            if (press == 0) {
-                if (caps_lock || shift_on) {
-                    terminal_putchar(keyboard_map_shift[scancode]);
-                } else {
-                    terminal_putchar(keyboard_map[scancode]);
-                }
-            }
-            break;
+    unsigned char scancode = inb(KEYBOARD_DATA_PORT);
+    
+    if (scancode & 0x80) {
+        // Key released
+        scancode &= 0x7F;
+        if (scancode == 42 || scancode == 54) shift_on = 0;
+        return;
     }
+
+    if (scancode == 42 || scancode == 54) {
+        shift_on = 1;
+        return;
+    }
+
+    if (scancode == 58) {
+        caps_lock = !caps_lock;
+        return;
+    }
+
+    char c = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
+    if (c && c != UNKNOWN) {
+        keyboard_buffer[buffer_end++] = c;
+        if (buffer_end >= BUFFER_SIZE) {
+            buffer_end = 0;
+        }
+        terminal_putchar(c);
+    }
+    
+
+    // switch (scancode) {
+    //     case 1:
+    //         terminal_writestring("ESC");
+    //         break;
+    //     case 29:
+    //         terminal_writestring("CTRL");
+    //         break;
+    //     case 56:
+    //         terminal_writestring("ALT");
+    //         break;
+    //     case 59:
+    //     case 60:
+    //     case 61:
+    //     case 62:
+    //     case 63:
+    //     case 64:
+    //     case 65:
+    //     case 66:
+    //     case 67:
+    //     case 68:
+    //     case 87:
+    //     case 88:
+    //         terminal_writestring("Function Keys");
+    //         break;
+    //     case 42:
+    //     case 54:
+    //         if (press == 0) shift_on = 1;
+    //         else shift_on = 0;
+    //         break;
+    //     case 58:
+    //         if (!caps_lock && press == 0) caps_lock = 1;
+    //         else if (caps_lock && press == 0) caps_lock = 0;
+    //         break;
+    //     case 13:
+    //         terminal_putchar('\n');
+    //         break;
+    //     default:
+    //         if (press == 0) {
+    //             if (caps_lock || shift_on) {
+    //                 terminal_putchar(keyboard_map_shift[scancode]);
+    //             } else {
+    //                 terminal_putchar(keyboard_map[scancode]);
+    //             }
+    //         }
+    //         break;
+    // }
 
     UNUSED(regs);
 }
 
+char kgetch() {
+    asm volatile("sti");
+    while (buffer_start == buffer_end) {
+        // Wait for a key press
+    }
+
+    char c = keyboard_buffer[buffer_start++];
+    if (buffer_start >= BUFFER_SIZE) buffer_start = 0;
+
+    return c;
+}
+
+char *kgets(char *buffer, size_t size) {
+    size_t i = 0;
+    while (i < size - 1) {
+        char c = kgetch();
+        if (c == '\n') {
+            buffer[i] = '\0';
+            return buffer;
+        } else if (c == '\b' && i > 0) {
+            i--;
+            // terminal_putchar(c);
+        } else if (c != '\b') {
+            buffer[i++] = c;
+            // terminal_putchar(c);
+        }
+    }
+
+    buffer[i] = '\0';
+    return buffer;
+}
+
 void init_keyboard() {
-    register_interrupt_handler(33, &keyboard_callback);
     shift_on = 0;
     caps_lock = 0;
+    buffer_start = 0;
+    buffer_end = 0;
+
+    register_interrupt_handler(33, &keyboard_callback);
 }

@@ -1,21 +1,19 @@
 ENTRY(user_program)
 
 SECTIONS {
-    . = 0x400000; /* User-space programs typically start at a higher address */
-
-    .text : {
+    .text BLOCK(4K) : ALIGN(4K) {
         *(.text)
     }
 
-    .rodata : {
+    .rodata BLOCK(4K) : ALIGN(4K) {
         *(.rodata)
     }
 
-    .data : {
+    .data BLOCK(4K) : ALIGN(4K) {
         *(.data)
     }
 
-    .bss : {
+    .bss BLOCK(4K) : ALIGN(4K) {
         *(.bss)
     }
 }

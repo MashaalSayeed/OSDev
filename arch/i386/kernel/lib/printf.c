@@ -29,3 +29,22 @@ int printf(const char *format, ...) {
     va_end(args);
     return ret;
 }
+
+void hexdump(const void *addr, size_t len) {
+    const uint8_t *p = (const uint8_t *)addr;
+    for (size_t i = 0; i < len; i += 8) {
+        printf("%x: ", (uint32_t)(uintptr_t)(p + i));  // Print address
+        for (size_t j = 0; j < 8; j++) {
+            if (i + j < len)
+                printf("%x ", p[i + j]);  // Print hex bytes
+            else
+                printf("   ");
+        }
+        printf(" |");
+        for (size_t j = 0; j < 8; j++) {
+            if (i + j < len)
+                printf("%c", (p[i + j] >= 32 && p[i + j] <= 126) ? p[i + j] : '.'); // ASCII
+        }
+        printf("|\n");
+    }
+}

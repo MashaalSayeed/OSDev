@@ -84,6 +84,7 @@ typedef struct {
 } vfs_fs_type_t;
 
 
+vfs_file_t *vfs_get_file(int fd);
 block_device_t *get_block_device(const char *path);
 
 static vfs_mount_t *find_mount(const char *path);

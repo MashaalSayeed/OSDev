@@ -444,18 +444,14 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
 
     if (fat32_get_cluster_at_offset(sb, &cluster, offset) != 0) return read;
 
-    while (read < count) {
+    while (read < count && cluster != FAT32_CLUSTER_LAST) {
         uint32_t cluster_offset = offset % sb->cluster_size;
         uint32_t to_read = sb->cluster_size - cluster_offset;
-        printf("Cluster offset: %d, to_read: %d\n", cluster_offset, to_read);
         if (to_read > count - read) {
             to_read = count - read;
         }
 
-        if (cluster_offset > 0 || to_read < sb->cluster_size) {
-            if (fat32_read_cluster(sb, cluster, buffer) != 0) return read;
-        }
-
+        if (fat32_read_cluster(sb, cluster, buffer) != 0) return read;
         memcpy((uint8_t*)buf + read, buffer + cluster_offset, to_read);
 
         read += to_read;
@@ -463,7 +459,6 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
 
         if (offset % sb->cluster_size == 0 && read < count) {
             cluster = fat32_get_next_cluster(sb, cluster);
-            if (cluster == FAT32_CLUSTER_LAST) break;
         }
     }
 
