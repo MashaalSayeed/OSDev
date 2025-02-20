@@ -3,13 +3,13 @@
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "drivers/keyboard.h"
+#include "drivers/pit.h"
 #include "kernel/multiboot.h"
 #include "kernel/pmm.h"
 #include "kernel/paging.h"
 #include "kernel/kheap.h"
 #include "kernel/gdt.h"
 #include "kernel/isr.h"
-#include "kernel/timer.h"
 #include "kernel/acpi.h"
 #include "kernel/framebuffer.h"
 #include "kernel/font.h"
@@ -21,10 +21,6 @@
 #include "drivers/pci.h"
 #include "drivers/ata.h"
 #include "drivers/rtc.h"
-
-#define USER_PROGRAM_START 0xB0000000
-
-typedef void (*user_func_t)(void);
 
 extern page_directory_t *kpage_dir;
 framebuffer_t* framebuffer;
@@ -165,10 +161,3 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	for (;;) ;
 }
-
-// void load_program_to_userspace(void* program_binary, size_t size) {
-//     uint32_t addr = USER_PROGRAM_START;
-//     for (size_t i = 0; i < size; i += BLOCK_SIZE) {
-// 		map_physical_to_virtual(addr + i, program_binary + i);
-//     }
-// }

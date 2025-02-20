@@ -239,6 +239,10 @@ void enable_paging() {
     paging_enabled = 1;
 }
 
+void invalidate_page(uint32_t addr) {
+    asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
+}
+
 void paging_init() {
     temp_mem = bitmap + bitmap_size;
 
@@ -255,7 +259,6 @@ void paging_init() {
         count += 1;
     }
 
-    printf("pages allocated: %d\n", count);
     register_interrupt_handler(14, page_fault_handler);
 
     // Map some memory for the kernel heap
@@ -264,8 +267,6 @@ void paging_init() {
         i += BLOCK_SIZE;
         count += 1;
     }
-    printf("pages allocated: %d\n", count);
-
 
     // Map RSDP
     // i = LOAD_MEMORY_ADDRESS + 0x000E0000;

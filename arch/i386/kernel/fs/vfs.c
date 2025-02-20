@@ -188,9 +188,8 @@ int vfs_open(const char *path, int flags) {
 int vfs_close(int fd) {
     if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
     vfs_file_t *file = vfs_fd_table[fd];
-    // file->inode->inode_ops->close(file);
+    file->inode->inode_ops->close(file);
 
-    kfree(file);
     vfs_fd_table[fd] = NULL;
     return 0;
 }

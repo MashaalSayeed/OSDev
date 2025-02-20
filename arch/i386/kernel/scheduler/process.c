@@ -4,6 +4,8 @@
 #include "kernel/printf.h"
 #include "libc/string.h"
 
+#define USER_STACK_BASE  0xB0000000
+
 process_t *process_list = NULL;
 process_t *current_process = NULL;
 process_t *init_process = NULL;
@@ -57,7 +59,6 @@ void schedule(registers_t* context) {
     }
 }
 
-#define USER_STACK_BASE  0xB0000000
 
 process_t* create_process(char *process_name, void (*entry_point)()) {
     process_t *new_process = (process_t *)kmalloc(sizeof(process_t));
@@ -66,27 +67,20 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
         return NULL;
     }
 
-    void* stack = kmalloc(PROCESS_STACK_SIZE);
-    if (!stack) {
-        printf("Error: Failed to allocate memory for process %s stack\n", process_name);
-        kfree(new_process);
-        return NULL;
-    }
-
     new_process->pid = allocate_pid();
     strncpy(new_process->process_name, process_name, PROCESS_NAME_MAX_LEN);
     new_process->root_page_table = clone_page_directory(kpage_dir);
     
-    // uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
-    // allocate_page(new_process->root_page_table, stack - PROCESS_STACK_SIZE, 0x7);
+    uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
+    allocate_page(new_process->root_page_table, stack - PROCESS_STACK_SIZE, 0x7);
 
-    new_process->stack = (void *)stack;
+    new_process->stack = (void *)stack - PROCESS_STACK_SIZE;
+    printf("PID %d | stack: %x | page dir: %x\n", new_process->pid, stack, new_process->root_page_table);
 
     // Initialize process context
     new_process->context.eip = (uint32_t)entry_point;
     new_process->context.eflags = 0x202;
-    new_process->context.esp = (uint32_t)stack; // Allocate and set stack pointer
-    // new_process->context.esp = ((uint32_t)stack) + PROCESS_STACK_SIZE; // Allocate and set stack pointer
+    new_process->context.esp = (uint32_t)stack;
     new_process->context.ebp = new_process->context.esp;
 
     new_process->context.cs = USER_CS;
@@ -106,7 +100,7 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
 void add_process(process_t *process) {
     if (!process_list) {
         process_list = process;
-        // current_process = process_list;
+        current_process = process;
     } else {
         process_t *temp = process_list;
         while (temp->next != process_list) {
@@ -137,7 +131,6 @@ void kill_process(process_t *process) {
     }
 
     // Free the process stack and process structure
-    // kfree(process->stack);
     free_page(process->root_page_table, (uint32_t)process->stack);
     free_page_directory(process->root_page_table);
     kfree(process);

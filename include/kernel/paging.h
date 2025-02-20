@@ -11,8 +11,7 @@
 #define ERR_RESERVED    0x8
 #define ERR_INST        0x10
 
-#define IS_ALIGN(addr) ((((uint32_t)(addr)) | 0xFFFFF000) == 0)
-// #define PAGE_ALIGN(addr) ((((uint32_t)(addr)) & 0xFFFFF000))
+#define IS_ALIGN(addr) (((uint32_t)(addr) & (PAGE_SIZE - 1)) == 0)
 #define PAGE_ALIGN(addr) ((uint32_t)(addr) & ~(PAGE_SIZE - 1))
 
 typedef struct page_directory_entry {

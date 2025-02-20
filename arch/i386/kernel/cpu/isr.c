@@ -177,13 +177,11 @@ void syscall_handler(registers_t *regs) {
             buffer = (const char *)regs->ecx;
             size = regs->edx;
             printf("%s", buffer);
-            // printf("| %x | %s | %x | %x\n", regs->ecx, buffer, size, fd);
             break;
         case 2: // Syscall read
             fd = regs->ebx;
-            buffer = (char *)regs->ecx;
+            buffer = (const char *)regs->ecx;
             size = regs->edx;
-            // printf("fgets: %x\n", size);
             kgets(buffer, size);
             break;
         case 5: // Syscall exit

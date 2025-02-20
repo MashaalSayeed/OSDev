@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "isr.h"
+#include "kernel/isr.h"
 
 void timer_callback(registers_t *regs);
 uint32_t get_timer_ticks();

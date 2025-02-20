@@ -27,6 +27,12 @@ void gpf_handler(registers_t *regs) {
     while (1) asm volatile("hlt");
 }
 
+void double_fault_handler(registers_t *regs) {
+    printf("Double Fault\n");
+    while (1) asm volatile("hlt");
+}
+
 void exceptions_install() {
+    register_interrupt_handler(8, &double_fault_handler);
     register_interrupt_handler(13, &gpf_handler);
 }

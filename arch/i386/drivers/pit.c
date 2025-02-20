@@ -1,5 +1,5 @@
-#include "kernel/timer.h"
 #include "kernel/process.h"
+#include "drivers/pit.h"
 #include "drivers/tty.h"
 #include "io.h"
 #include "system.h"

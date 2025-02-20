@@ -1,6 +1,7 @@
 #include "user/stdio.h"
 #include "user/umain.h"
 #include "libc/string.h"
+#include "user/syscall.h"
 
 #define MAX_INPUT 256
 #define MAX_ARGS 10
@@ -30,5 +31,11 @@ void user_program() {
         puts("Enter a string: ");
         fgets(0, buffer, 80);
         printf("You entered: %s\n", buffer);
+
+        if (strcmp(buffer, "exit") == 0) {
+            break;
+        }
     }
+
+    exit(0);
 }

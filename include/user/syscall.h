@@ -19,3 +19,4 @@ static inline void syscall(int num, const char* arg1) {
 
 int write(int fd, const char *buffer, int size);
 int read(int fd, char *buffer, int size);
+void exit(int status);

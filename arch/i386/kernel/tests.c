@@ -1,14 +1,14 @@
 #include "kernel/tests.h"
 #include "kernel/kheap.h"
 #include "kernel/process.h"
-#include "kernel/timer.h"
 #include "kernel/locks.h"
-#include "system.h"
 #include "kernel/printf.h"
 #include "kernel/vfs.h"
 #include "kernel/elf.h"
 #include "libc/stdio.h"
 #include "libc/string.h"
+#include "drivers/pit.h"
+#include "system.h"
 #include <stdarg.h>
 
 void test_divide_by_zero() {
@@ -42,7 +42,7 @@ uint32_t get_esp() {
     return esp;
 }
 
-void uprintf(const char* format, ...) {
+static void uprintf(const char* format, ...) {
 	va_list args;
 	va_start(args, format);
 
@@ -62,7 +62,7 @@ void uprintf(const char* format, ...) {
     );
 }
 
-void fgets(int fd, char* buffer, int size) {
+static void fgets(int fd, char* buffer, int size) {
 	asm volatile (
 		"int $0x80"             // Trigger system call
 		: "=a" (size)         // Return value in eax
@@ -76,7 +76,7 @@ void fgets(int fd, char* buffer, int size) {
 }
 
 spinlock_t lock;
-void test_process1() {
+static void test_process1() {
 	int a = 0;
     while (1) {
 		uprintf("Hello from process 1!\n");
@@ -87,7 +87,7 @@ void test_process1() {
     }
 }
 
-void test_process2() {
+static void test_process2() {
 	while (1) {
 		// spinlock_acquire(&lock);
 		// printf("Process 2: ESP = %x\n", get_esp());
@@ -97,7 +97,7 @@ void test_process2() {
 	}
 }
 
-void exit(int arg) {
+static void exit(int arg) {
 	asm volatile (
 		"int $0x80"
 		:
@@ -106,18 +106,16 @@ void exit(int arg) {
 	);
 }
 
-void shell() {
+static void shell() {
 	while (1) {
 		char buffer[80];
-		uprintf("> ");
-		sleep(80);
-		break;
-		// fgets(0, buffer, 80);
-		// uprintf("You entered: %s\n", buffer);
+		uprintf("%x> ", buffer);
+		fgets(0, buffer, 80);
+		uprintf("You entered: %s\n", buffer);
 
-		// if (strcmp(buffer, "exit") == 0) {
-		// 	break;
-		// }
+		if (strcmp(buffer, "exit") == 0) {
+			break;
+		}
 	}
 
 	exit(0);

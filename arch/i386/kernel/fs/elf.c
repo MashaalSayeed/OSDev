@@ -60,7 +60,7 @@ process_t* load_elf(const char *path) {
 
         vfs_seek(fd, ph.offset, VFS_SEEK_SET);
         if (vfs_read(fd, buf, ph.file_size) != ph.file_size) {
-            printf("Error: Failed to read program header\n");
+            // printf("Error: Failed to read program header\n");
             kfree(buf);
             vfs_close(fd);
             return NULL;
@@ -69,6 +69,7 @@ process_t* load_elf(const char *path) {
         memset((uint8_t*)(buf + ph.file_size), 0, ph.mem_size - ph.file_size);
     }
 
+    // printf("Entry point: %x\n", header.entry);
     process_t* proc = create_process(path, (void*)header.entry);
     vfs_close(fd);
 
