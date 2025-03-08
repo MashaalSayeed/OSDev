@@ -20,7 +20,7 @@ void parse_input(char *input, char **args) {
 void ls_command(char *path) {
     if (path == NULL) path = ".";
 
-    int fd = syscall_open(path, 0);
+    int fd = syscall_open(path, O_RDONLY);
     if (fd < 0) {
         printf("Error: Failed to open directory\n");
         return;
@@ -42,7 +42,7 @@ void ls_command(char *path) {
 }
 
 void cat_command(char *path) {
-    int fd = syscall_open(path, 0);
+    int fd = syscall_open(path, O_RDONLY);
     if (fd < 0) {
         printf("Error: Failed to open file\n");
         return;
@@ -54,11 +54,39 @@ void cat_command(char *path) {
         printf("Error: Failed to read file\n");
         return;
     }
-    
+
     printf("Bytes Read: %d\n", bytes_read);
     printf("%s\n", buffer);
 
     syscall_close(fd);
+}
+
+void touch_command(char *path) {
+    int fd = syscall_open(path, O_WRONLY | O_CREAT);
+    if (fd < 0) {
+        printf("Error: Failed to create file\n");
+        return;
+    }
+
+    syscall_close(fd);
+}
+
+void rm_command(char *path) {
+    if (syscall_unlink(path) < 0) {
+        printf("Error: Failed to remove file\n");
+    }
+}
+
+void mkdir_command(char *path) {
+    if (syscall_mkdir(path, 0) < 0) {
+        printf("Error: Failed to create directory\n");
+    }
+}
+
+void rmdir_command(char *path) {
+    if (syscall_rmdir(path) < 0) {
+        printf("Error: Failed to remove directory\n");
+    }
 }
 
 void execute_command(char **args) {
@@ -76,6 +104,14 @@ void execute_command(char **args) {
         ls_command(args[1]);
     } else if (strcmp(args[0], "cat") == 0) {
         cat_command(args[1]);
+    } else if (strcmp(args[0], "touch") == 0) {
+        touch_command(args[1]);
+    } else if (strcmp(args[0], "rm") == 0) {
+        rm_command(args[1]);
+    } else if (strcmp(args[0], "mkdir") == 0) {
+        mkdir_command(args[1]);
+    } else if (strcmp(args[0], "rmdir") == 0) {
+        rmdir_command(args[1]);
     } else {
         printf("Unknown command: %s\n", args[0]);
     }    

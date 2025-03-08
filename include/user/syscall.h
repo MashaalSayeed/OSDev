@@ -2,13 +2,12 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <syscall.h>
 
-#define SYSCALL_WRITE 1
-#define SYSCALL_READ 2
-#define SYSCALL_OPEN 3
-#define SYSCALL_CLOSE 4
-#define SYSCALL_EXIT 5
-#define SYSCALL_GETDENTS 6
+#define O_RDONLY 0
+#define O_WRONLY 1
+#define O_RDWR 2
+#define O_CREAT 64
 
 static inline void syscall(int num, const char* arg1) {
     asm volatile (
@@ -25,3 +24,7 @@ int syscall_open(const char *path, int flags);
 int syscall_close(int fd);
 void syscall_exit(int status);
 int syscall_getdents(int fd, void *dirp, size_t count);
+int syscall_getpid();
+int syscall_mkdir(const char *path, int mode);
+int syscall_rmdir(const char *path);
+int syscall_unlink(const char *path);

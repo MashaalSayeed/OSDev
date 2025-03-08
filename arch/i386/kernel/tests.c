@@ -124,20 +124,20 @@ static void shell() {
 void test_scheduler() {
 	// initialize_lock(&lock);
 
-	// process_t* process1 = create_process("process1", &test_process1);
-	// add_process(process1);
+	process_t* process1 = create_process("process1", &test_process1);
+	add_process(process1);
 
-	// process_t* process2 = create_process("process2", &test_process2);
-	// add_process(process2);
+	process_t* process2 = create_process("process2", &test_process2);
+	add_process(process2);
 
-	process_t* process3 = create_process("shell", &shell);
-	add_process(process3);
+	// process_t* process3 = create_process("shell", &shell);
+	// add_process(process3);
 
 	print_process_list();
 }
 
 void test_elf_loader() {
-	process_t* user_process = load_elf("/user.bin");
+	process_t* user_process = load_elf("/USER.BIN");
 	if (user_process == NULL) {
 		printf("Failed to load ELF file\n");
 		return;

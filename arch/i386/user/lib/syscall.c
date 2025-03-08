@@ -80,3 +80,51 @@ int syscall_getdents(int fd, void *dirp, size_t count)
         : "memory");
     return result;
 }
+
+int syscall_getpid()
+{
+    int result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_GETPID)
+        : "memory");
+    return result;
+}
+
+int syscall_mkdir(const char *path, int mode)
+{
+    int result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_MKDIR),
+          "b"(path),
+          "c"(mode)
+        : "memory");
+    return result;
+}
+
+int syscall_rmdir(const char *path)
+{
+    int result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_RMDIR),
+          "b"(path)
+        : "memory");
+    return result;
+}
+
+int syscall_unlink(const char *path)
+{
+    int result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_UNLINK),
+          "b"(path)
+        : "memory");
+    return result;
+}

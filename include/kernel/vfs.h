@@ -5,10 +5,10 @@
 
 #define MAX_OPEN_FILES 256
 
-#define VFS_MODE_FILE 0x1
-#define VFS_MODE_DIR 0x2
+#define VFS_MODE_DIR 0x10
+#define VFS_MODE_FILE 0x20
 
-#define VFS_FLAG_READ 0x1
+#define VFS_FLAG_READ 0x0
 #define VFS_FLAG_WRITE 0x2
 #define VFS_FLAG_APPEND 0x4
 #define VFS_FLAG_CREATE 0x8
@@ -17,6 +17,11 @@
 #define VFS_SEEK_SET 0
 #define VFS_SEEK_CUR 1
 #define VFS_SEEK_END 2
+
+#define O_RDONLY 0
+#define O_WRONLY 1
+#define O_RDWR 2
+#define O_CREAT 64
 
 typedef struct {
     uint32_t mode;          // The permissions of the file
@@ -102,7 +107,6 @@ uint32_t vfs_write(int fd, const void *buf, size_t count);
 uint32_t vfs_read(int fd, void *buf, size_t count);
 
 int vfs_seek(int fd, uint32_t offset, int whence);
-int vfs_mkdir(const char *path, uint32_t mode);
 int vfs_rmdir(const char *path);
 int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries);
 int vfs_getdents(int fd, void *buf, int size);

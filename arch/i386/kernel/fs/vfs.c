@@ -5,6 +5,7 @@
 #include "libc/string.h"
 #include "kernel/printf.h"
 #include "user/dirent.h"
+#include "kernel/hashtable.h"
 
 #define MAX_BLOCK_DEVICES 16
 
@@ -13,6 +14,7 @@ static block_device_t* block_device_table[MAX_BLOCK_DEVICES] = {0};
 vfs_file_t* vfs_fd_table[MAX_OPEN_FILES];
 vfs_mount_t* vfs_mount_list = NULL;
 vfs_mount_t* root_mount = NULL;
+hash_table_t vfs_table = {0};
 
 vfs_file_t* vfs_get_file(int fd) {
     if (fd < 0 || fd >= MAX_OPEN_FILES) return NULL;
@@ -136,6 +138,7 @@ static vfs_inode_t * resolve_path(const char *path, vfs_mount_t **mount_out) {
     char *path_copy = strdup(path);
     char *token = strtok(path_copy, "/");
     while (token) {
+        // printf("Current: %x | Token: %s\n", current_inode, token);
         current_inode = current_inode->inode_ops->lookup(current_inode, token);
         if (!current_inode) {
             kfree(path_copy);
@@ -158,9 +161,23 @@ int vfs_open(const char *path, int flags) {
     vfs_mount_t *mount;
     vfs_inode_t *inode = resolve_path(path, &mount);
 
-    if (!mount || !inode) {
-        printf("Error: Failed to resolve path: %s\n", path);
-        return -1;
+    if (!inode) {
+        if (flags & O_CREAT) {
+            int ret = vfs_create(path, VFS_MODE_FILE);
+            if (ret < 0) {
+                printf("Error: Failed to create file: %s\n", path);
+                return -1;
+            }
+
+            inode = resolve_path(path, &mount);
+            if (!inode) {
+                printf("Error: Failed to resolve newly created file: %s\n", path);
+                return -1;
+            }
+        } else {
+            printf("Error: Failed to resolve path: %s\n", path);
+            return -1;
+        }
     }
 
     // Find an available file descriptor
@@ -175,6 +192,8 @@ int vfs_open(const char *path, int flags) {
     }
 
     vfs_file_t* file = (vfs_file_t *)kmalloc(sizeof(vfs_file_t));
+    if (!file) return -1;
+
     file->fd = fd;
     file->inode = inode;
     file->offset = 0;
@@ -198,9 +217,14 @@ int vfs_close(int fd) {
 }
 
 int vfs_create(const char *path, uint32_t mode) {
+    if (!path) return -1;
+
     // Split the path into the directory and the file name
     char *dirname, *filename;
-    split_path(path, &dirname, &filename);
+    if (split_path(path, &dirname, &filename) != 0) {
+        printf("Error: Failed to split path: %s\n", path);
+        return -1;
+    }
 
     vfs_inode_t *dir = vfs_traverse(dirname);
     kfree(dirname);
@@ -211,7 +235,7 @@ int vfs_create(const char *path, uint32_t mode) {
         return -1;
     }
 
-    int result = dir->inode_ops->create(dir, filename, VFS_MODE_FILE);
+    int result = dir->inode_ops->create(dir, filename, mode);
     kfree(filename);
     return result;
 }
@@ -245,6 +269,16 @@ uint32_t vfs_read(int fd, void* buf, size_t count) {
     if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
     vfs_file_t *file = vfs_fd_table[fd];
 
+    if (file->inode->mode != VFS_MODE_FILE) {
+        printf("Error: Not a file\n");
+        return -1;
+    }
+
+    // if (!(file->flags & VFS_FLAG_READ)) {
+    //     printf("Error: File not opened for reading %d\n");
+    //     return -1;
+    // }
+
     return file->inode->inode_ops->read(file, buf, count);
 }
 
@@ -271,24 +305,6 @@ int vfs_seek(int fd, uint32_t offset, int whence) {
 
     file->offset = new_offset;
     return 0;
-}
-
-// TODO: Merge with vfs_create
-int vfs_mkdir(const char *path, uint32_t mode) {
-    char *dirname, *filename;
-    split_path(path, &dirname, &filename);
-
-    vfs_inode_t *dir = vfs_traverse(dirname);
-    kfree(dirname);
-    if (!dir) {
-        printf("Error: Failed to resolve path: %s\n", path);
-        kfree(filename);
-        return -1;
-    }
-
-    int result = dir->inode_ops->mkdir(dir, filename, mode);
-    kfree(filename);
-    return result;
 }
 
 int vfs_rmdir(const char *path) {
@@ -325,7 +341,7 @@ int vfs_getdents(int fd, void* buf, int size) {
     vfs_file_t *file = vfs_fd_table[fd];
 
     if (file->inode->mode != VFS_MODE_DIR) {
-        printf("Error: Not a directory\n");
+        printf("Error: Not a directory %d\n", file->inode->mode);
         return -1;
     }
 
@@ -352,12 +368,16 @@ int vfs_getdents(int fd, void* buf, int size) {
     return bytes_written;
 }
 
-// void * vfs_load
-
 int vfs_register_fs_type(vfs_fs_type_t *fs_type) {
-    // TODO: Implement
-    // Set in hash table
-    return 0;
+    return hash_set(&vfs_table, fs_type->name, fs_type);
+}
+
+int vfs_unregister_fs_type(const char *name) {
+    return hash_remove(&vfs_table, name);
+}
+
+vfs_fs_type_t *vfs_get_fs_type(const char *name) {
+    return (vfs_fs_type_t*)hash_get(&vfs_table, name);
 }
 
 void test_vfs(vfs_superblock_t *root_sb) {
@@ -389,17 +409,6 @@ void test_vfs(vfs_superblock_t *root_sb) {
     // int bytes_read = vfs_read(fd, buffer, sizeof(buffer));
     // printf("Read %d bytes: %s\n", bytes_read, buffer);
     // vfs_close(fd);
-
-    // fd = vfs_open("/sofa.txt", VFS_FLAG_READ);
-    // vfs_close(fd);
-    
-    // if (vfs_create("/sofa.txt", 0644) != 0) {
-    //     printf("Failed to create file\n");
-    //     return;
-    // }
-
-    // printf("Created file: /sofa.txt\n");
-
 }
 
 void ramfs_init() {
