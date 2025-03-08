@@ -24,7 +24,7 @@ void pmm_init(struct multiboot_tag *mbd, uint32_t mem_size) {
     UNUSED(mbd);
 }
 
-uint32_t allocate_block() {
+uint32_t pmm_alloc_block() {
     uint32_t block = first_free_block();
     if (out_of_memory == true) {
         printf("Error: Out of memory\n");
@@ -35,7 +35,7 @@ uint32_t allocate_block() {
     return block;
 }
 
-uint32_t first_free_block() {
+static uint32_t first_free_block() {
     out_of_memory = false;
     for (uint32_t i = 0; i < total_blocks; i++) {
         if (!ISSET(i)) {
@@ -46,6 +46,6 @@ uint32_t first_free_block() {
     return 0;
 }
 
-void free_block(uint32_t block) {
+void pmm_free_block(uint32_t block) {
     CLEARBIT(block);
 }

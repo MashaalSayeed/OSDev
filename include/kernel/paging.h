@@ -5,6 +5,11 @@
 
 #define PAGE_SIZE       0x1000
 
+#define PAGE_PRESENT     0x1
+#define PAGE_RW          0x2
+#define PAGE_USER        0x4
+#define PAGE_SIZE_4MB    0x80
+
 #define PF_ERR_PRESENT     0x1
 #define PF_ERR_RW          0x2
 #define PF_ERR_USER        0x4
@@ -50,13 +55,16 @@ extern uint32_t _kernel_start;
 void paging_init();
 void switch_page_directory(page_directory_t *dir);
 void enable_paging();
-void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags);
-void free_page(page_directory_t *dir, uint32_t virtual);
+
+page_table_entry_t * get_page(uint32_t virtual, int make, page_directory_t *dir);
+void alloc_page(page_directory_entry_t *page, uint32_t flags);
+void free_page(page_directory_entry_t *page);
+
 void * physical2virtual(page_directory_t *dir, void *physical);
 void * virtual2physical(page_directory_t *dir, void *virtual);
-void map_pages(page_directory_t *dir, uint32_t virtual, uint32_t size, uint32_t flags);
-void map_physical_to_virtual(uint32_t virtual, uint32_t physical);
-void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_start, uint32_t size);
+void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags);
+void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags);
+
 void debug_page_mapping(page_directory_t *dir, uint32_t virtual_address);
 void dump_page_directory(page_directory_t *dir);
 void page_fault_handler(registers_t *regs);

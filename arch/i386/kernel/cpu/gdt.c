@@ -1,10 +1,7 @@
 #include "kernel/gdt.h"
 #include "libc/string.h"
 
-#define KERNEL_STACK_SIZE 4096 * 16
-
-// TODO: Use the existing kernel stack
-uint8_t kernel_stack[KERNEL_STACK_SIZE] __attribute__((aligned(16)));
+extern uint8_t stack_top;
 
 extern void gdt_flush(void* addr);
 extern void tss_flush();
@@ -50,7 +47,7 @@ void gdt_install() {
     gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);  // User Code segment   0x1B
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);  // User Data segment   0x23
     // TSS segment         0x28
-    load_tss(5, 0x10, (uint32_t)(kernel_stack + KERNEL_STACK_SIZE)); 
+    load_tss(5, 0x10, &stack_top); 
 
     gdt_flush(&gp);
     tss_flush();

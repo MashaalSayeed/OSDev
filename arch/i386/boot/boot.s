@@ -64,6 +64,7 @@ initial_page_dir:
 section .bss
 align 16
 global stack_top
+global stack_bottom
 stack_bottom:
     RESB 16384 * 8  ; Reserve 16KB stack
 stack_top:

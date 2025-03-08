@@ -121,7 +121,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// acpi_init();
 	printf("\n");
 
-	map_physical_to_virtual_region(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height);
+	kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
 	log_to_serial("Hello, Serial World 1!\n");
 
 

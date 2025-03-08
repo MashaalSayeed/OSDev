@@ -24,6 +24,14 @@ typedef struct process {
     registers_t context;
     void *root_page_table;
     void *stack;
+    
+    void *heap_start;
+    void *brk;
+    void *heap_end;
+
+    char cwd[256];
+
+
     struct process* next;
 } process_t;
 
@@ -34,3 +42,4 @@ void add_process(process_t *process);
 void kill_process(process_t *process);
 void kill_current_process();
 void print_process_list();
+process_t* get_current_process();

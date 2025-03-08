@@ -76,9 +76,12 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     new_process->root_page_table = clone_page_directory(kpage_dir);
     
     uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
-    allocate_page(new_process->root_page_table, stack - PROCESS_STACK_SIZE, 0x7);
+    alloc_page(get_page(stack - PROCESS_STACK_SIZE, 1, new_process->root_page_table), 0x7);
 
     new_process->stack = (void *)stack - PROCESS_STACK_SIZE;
+    new_process->heap_start = NULL;
+    new_process->brk = NULL;
+    new_process->heap_end = NULL;
 
     // Initialize process context
     new_process->context.eip = (uint32_t)entry_point;
@@ -134,7 +137,7 @@ void kill_process(process_t *process) {
     }
 
     // Free the process stack and process structure
-    free_page(process->root_page_table, (uint32_t)process->stack);
+    free_page(get_page((uint32_t)process->stack, 0, process->root_page_table));
     free_page_directory(process->root_page_table);
     kfree(process);
     schedule(NULL);
@@ -142,6 +145,10 @@ void kill_process(process_t *process) {
 
 void kill_current_process() {
     kill_process(current_process);
+}
+
+process_t* get_current_process() {
+    return current_process;
 }
 
 void print_process_list() {

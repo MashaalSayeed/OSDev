@@ -4,8 +4,9 @@
 #include "kernel/kheap.h"
 #include "kernel/printf.h"
 #include "libc/string.h"
-#include "system.h"
 #include "drivers/serial.h"
+#include "kernel/gdt.h"
+#include "system.h"
 
 
 uint8_t * temp_mem;
@@ -13,7 +14,8 @@ page_directory_t *kpage_dir; // Kernel page directory
 
 extern uint8_t *bitmap;
 extern uint32_t bitmap_size;
-extern uint8_t *kernel_stack;
+extern uint8_t stack_top;
+extern uint8_t stack_bottom;
 
 int paging_enabled = 0;
 
@@ -26,6 +28,7 @@ void * dumb_kmalloc(uint32_t size, uint32_t align) {
     temp_mem = (uint8_t*) ret + size;
     return ret;
 }
+
 
 void * virtual2physical(page_directory_t * dir, void * virtual) {
     if (!paging_enabled) {
@@ -76,95 +79,83 @@ void *physical2virtual(page_directory_t *dir, void *physical) {
     return (void *)((pd_index << 22) + (pt_index << 12) + page_frame_offset);
 }
 
-// Allocates a page in the page directory and page table for a given virtual address.
-void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags) {
+page_table_entry_t *get_page(uint32_t virtual, int make, page_directory_t *dir) {
     uint32_t pd_index = virtual >> 22;
     uint32_t pt_index = (virtual >> 12) & 0x3FF;
 
-    page_table_t *pt = dir->ref_tables[pd_index];
-    if (!pt) {
-        // Allocate a new page table
-        pt = (page_table_t*) dumb_kmalloc(sizeof(page_table_t), 1);
-        memset(pt, 0, sizeof(page_table_t));
+    if (!dir->ref_tables[pd_index]) {
+        if (!make) return NULL;
 
-        uint32_t t = (uint32_t) virtual2physical(dir, pt);
+        page_table_t *table = (page_table_t*) dumb_kmalloc(sizeof(page_table_t), 1);
+        if (!table) return NULL;
+        memset(table, 0, sizeof(page_table_t));
+
         dir->tables[pd_index].present = 1;
-        dir->tables[pd_index].rw = (flags & 0x2) ? 1 : 0;
-        dir->tables[pd_index].user = (flags & 0x4) ? 1 : 0;
-        dir->tables[pd_index].frame = t >> 12;
-
-        dir->ref_tables[pd_index] = pt;
+        dir->tables[pd_index].rw = 1;
+        dir->tables[pd_index].user = 1;
+        dir->tables[pd_index].frame = (uint32_t)virtual2physical(dir, table) >> 12;
+        dir->ref_tables[pd_index] = table;
     }
 
-    if (!pt->pages[pt_index].present) {
-        uint32_t frame = allocate_block();
-        pt->pages[pt_index].present = 1;
-        pt->pages[pt_index].rw = (flags & 0x2) ? 1 : 0;
-        pt->pages[pt_index].user = (flags & 0x4) ? 1 : 0;
-        pt->pages[pt_index].frame = frame;
-    } else {
-        printf("allocate_page: page already exists\n");
-    }
+    return &dir->ref_tables[pd_index]->pages[pt_index];
 }
 
-void free_page(page_directory_t *dir, uint32_t virtual) {
-    uint32_t pd_index = virtual >> 22;
-    uint32_t pt_index = (virtual >> 12) & 0x3FF;
-
-    page_table_t *pt = dir->ref_tables[pd_index];
-    if (!pt) {
-        printf("free_page: page dir entry does not exist\n");
+void alloc_page(page_directory_entry_t *page, uint32_t flags) {
+    if (page->present) {
+        printf("alloc_page: Page already allocated\n");
         return;
     }
 
-    if (pt->pages[pt_index].present) {
-        free_block(pt->pages[pt_index].frame);
-        pt->pages[pt_index].present = 0;
-    }
+    uint32_t frame = pmm_alloc_block();
+    if (!frame) return;
+    page->frame = (uint32_t)frame;
+    page->present = 1;
+    page->rw = (flags & PAGE_RW) ? 1 : 0;
+    page->user = (flags & PAGE_USER) ? 1 : 0;
 }
 
-void map_pages(page_directory_t *dir, uint32_t virtual, uint32_t size, uint32_t flags) {
-    for (uint32_t i = 0; i < size; i += PAGE_SIZE) {
-        allocate_page(dir, virtual + i, flags);
+void free_page(page_directory_entry_t *page) {
+    if (!page || !page->present) {
+        printf("free_page: Page not present\n");
+        return;
     }
+
+    pmm_free_block((void *)(page->frame));
+    memset(page, 0, sizeof(page_table_entry_t));
 }
 
-// Map a physical address to a virtual address by creating a new page table entry
-void map_physical_to_virtual(uint32_t virtual, uint32_t physical) {
-    if (!IS_ALIGN(physical)) {
-        physical = PAGE_ALIGN(physical);
-    }
+void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags) {
+    uint32_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE; // Round up to full pages
 
-    allocate_page(kpage_dir, virtual, 0x6);
-
-    uint32_t pd_index = virtual >> 22;
-    uint32_t pt_index = (virtual >> 12) & 0x3FF;
-
-    // Get the page table corresponding to the directory entry
-    page_table_t *pt = kpage_dir->ref_tables[pd_index];
-    if (pt) {
-        pt->pages[pt_index].frame = physical >> 12; // Store physical frame
-        pt->pages[pt_index].present = 1;  // Mark the page as present
-        pt->pages[pt_index].rw = 1;       // Allow read/write access
-        pt->pages[pt_index].user = 1;     // User accessible
-    } else {
-        // Handle case where page table was not allocated (error)
-        printf("Error: Page table not found for virtual address %x\n", virtual);
-    }
-}
-
-void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_start, uint32_t size) {
-    // Calculate the number of pages to map
-    uint32_t num_pages = (size + 0xFFF) / PAGE_SIZE;
-    // printf("Mapping %d pages from %x to %x\n", num_pages, physical_start, virtual_start);
     for (uint32_t i = 0; i < num_pages; i++) {
-        // Calculate the virtual and physical addresses for the current page
         uint32_t virtual_addr = virtual_start + (i * PAGE_SIZE);
-        uint32_t physical_addr = physical_start + (i * PAGE_SIZE);
+        uint32_t physical_addr = (physical_start) ? (physical_start + (i * PAGE_SIZE)) : 0;
 
-        // Map each page individually
-        map_physical_to_virtual(virtual_addr, physical_addr);
+        // Request a page
+        page_directory_entry_t *page = get_page(virtual_addr, 1, dir);
+        if (!page) {
+            printf("map_memory: Failed to get page for %x\n", virtual_addr);
+            continue;
+        }
+
+        // Allocate and map the frame if physical_start is provided
+        if (physical_addr) {
+            if (!IS_ALIGN(physical_addr)) {
+                physical_addr = PAGE_ALIGN(physical_addr);
+            }
+            page->frame = physical_addr >> 12;
+        } else {
+            alloc_page(page, flags); // Allocate normally
+        }
+
+        page->present = 1;
+        page->rw = (flags & 0x2) ? 1 : 0;
+        page->user = (flags & 0x4) ? 1 : 0;
     }
+}
+
+void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags) {
+    map_memory(kpage_dir, virtual_start, physical_start, size, flags);
 }
 
 void print_stack_trace() {
@@ -235,15 +226,18 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
 }
 
 void free_page_directory(page_directory_t *dir) {
+    if (!dir) return;
     for (uint32_t i = 0; i < 1024; i++) {
         if (!dir->tables[i].present) continue;
 
         page_table_t *table = dir->ref_tables[i];
         if (!table) continue;
 
+        // TODO: Dont free kernel pages
         // for (uint32_t j = 0; j < 1024; j++) {
         //     if (!table->pages[j].present) continue;
-        //     free_block(table->pages[j].frame);
+        //     free_page(&table->pages[j]);
+        //     // pmm_free_block(table->pages[j].frame);
         // }
 
         kfree(table);
@@ -276,7 +270,7 @@ void paging_init() {
     uint32_t i = LOAD_MEMORY_ADDRESS;
     int count = 0;
     while (i < LOAD_MEMORY_ADDRESS + 4 * 0x100000) {
-        allocate_page(kpage_dir, i, 0x3);
+        alloc_page(get_page(i, 1, kpage_dir), 0x3);
         i += BLOCK_SIZE;
         count += 1;
     }
@@ -285,14 +279,16 @@ void paging_init() {
 
     // Map some memory for the kernel heap
     while (i < LOAD_MEMORY_ADDRESS + 4 * 0x100000 + KHEAP_INITIAL_SIZE) {
-        allocate_page(kpage_dir, i, 0x3);
+        alloc_page(get_page(i, 1, kpage_dir), 0x3);
+
         i += BLOCK_SIZE;
         count += 1;
     }
 
     // Setup a guard page for the kernel stack
-    allocate_page(kpage_dir, (uint32_t)kernel_stack + sizeof(kernel_stack) - PAGE_SIZE, 0);
+    free_page(get_page((uint32_t) &stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
+    // printf("Paging initialized with %d pages\n", count);
     // Switch to the new page directory
     switch_page_directory(kpage_dir);
     enable_paging();
@@ -341,6 +337,12 @@ void dump_page_directory(page_directory_t *dir) {
 void page_fault_handler(registers_t *regs) {
     uint32_t faulting_address;
     asm volatile("mov %%cr2, %0" : "=r" (faulting_address));
+
+    if (faulting_address >= &stack_bottom && faulting_address < &stack_bottom + BLOCK_SIZE) {
+        printf("Stack overflow at %x\n", faulting_address);
+        print_stack_trace();
+        for (;;) ;
+    }
 
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);

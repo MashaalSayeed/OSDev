@@ -4,8 +4,7 @@
 #include "kernel/paging.h"
 #include "kernel/process.h"
 #include "libc/string.h"
-
-extern page_directory_t *kpage_dir;
+#include "kernel/printf.h"
 
 int is_valid_elf(elf_header_t *header) {
     if (header->magic != ELF_MAGIC) return 0;
@@ -55,7 +54,7 @@ process_t* load_elf(const char *path) {
         // printf("  Flags: %x\n", ph.flags);
         // printf("  Align: %x\n", ph.align);
 
-        map_pages(kpage_dir, ph.vaddr, ph.mem_size, 0x7);
+        kmap_memory(ph.vaddr, 0, ph.mem_size, 0x7);
         void *buf = (void *)ph.vaddr;
 
         vfs_seek(fd, ph.offset, VFS_SEEK_SET);
