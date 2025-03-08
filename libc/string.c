@@ -71,6 +71,18 @@ int strncmp(const char *s1, const char *s2, uint32_t count) {
     return 0;
 }
 
+char *strcat(char *dest, const char *src) {
+    char *ret = dest;
+    while (*dest) {
+        dest++;
+    }
+    while (*src) {
+        *dest++ = *src++;
+    }
+    *dest = '\0';
+    return ret;
+}
+
 char *strncat(char *dest, const char *src, uint32_t count) {
     char *ret = dest;
     while (*dest) {

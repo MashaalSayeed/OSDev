@@ -19,7 +19,7 @@ LIBC_DIR = libc
 ISO_DIR = iso
 
 # Compiler and linker flags
-CFLAGS = -ffreestanding -O2 -Wall -Wextra -O0 -I$(PWD)/include -std=gnu99
+CFLAGS = -ffreestanding -O2 -Wall -Wextra -O0 -I$(CURDIR)/include -std=gnu99
 CFLAGS += -g  # Enable debugging
 LDFLAGS = -nostdlib -T $(BOOT_DIR)/linker.ld
 QEMU_FLAGS = -d int,page,cpu_reset,guest_errors -no-reboot -no-shutdown

@@ -5,11 +5,11 @@
 
 #define PAGE_SIZE       0x1000
 
-#define ERR_PRESENT     0x1
-#define ERR_RW          0x2
-#define ERR_USER        0x4
-#define ERR_RESERVED    0x8
-#define ERR_INST        0x10
+#define PF_ERR_PRESENT     0x1
+#define PF_ERR_RW          0x2
+#define PF_ERR_USER        0x4
+#define PF_ERR_RESERVED    0x8
+#define PF_ERR_INST        0x10
 
 #define IS_ALIGN(addr) (((uint32_t)(addr) & (PAGE_SIZE - 1)) == 0)
 #define PAGE_ALIGN(addr) ((uint32_t)(addr) & ~(PAGE_SIZE - 1))

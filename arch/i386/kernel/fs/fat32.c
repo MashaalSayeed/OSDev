@@ -11,6 +11,7 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count);
 static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count);
 static int fat32_close(vfs_file_t *file);
 static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_entries);
+static int fat32_readdir_2(vfs_inode_t *dir, uint32_t offset, vfs_dir_entry_t *entry);
 
 static struct vfs_inode_operations fat32_inode_ops = {
     .lookup = fat32_lookup,
@@ -22,6 +23,7 @@ static struct vfs_inode_operations fat32_inode_ops = {
     .mkdir = NULL,
     .rmdir = NULL,
     .readdir = fat32_readdir,
+    .readdir_2 = fat32_readdir_2
 };
 
 int fat32_read_cluster(fat32_superblock_t *sb, uint32_t cluster_number, void *buffer) {
@@ -38,6 +40,7 @@ int fat32_read_cluster(fat32_superblock_t *sb, uint32_t cluster_number, void *bu
             printf("Error: Failed to read sector %d\n", first_sector + i);
             return -1;
         }
+
         memcpy((uint8_t*)buffer + (i * sb->bytes_per_sector), temp_buffer, sb->bytes_per_sector);
     }
 
@@ -268,15 +271,17 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
 
     uint32_t cluster = dir_inode->cluster;
     uint8_t buffer[CLUSTER_SIZE];
-
     char formatted_name[12];
     fat32_format_name(name, formatted_name);
 
     while (cluster < FAT32_CLUSTER_LAST) {
         if (fat32_read_cluster(sb, cluster, buffer) != 0) return NULL;
-
+        
         for (int i = 0; i < sb->cluster_size / sizeof(fat32_dir_entry_t); i++) {
             fat32_dir_entry_t *entry = (fat32_dir_entry_t*)(buffer + i * sizeof(fat32_dir_entry_t));
+            
+            if (entry->filename[0] == FAT32_DELETED_ENTRY) continue;
+
             if (strncmp(entry->filename, formatted_name, 8) == 0 && strncmp(entry->ext, formatted_name + 8, 3) == 0) {
                 vfs_inode_t *inode = (vfs_inode_t*) kmalloc(sizeof(vfs_inode_t));
                 inode->mode = entry->attributes;
@@ -469,7 +474,6 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
 static int fat32_close(vfs_file_t *file) {
     kfree(file->inode->fs_data);
     kfree(file->inode);
-    kfree(file);
     return 0;
 }
 
@@ -479,14 +483,15 @@ uint32_t fat32_entry_to_inode_number(fat32_dir_entry_t *entry, uint32_t entry_of
 }
 
 char fat32_extract_lfn_char(fat32_long_dir_entry_t *entry, int index) {
+    char c = '\0';
     if (index < 5) {
-        return entry->name1[index * 2]; // First 5 characters (Unicode, skip high byte)
+        c = entry->name1[index]; // First 5 characters (Unicode, skip high byte)
     } else if (index < 11) {
-        return entry->name2[(index - 5) * 2]; // Next 6 characters
+        c = entry->name2[(index - 5)]; // Next 6 characters
     } else if (index < 13) {
-        return entry->name3[(index - 11) * 2]; // Last 2 characters
+        c = entry->name3[(index - 11)]; // Last 2 characters
     }
-    return '\0'; // Out of range
+    return (c < 128) ? c : '?'; // Out of range
 }
 
 static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_entries) {
@@ -499,8 +504,9 @@ static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_
     uint8_t buffer[sb->cluster_size];
     uint32_t entry_count = 0;
 
-    char lfn_buffer[256];
+    char lfn_buffer[256] = {0};
     size_t lfn_length = 0;
+    int lfn_order = -1;
 
     while (cluster < FAT32_CLUSTER_LAST) {
         if (fat32_read_cluster(sb, cluster, buffer) != 0) return -1;
@@ -512,14 +518,20 @@ static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_
 
             if (entry->attributes == FAT32_ATTR_LONG_NAME) {
                 fat32_long_dir_entry_t *lfn_entry = (fat32_long_dir_entry_t*)entry;
-                if (lfn_entry->order & 0x40) {
-                    lfn_length = 0;
+                int entry_order = lfn_entry->order & 0x1F;
+
+                if (lfn_order == -1 || entry_order == lfn_order - 1) {
+                    // Append characters in correct order
+                    for (int j = 0; j < 13; j++) {
+                        char c = fat32_extract_lfn_char(lfn_entry, j);
+                        if (c == '\0') break;
+                        lfn_buffer[(entry_order - 1) * 13 + j] = c;
+                    }
+                    lfn_order = entry_order;
                 }
 
-                for (int j = 0; j < 13; j++) {
-                    char c = fat32_extract_lfn_char(lfn_entry, j);
-                    if (c == '\0') break;
-                    lfn_buffer[lfn_length++] = c;
+                if (lfn_entry->order & 0x40) {
+                    lfn_length = (entry_order - 1) * 13 + 13;
                 }
 
                 continue;
@@ -527,10 +539,11 @@ static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_
 
             vfs_dir_entry_t *vfs_entry = &entries[entry_count];
             if (lfn_length > 0) {
-                // Use long file name if available
+                // lfn_buffer[lfn_length] = '\0';
                 strncpy(vfs_entry->name, lfn_buffer, sizeof(vfs_entry->name) - 1);
                 memset(lfn_buffer, 0, sizeof(lfn_buffer));
                 lfn_length = 0;
+                lfn_order = -1;
             } else {
                 // Use 8.3 file name
                 strncpy(vfs_entry->name, (char *)entry->filename, 8);
@@ -554,6 +567,83 @@ static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_
     }
 
     return entry_count;
+}
+
+
+static int fat32_readdir_2(vfs_inode_t *dir, uint32_t offset, vfs_dir_entry_t *entry) {
+    if (!dir || !entry) return -1;
+
+    fat32_inode_t *dir_inode = (fat32_inode_t*)dir->fs_data;
+    fat32_superblock_t *sb = (fat32_superblock_t*)dir->superblock->fs_data;
+
+    uint32_t cluster = dir_inode->cluster;
+    uint8_t buffer[sb->cluster_size];
+    uint32_t current_offset = 0;
+
+    char lfn_buffer[256] = {0}; // Buffer to store LFN
+    size_t lfn_length = 0;
+    int lfn_order = -1;
+
+    while (cluster < FAT32_CLUSTER_LAST) {
+        if (fat32_read_cluster(sb, cluster, buffer) != 0) return -1;
+
+        for (int i = 0; i < sb->cluster_size / sizeof(fat32_dir_entry_t); i++, current_offset++) {
+            fat32_dir_entry_t *dir_entry = (fat32_dir_entry_t*)(buffer + i * sizeof(fat32_dir_entry_t));
+
+            if (dir_entry->filename[0] == FAT32_LAST_ENTRY) return 0;  // No more entries
+            if (dir_entry->filename[0] == FAT32_DELETED_ENTRY) continue;
+
+            if (current_offset < offset) continue;
+
+            if (dir_entry->attributes == FAT32_ATTR_LONG_NAME) {
+                fat32_long_dir_entry_t *lfn_entry = (fat32_long_dir_entry_t*)dir_entry;
+                int entry_order = lfn_entry->order & 0x1F;
+
+                if (lfn_order == -1 || entry_order == lfn_order - 1) {
+                    // Append characters in correct order
+                    for (int j = 0; j < 13; j++) {
+                        char c = fat32_extract_lfn_char(lfn_entry, j);
+                        if (c == '\0') break;
+                        lfn_buffer[(entry_order - 1) * 13 + j] = c;
+                    }
+                    lfn_order = entry_order;
+                }
+
+                if (lfn_entry->order & 0x40) {
+                    lfn_length = (entry_order - 1) * 13 + 13;
+                }
+
+                continue;
+            }
+
+            // Populate VFS entry
+            if (lfn_length > 0) {
+                strncpy(entry->name, lfn_buffer, sizeof(entry->name) - 1);
+                memset(lfn_buffer, 0, sizeof(lfn_buffer));
+                lfn_length = 0;
+                lfn_order = -1;
+            } else {
+                // Use 8.3 filename
+                strncpy(entry->name, (char *)dir_entry->filename, 8);
+                entry->name[8] = '\0'; // Ensure null-termination
+                char *ext = entry->name + strlen(entry->name);
+                if (dir_entry->ext[0] != ' ') {
+                    if (strlen(entry->name) < sizeof(entry->name) - 1) {
+                        strncat(entry->name, ".", sizeof(entry->name) - strlen(entry->name) - 1);
+                        strncat(entry->name, (char *)dir_entry->ext, 3);
+                    }
+                }
+            }
+
+            entry->type = (dir_entry->attributes & FAT32_ATTR_DIRECTORY) ? VFS_MODE_DIR : VFS_MODE_FILE;
+            entry->inode_number = fat32_entry_to_inode_number(dir_entry, i);
+            return current_offset + 1; // Return next offset
+        }
+
+        cluster = fat32_get_next_cluster(sb, cluster);
+    }
+
+    return 0; // End of directory
 }
 
 static int fat32_mkdir(vfs_inode_t *dir, const char* name, uint32_t mode) {

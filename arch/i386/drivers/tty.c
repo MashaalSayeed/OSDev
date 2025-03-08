@@ -1,11 +1,11 @@
 #include "drivers/tty.h"
+#include "drivers/serial.h"
 #include "libc/string.h"
 #include "io.h"
-#include "drivers/serial.h"
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
-static uint16_t* const VGA_MEMORY = (uint16_t*) 0xC00B8000;
+static const uint16_t* VGA_MEMORY = (uint16_t*) 0xC00B8000;
 
 size_t terminal_row;
 size_t terminal_column;
@@ -25,19 +25,15 @@ void terminal_initialize(void)
 {
 	terminal_row = 0;
 	terminal_column = 0;
-	terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 	terminal_buffer = VGA_MEMORY;
+    
+	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 	terminal_clear();
 }
 
-void terminal_setcolor(uint8_t color) 
+void terminal_setcolor(enum vga_color fg, enum vga_color bg) 
 {
-    terminal_color = color;
-}
-
-uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg) 
-{
-    return fg | bg << 4;
+    terminal_color = fg | bg << 4;
 }
 
 uint16_t vga_entry(unsigned char uc, uint8_t color) 

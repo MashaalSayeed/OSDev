@@ -9,10 +9,11 @@
 
 
 uint8_t * temp_mem;
-page_directory_t *kpage_dir; // Kernel page directory (current)
+page_directory_t *kpage_dir; // Kernel page directory
 
 extern uint8_t *bitmap;
 extern uint32_t bitmap_size;
+extern uint8_t *kernel_stack;
 
 int paging_enabled = 0;
 
@@ -37,7 +38,7 @@ void * virtual2physical(page_directory_t * dir, void * virtual) {
 
     page_table_t * table = dir->ref_tables[pd_index];
     if(!table) {
-        printf("virtual2phys: page dir entry does not exist\n");
+        // printf("virtual2phys: page dir entry does not exist\n");
         return NULL;
     }
 
@@ -101,6 +102,8 @@ void allocate_page(page_directory_t *dir, uint32_t virtual, uint32_t flags) {
         pt->pages[pt_index].rw = (flags & 0x2) ? 1 : 0;
         pt->pages[pt_index].user = (flags & 0x4) ? 1 : 0;
         pt->pages[pt_index].frame = frame;
+    } else {
+        printf("allocate_page: page already exists\n");
     }
 }
 
@@ -122,7 +125,6 @@ void free_page(page_directory_t *dir, uint32_t virtual) {
 
 void map_pages(page_directory_t *dir, uint32_t virtual, uint32_t size, uint32_t flags) {
     for (uint32_t i = 0; i < size; i += PAGE_SIZE) {
-        // printf("Mapping page %x | %x\n", virtual + i);
         allocate_page(dir, virtual + i, flags);
     }
 }
@@ -130,7 +132,6 @@ void map_pages(page_directory_t *dir, uint32_t virtual, uint32_t size, uint32_t 
 // Map a physical address to a virtual address by creating a new page table entry
 void map_physical_to_virtual(uint32_t virtual, uint32_t physical) {
     if (!IS_ALIGN(physical)) {
-        // printf("Error: Physical address is not page aligned %x to %x\n", physical, PAGE_ALIGN(physical));
         physical = PAGE_ALIGN(physical);
     }
 
@@ -155,7 +156,7 @@ void map_physical_to_virtual(uint32_t virtual, uint32_t physical) {
 void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_start, uint32_t size) {
     // Calculate the number of pages to map
     uint32_t num_pages = (size + 0xFFF) / PAGE_SIZE;
-    printf("Mapping %d pages from %x to %x\n", num_pages, physical_start, virtual_start);
+    // printf("Mapping %d pages from %x to %x\n", num_pages, physical_start, virtual_start);
     for (uint32_t i = 0; i < num_pages; i++) {
         // Calculate the virtual and physical addresses for the current page
         uint32_t virtual_addr = virtual_start + (i * PAGE_SIZE);
@@ -166,15 +167,36 @@ void map_physical_to_virtual_region(uint32_t virtual_start, uint32_t physical_st
     }
 }
 
+void print_stack_trace() {
+    uint32_t *ebp;
+    uint32_t eip;
+
+    // Get the current base pointer
+    asm volatile("mov %%ebp, %0" : "=r"(ebp));
+
+    printf("Stack trace:\n");
+    while (ebp) {
+        eip = ebp[1];  // Return address is at EBP + 4
+        printf("  [%x]\n", eip);
+
+        ebp = (uint32_t *)ebp[0];  // Move to previous frame
+    }
+}
+
+
 void switch_page_directory(page_directory_t *dir) {
     // Set the CR3 register to the physical address of the page directory
-    if (!paging_enabled) {
-        dir = (page_directory_t*) virtual2physical(kpage_dir, dir);
-    } else {
-        dir = (page_directory_t*) virtual2physical(kpage_dir, dir);
+    // printf("Switching to page directory %x | %x\n", dir, kpage_dir);
+    if (kpage_dir == 0) {
+        print_stack_trace();
+    }
+    
+    dir = (page_directory_t*) virtual2physical(kpage_dir, dir);
+    if (!dir) {
+        printf("Failed to switch page directory\n");
+        return;
     }
 
-    // printf("Switching page directory to %x\n", dir);
     asm volatile("mov %0, %%cr3" :: "r"(dir) : "memory");
 }
 
@@ -268,12 +290,8 @@ void paging_init() {
         count += 1;
     }
 
-    // Map RSDP
-    // i = LOAD_MEMORY_ADDRESS + 0x000E0000;
-    // while (i < LOAD_MEMORY_ADDRESS + 0x00100000) {
-    //     allocate_page(kpage_dir, i, 0x3);
-    //     i += BLOCK_SIZE;
-    // }
+    // Setup a guard page for the kernel stack
+    allocate_page(kpage_dir, (uint32_t)kernel_stack + sizeof(kernel_stack) - PAGE_SIZE, 0);
 
     // Switch to the new page directory
     switch_page_directory(kpage_dir);
@@ -324,17 +342,18 @@ void page_fault_handler(registers_t *regs) {
     uint32_t faulting_address;
     asm volatile("mov %%cr2, %0" : "=r" (faulting_address));
 
-    log_to_serial("Page fault\n");
-
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);
     printf("At Instruction %x\n", regs->eip);
+    printf("Stack: %x\n", regs->esp);
+    printf("CS: %x\n", regs->cs);
 
-    uint32_t present = regs->err_code & ERR_PRESENT;
-    uint32_t rw = regs->err_code & ERR_RW;
-    uint32_t user = regs->err_code & ERR_USER;
-    uint32_t reserved = regs->err_code & ERR_RESERVED;
-    uint32_t inst_fetch = regs->err_code & ERR_INST;
+
+    uint32_t present = regs->err_code & PF_ERR_PRESENT;
+    uint32_t rw = regs->err_code & PF_ERR_RW;
+    uint32_t user = regs->err_code & PF_ERR_USER;
+    uint32_t reserved = regs->err_code & PF_ERR_RESERVED;
+    uint32_t inst_fetch = regs->err_code & PF_ERR_INST;
 
     printf("Possible causes: [ ");
     if(!present) printf("Page not present ");

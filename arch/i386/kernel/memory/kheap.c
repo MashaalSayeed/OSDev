@@ -7,22 +7,20 @@ uint8_t *kheap_curr;
 
 static kheap_block_t *free_list;
 
-void * kmalloc(size_t size) {
+void *kmalloc(size_t size) {
     size = align(size);
     kheap_block_t *cur_block = free_list;
     kheap_block_t *prev_block = NULL;
 
     while (cur_block) {
-        // Find the first block that is large enough
         if (cur_block->size >= size) {
             if (cur_block->size > size + sizeof(kheap_block_t)) {
-                // Split the block (Used + Free)
+                // Split block: create a new free block
                 kheap_block_t *new_block = (kheap_block_t *)((uint8_t *)cur_block + sizeof(kheap_block_t) + size);
                 new_block->size = cur_block->size - size - sizeof(kheap_block_t);
                 new_block->next = cur_block->next;
 
                 cur_block->size = size;
-                cur_block->next = NULL;
 
                 if (prev_block) {
                     prev_block->next = new_block;
@@ -30,7 +28,7 @@ void * kmalloc(size_t size) {
                     free_list = new_block;
                 }
             } else {
-                // Remove the block from the free list
+                // Remove the block from free list
                 if (prev_block) {
                     prev_block->next = cur_block->next;
                 } else {
@@ -45,22 +43,23 @@ void * kmalloc(size_t size) {
         cur_block = cur_block->next;
     }
 
-    return NULL;
+    return NULL; // Out of memory
 }
 
 void kfree(void *ptr) {
     if (!ptr) return;
 
-    kheap_block_t *block = (kheap_block_t *)(ptr - sizeof(kheap_block_t));
-    block->next = free_list; // Add the block to the free list
+    kheap_block_t *block = (kheap_block_t *)((uint8_t *)ptr - sizeof(kheap_block_t));
+    block->next = free_list;
     free_list = block;
+
 
     // Coalesce free blocks
     kheap_block_t *cur_block = free_list;
     while (cur_block) {
         kheap_block_t *next_block = cur_block->next;
-        // If the current block and the next block are contiguous
-        if (next_block && (uint32_t)cur_block + cur_block->size + sizeof(kheap_block_t) == (uint32_t)next_block) {
+
+        if ((uint8_t *)cur_block + cur_block->size + sizeof(kheap_block_t) == (uint8_t *)next_block) {
             cur_block->size += next_block->size + sizeof(kheap_block_t);
             cur_block->next = next_block->next;
         } else {

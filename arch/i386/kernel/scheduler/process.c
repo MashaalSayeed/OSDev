@@ -3,6 +3,7 @@
 #include "kernel/paging.h"
 #include "kernel/printf.h"
 #include "libc/string.h"
+#include <stdbool.h>
 
 #define USER_STACK_BASE  0xB0000000
 
@@ -10,6 +11,7 @@ process_t *process_list = NULL;
 process_t *current_process = NULL;
 process_t *init_process = NULL;
 size_t pid_counter = 0;
+bool scheduler_started = false;
 
 extern page_directory_t* kpage_dir;
 extern void switch_context(registers_t* context);
@@ -26,18 +28,19 @@ void idle_process() {
 
 void scheduler_init() {
     init_process = create_process("init", idle_process);
-    add_process(init_process);
+    // add_process(init_process);
 }
 
 void schedule(registers_t* context) {
     if (!process_list) return;
 
     // // Save the context of the current processs
-    if (current_process != NULL && context != NULL) {
+    if (current_process != NULL && context != NULL && scheduler_started == true) {
         current_process->context = *context;
         current_process->status = READY;
     }
 
+    scheduler_started = true;
     process_t *next_process = current_process ? current_process : process_list;
     do {
         next_process = next_process->next ? next_process->next : process_list;
@@ -46,11 +49,12 @@ void schedule(registers_t* context) {
     if (next_process == current_process && (current_process == NULL || current_process->status != READY)) {
         next_process = init_process;  // Always have a fallback
     }
-
-    if (next_process != current_process) {
+    
+    // printf("Current process %d (%d) | Next Process: %d (%d)\n", current_process->pid, current_process->status, next_process->pid, next_process->status);
+    if (next_process != current_process || next_process->status == READY) {
         current_process = next_process;
         current_process->status = RUNNING;
-
+        
         // Restore context and switch page directory
         switch_page_directory(current_process->root_page_table);
         switch_context(&current_process->context);
@@ -75,7 +79,6 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     allocate_page(new_process->root_page_table, stack - PROCESS_STACK_SIZE, 0x7);
 
     new_process->stack = (void *)stack - PROCESS_STACK_SIZE;
-    printf("PID %d | stack: %x | page dir: %x\n", new_process->pid, stack, new_process->root_page_table);
 
     // Initialize process context
     new_process->context.eip = (uint32_t)entry_point;

@@ -5,8 +5,9 @@
 #include "drivers/serial.h"
 #include "drivers/keyboard.h"
 #include "libc/string.h"
-#include "io.h"
 #include "kernel/process.h"
+#include "kernel/syscall.h"
+#include "io.h"
 
 static idt_entry_t idt[256];
 idt_ptr_t idtp;
@@ -140,7 +141,9 @@ isr_t interrupt_handlers[256];
 void isr_handler(registers_t *r) {
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];
+        if (r->int_no < 32) terminal_setcolor(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         handler(r);
+        if (r->int_no < 32) terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     } else {
         printf("Received interrupt: %d\n", r->int_no);
     }
@@ -161,35 +164,6 @@ void irq_handler(registers_t *r) {
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];
         handler(r);
-    }
-}
-
-void syscall_handler(registers_t *regs) {
-    int fd, size;
-    char *buffer;
-    // printf("Syscall: %d\n", regs->eax);
-    switch (regs->eax) {
-        case 0:
-            printf((const char *)regs->ebx);
-            break;
-        case 1: // Syscall write
-            fd = regs->ebx;
-            buffer = (const char *)regs->ecx;
-            size = regs->edx;
-            printf("%s", buffer);
-            break;
-        case 2: // Syscall read
-            fd = regs->ebx;
-            buffer = (const char *)regs->ecx;
-            size = regs->edx;
-            kgets(buffer, size);
-            break;
-        case 5: // Syscall exit
-            printf("Exiting with status: %d\n", regs->ebx);
-            kill_current_process();
-            break;
-        default:
-            printf("Unknown syscall: %d\n", regs->eax);
     }
 }
 

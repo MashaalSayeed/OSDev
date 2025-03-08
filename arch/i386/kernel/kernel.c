@@ -22,7 +22,6 @@
 #include "drivers/ata.h"
 #include "drivers/rtc.h"
 
-extern page_directory_t *kpage_dir;
 framebuffer_t* framebuffer;
 bool is_gui_enabled = false;
 
@@ -42,12 +41,6 @@ void multiboot2_init(struct multiboot_tag* mbd) {
 		}
 		else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
 			fb = (struct multiboot_tag_framebuffer*) tag;
-			// printf("Framebuffer type: %d\n", fb->framebuffer_type);
-			// printf("Framebuffer pitch: %d, width: %d, height: %d, bpp: %d\n",
-			// 	   fb->framebuffer_pitch, fb->framebuffer_width,
-			// 	   fb->framebuffer_height, fb->framebuffer_bpp);
-			// printf("Framebuffer address: %x\n", fb->framebuffer_addr);
-
 			framebuffer = init_framebuffer(fb->framebuffer_width, fb->framebuffer_height, fb->framebuffer_pitch, fb->framebuffer_bpp, fb->framebuffer_addr);
 			is_gui_enabled = fb->framebuffer_type == MULTIBOOT_FRAMEBUFFER_TYPE_RGB;
 		}
@@ -99,8 +92,9 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	terminal_initialize();
 	printf("Initialized Terminal\n\n");
-
+	terminal_setcolor(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 	print_time();
+	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         printf("Invalid magic number: %x\n", magic);
@@ -147,17 +141,16 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	scheduler_init();
 	// print_process_list();
 	init_timer(100);
-	test_scheduler();
+	// test_scheduler();
 
 	vfs_init();
-	// test_elf_loader();
+
+	test_elf_loader();
 
 	// printf("Enter a string: ");
 	// char buffer[100];
 	// kgets(buffer, 100);
 	// printf("You entered: %s\n", buffer);
-
-	log_to_serial("Hello, Serial World 2!\n");
 
 	for (;;) ;
 }

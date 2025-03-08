@@ -5,7 +5,6 @@
 
 static rsdp_descriptor_t *rsdp = NULL;
 static acpi_table_header_t *rsdt = NULL;
-extern page_directory_t *kpage_dir;
 
 uint8_t calculate_checksum(void *table, size_t length) {
     uint8_t sum = 0;
@@ -58,7 +57,7 @@ void find_rsdt() {
     // // Iterate through the entries to find other tables
     // for (uint32_t i = 0; i < num_entries; i++) {
     //     uint32_t table_address = *(uint32_t*)((uint8_t*)rsdt_virt + sizeof(acpi_table_header_t) + i * sizeof(uint32_t));
-    //     acpi_table_header_t *table = (acpi_table_header_t*)physical2virtual(kpage_dir, (void*)table_address);
+    //     acpi_table_header_t *table = (acpi_table_header_t*)physical2virtual(dir, (void*)table_address);
         
     //     if (table) {
     //         printf("Found table: %s at address %x\n", table->signature, table->length);

@@ -1,7 +1,7 @@
 #include "kernel/gdt.h"
 #include "libc/string.h"
 
-#define KERNEL_STACK_SIZE 4096
+#define KERNEL_STACK_SIZE 4096 * 16
 
 // TODO: Use the existing kernel stack
 uint8_t kernel_stack[KERNEL_STACK_SIZE] __attribute__((aligned(16)));

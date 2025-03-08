@@ -10,13 +10,13 @@ int printf(const char *format, ...) {
     int size = vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
-    return write(1, buffer, 0);
+    return syscall_write(1, buffer, 0);
 }
 
 int puts(const char *str) {
-    return write(1, str, 0);
+    return syscall_write(1, str, 0);
 }
 
-int fgets(int fd, char *buffer, int n) {
-    return read(fd, buffer, n);
+int fgets(char *buffer, int n, int fd) {
+    return syscall_read(fd, buffer, n);
 }

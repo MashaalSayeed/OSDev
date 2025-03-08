@@ -1,5 +1,7 @@
 #include <stddef.h>
 #include "kernel/string.h"
+#include "kernel/kheap.h"
+#include "libc/string.h"
 
 char *strdup(const char *s) {
     size_t len = strlen(s);

@@ -49,7 +49,8 @@ struct vfs_inode_operations {
     
     int (*mkdir)(vfs_inode_t* dir, const char* name, uint32_t mode);
     int (*rmdir)(vfs_inode_t* dir, const char* name);
-    vfs_inode_t* (*readdir)(vfs_inode_t* dir, vfs_dir_entry_t *entries, size_t max_entries); // Read a directory entry
+    int (*readdir)(vfs_inode_t* dir, vfs_dir_entry_t *entries, size_t max_entries); // Read a directory entry
+    int (*readdir_2)(vfs_inode_t* dir, uint32_t offset, vfs_dir_entry_t *entry); // Read a directory entry
 };
 
 struct vfs_file_operations {
@@ -103,7 +104,8 @@ uint32_t vfs_read(int fd, void *buf, size_t count);
 int vfs_seek(int fd, uint32_t offset, int whence);
 int vfs_mkdir(const char *path, uint32_t mode);
 int vfs_rmdir(const char *path);
-int vfs_readdir(const char *path, vfs_dir_entry_t *entries, size_t max_entries);
+int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries);
+int vfs_getdents(int fd, void *buf, int size);
 
 int vfs_register_fs_type(vfs_fs_type_t *fs_type);
 

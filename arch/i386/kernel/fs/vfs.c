@@ -4,6 +4,7 @@
 #include "kernel/fat32.h"
 #include "libc/string.h"
 #include "kernel/printf.h"
+#include "user/dirent.h"
 
 #define MAX_BLOCK_DEVICES 16
 
@@ -134,7 +135,6 @@ static vfs_inode_t * resolve_path(const char *path, vfs_mount_t **mount_out) {
 
     char *path_copy = strdup(path);
     char *token = strtok(path_copy, "/");
-
     while (token) {
         current_inode = current_inode->inode_ops->lookup(current_inode, token);
         if (!current_inode) {
@@ -165,7 +165,7 @@ int vfs_open(const char *path, int flags) {
 
     // Find an available file descriptor
     int fd;
-    for (fd = 0; fd < MAX_OPEN_FILES; fd++) {
+    for (fd = 3; fd < MAX_OPEN_FILES; fd++) {
         if (!vfs_fd_table[fd]) break;
     }
 
@@ -181,16 +181,19 @@ int vfs_open(const char *path, int flags) {
     file->flags = flags;
 
     vfs_fd_table[fd] = file;
-
     return fd;
 }
 
 int vfs_close(int fd) {
     if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
     vfs_file_t *file = vfs_fd_table[fd];
-    file->inode->inode_ops->close(file);
-
     vfs_fd_table[fd] = NULL;
+
+    // Don't allow closing the root directory
+    if (file->inode == file->inode->superblock->root) return -1;
+
+    file->inode->inode_ops->close(file);
+    kfree(file);
     return 0;
 }
 
@@ -305,16 +308,48 @@ int vfs_rmdir(const char *path) {
     return result;
 }
 
-int vfs_readdir(const char *path, vfs_dir_entry_t *entries, size_t max_entries) {
-    vfs_mount_t *mount;
-    vfs_inode_t *dir = resolve_path(path, &mount);
-    if (!dir) {
-        printf("Error: Failed to resolve path: %s\n", path);
+int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries) {
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd] || !entries) return -1;
+    vfs_file_t *file = vfs_fd_table[fd];
+
+    if (file->inode->mode != VFS_MODE_DIR) {
+        printf("Error: Not a directory\n");
         return -1;
     }
 
-    printf("Reading directory: %s\n", path);
-    return dir->inode_ops->readdir(dir, entries, max_entries);
+    return file->inode->inode_ops->readdir(file->inode, entries, max_entries);
+}
+
+int vfs_getdents(int fd, void* buf, int size) {
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd] || !buf) return -1;
+    vfs_file_t *file = vfs_fd_table[fd];
+
+    if (file->inode->mode != VFS_MODE_DIR) {
+        printf("Error: Not a directory\n");
+        return -1;
+    }
+
+    int bytes_written = 0;
+    uint32_t offset = file->offset;
+    vfs_dir_entry_t entry;
+
+    while (bytes_written + sizeof(linux_dirent_t) <= size) {
+        if ((offset = file->inode->inode_ops->readdir_2(file->inode, offset, &entry)) <= 0) break;
+
+        linux_dirent_t *dirp = (linux_dirent_t*)((uint8_t*)buf + bytes_written);
+        dirp->d_ino = entry.inode_number;
+        dirp->d_off = offset;
+        dirp->d_reclen = sizeof(linux_dirent_t);
+        dirp->d_type = entry.type;
+
+        strncpy(dirp->d_name, entry.name, sizeof(dirp->d_name) - 1);
+        dirp->d_name[sizeof(dirp->d_name) - 1] = '\0';
+
+        bytes_written += sizeof(linux_dirent_t);
+    }
+
+    file->offset = offset;
+    return bytes_written;
 }
 
 // void * vfs_load
@@ -326,27 +361,37 @@ int vfs_register_fs_type(vfs_fs_type_t *fs_type) {
 }
 
 void test_vfs(vfs_superblock_t *root_sb) {
-    vfs_dir_entry_t entries[16];
-    int file_count = vfs_readdir("/", &entries, 16);
-    printf("Files in root (%d):\n", file_count);
-    for (int i = 0; i < file_count; i++) {
-        if (entries[i].type == VFS_MODE_DIR) {
-            printf(">  %s\n", entries[i].name);
-        } else {
-            printf("   %s\n", entries[i].name);
-        }
-    }
+    // linux_dirent_t entries[16];
+    // int bytes_read = vfs_getdents(fd, entries, sizeof(entries));
+    // printf("Read %d bytes\n", bytes_read);
+    // for (int i = 0; i < bytes_read / sizeof(linux_dirent_t); i++) {
+    //     printf("Inode: %d, Name: %s, Type: %d\n", entries[i].d_ino, entries[i].d_name, entries[i].d_type);
+    // }
+    
+    // vfs_dir_entry_t entries[16];
+    // file_count = vfs_readdir(fd, &entries, sizeof(entries) / sizeof(vfs_dir_entry_t));
+    // vfs_close(fd);
+    // printf("Files in root (%d):\n", file_count);
+    // for (int i = 0; i < file_count; i++) {
+    //     if (entries[i].type == VFS_MODE_DIR) {
+    //         printf(">  %s\n", entries[i].name);
+    //     } else {
+    //         printf("   %s\n", entries[i].name);
+    //     }
+    // }
 
-    int fd = vfs_open("/sofa.txt", 0);
-    if (fd < 0) {
-        printf("Failed to open file\n");
-        return;
-    }
 
-    char buf[100];
-    int count = vfs_read(fd, buf, 100);
-    buf[count] = '\0';
-    printf("Read %d bytes from file: %s\n", count, buf);
+
+    // int fd = vfs_open("/sofa.txt", VFS_FLAG_READ);
+    // int fd = vfs_open("/k", VFS_FLAG_READ);
+
+    // char buffer[256];
+    // int bytes_read = vfs_read(fd, buffer, sizeof(buffer));
+    // printf("Read %d bytes: %s\n", bytes_read, buffer);
+    // vfs_close(fd);
+
+    // fd = vfs_open("/sofa.txt", VFS_FLAG_READ);
+    // vfs_close(fd);
     
     // if (vfs_create("/sofa.txt", 0644) != 0) {
     //     printf("Failed to create file\n");
@@ -384,8 +429,6 @@ void ramfs_init() {
 }
 
 void vfs_init() {
-    // ramfs_init();
-
     block_device_t *ata = get_block_device("/dev/sda1");
     if (!ata) {
         printf("ATA block device not found\n");
@@ -412,5 +455,5 @@ void vfs_init() {
         return;
     }
 
-    // test_vfs(sb);
+    test_vfs(sb);
 }
