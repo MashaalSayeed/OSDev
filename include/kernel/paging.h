@@ -4,6 +4,7 @@
 #include "kernel/isr.h"
 
 #define PAGE_SIZE       0x1000
+#define USER_HEAP_START 0x400000
 
 #define PAGE_PRESENT     0x1
 #define PAGE_RW          0x2

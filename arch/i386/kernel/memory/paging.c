@@ -7,7 +7,8 @@
 #include "drivers/serial.h"
 #include "kernel/gdt.h"
 #include "system.h"
-
+#include "kernel/process.h"
+#include "kernel/exceptions.h"
 
 uint8_t * temp_mem;
 page_directory_t *kpage_dir; // Kernel page directory
@@ -29,7 +30,6 @@ void * dumb_kmalloc(uint32_t size, uint32_t align) {
     return ret;
 }
 
-
 void * virtual2physical(page_directory_t * dir, void * virtual) {
     if (!paging_enabled) {
         return virtual - LOAD_MEMORY_ADDRESS;
@@ -41,7 +41,7 @@ void * virtual2physical(page_directory_t * dir, void * virtual) {
 
     page_table_t * table = dir->ref_tables[pd_index];
     if(!table) {
-        // printf("virtual2phys: page dir entry does not exist\n");
+        printf("virtual2phys: page dir entry does not exist\n");
         return NULL;
     }
 
@@ -56,27 +56,22 @@ void * virtual2physical(page_directory_t * dir, void * virtual) {
 
 void *physical2virtual(page_directory_t *dir, void *physical) {
     if (!paging_enabled) {
-        return physical + LOAD_MEMORY_ADDRESS;
+        return (void *)((uint32_t)physical + LOAD_MEMORY_ADDRESS);
     }
 
     uint32_t phys_addr = (uint32_t)physical;
-    uint32_t pd_index = phys_addr >> 22; // Get page directory index
-    uint32_t pt_index = (phys_addr >> 12) & 0x03FF; // Get page table index
-    uint32_t page_frame_offset = phys_addr & 0xFFF; // Get offset within page
+    uint32_t pd_index = phys_addr >> 22;  // Page directory index
+    uint32_t pt_index = (phys_addr >> 12) & 0x03FF;  // Page table index
+    uint32_t page_frame_offset = phys_addr & 0xFFF;  // Offset within page
 
     page_table_t *table = dir->ref_tables[pd_index];
-    if (!table) {
-        printf("physical2virtual: page dir entry does not exist\n");
-        return NULL;
-    }
-
-    page_table_entry_t pt_entry = table->pages[pt_index];
-    if (!pt_entry.present) {
+    if (!table || !table->pages[pt_index].present) {
         printf("physical2virtual: page table entry does not exist\n");
         return NULL;
     }
 
-    return (void *)((pd_index << 22) + (pt_index << 12) + page_frame_offset);
+    uint32_t virt_addr = (table->pages[pt_index].frame << 12) + page_frame_offset;
+    return (void *)virt_addr;
 }
 
 page_table_entry_t *get_page(uint32_t virtual, int make, page_directory_t *dir) {
@@ -158,30 +153,8 @@ void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size,
     map_memory(kpage_dir, virtual_start, physical_start, size, flags);
 }
 
-void print_stack_trace() {
-    uint32_t *ebp;
-    uint32_t eip;
-
-    // Get the current base pointer
-    asm volatile("mov %%ebp, %0" : "=r"(ebp));
-
-    printf("Stack trace:\n");
-    while (ebp) {
-        eip = ebp[1];  // Return address is at EBP + 4
-        printf("  [%x]\n", eip);
-
-        ebp = (uint32_t *)ebp[0];  // Move to previous frame
-    }
-}
-
-
 void switch_page_directory(page_directory_t *dir) {
     // Set the CR3 register to the physical address of the page directory
-    // printf("Switching to page directory %x | %x\n", dir, kpage_dir);
-    if (kpage_dir == 0) {
-        print_stack_trace();
-    }
-    
     dir = (page_directory_t*) virtual2physical(kpage_dir, dir);
     if (!dir) {
         printf("Failed to switch page directory\n");
@@ -191,12 +164,22 @@ void switch_page_directory(page_directory_t *dir) {
     asm volatile("mov %0, %%cr3" :: "r"(dir) : "memory");
 }
 
+uint32_t copy_from_page(page_directory_t* src, uint32_t virt) {
+    uint32_t *temp_dest = 0xFFC01000;
+    page_directory_entry_t *temp_page = get_page(temp_dest, 1, src);
+    alloc_page(temp_page, 0x7);
+
+    memcpy((void *)temp_dest, (void *)virt, PAGE_SIZE);
+    // free_page(temp_page);
+    temp_page->present = 0;
+    return temp_page->frame;
+}
+
+// TODO: Implement copy-on-write
 page_directory_t * clone_page_directory(page_directory_t *src) {
     page_directory_t *new_dir = (page_directory_t*) dumb_kmalloc(sizeof(page_directory_t), 1);
     memset(new_dir, 0, sizeof(page_directory_t));
-    int count = 0;
 
-    // Copy kernel space
     for (uint32_t i = 0; i < 1024; i++) {
         if (!src->tables[i].present) continue;
 
@@ -206,17 +189,27 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
 
         for (uint32_t j = 0; j < 1024; j++) {
             if (!src_table->pages[j].present) continue;
-            count += 1;
 
-            new_table->pages[j].frame = src_table->pages[j].frame;
-            new_table->pages[j].present = 1;
-            new_table->pages[j].rw = src_table->pages[j].rw;
-            new_table->pages[j].user = 1; // src_table->pages[j].user;
+            uint32_t virt_addr = i << 22 | j << 12;
+            if (kpage_dir->tables[i].present) {
+                // Skip kernel pages
+                new_table->pages[j] = src_table->pages[j];
+                new_table->pages[j].present = 1;
+                new_table->pages[j].rw = 1; // 0 for COW
+                new_table->pages[j].user = 1;
+                continue;
+            } else {
+                uint32_t *temp_dest = 0xFFC01000;         
+                new_table->pages[j].frame = copy_from_page(src, virt_addr);
+                new_table->pages[j].present = 1;
+                new_table->pages[j].rw = 1; // 0 for COW
+                new_table->pages[j].user = 1; // src_table->pages[j].user;
+            }
         }
 
         uint32_t t = (uint32_t) virtual2physical(src, new_table);
         new_dir->tables[i].present = 1;
-        new_dir->tables[i].rw = src->tables[i].rw;
+        new_dir->tables[i].rw = src->tables[i].rw; // 0 for COW
         new_dir->tables[i].user = 1; //src->tables[i].user;
         new_dir->tables[i].frame = t >> 12;
         new_dir->ref_tables[i] = new_table;
@@ -231,19 +224,13 @@ void free_page_directory(page_directory_t *dir) {
         if (!dir->tables[i].present) continue;
 
         page_table_t *table = dir->ref_tables[i];
-        if (!table) continue;
+        if (!table || kpage_dir->tables[i].present) continue;
 
-        // TODO: Dont free kernel pages
-        // for (uint32_t j = 0; j < 1024; j++) {
-        //     if (!table->pages[j].present) continue;
-        //     free_page(&table->pages[j]);
-        //     // pmm_free_block(table->pages[j].frame);
-        // }
-
-        kfree(table);
+        for (uint32_t j = 0; j < 1024; j++) {
+            if (!table->pages[j].present) continue;
+            free_page(&table->pages[j]);
+        }
     }
-
-    kfree(dir);
 }
 
 void enable_paging() {
@@ -259,6 +246,10 @@ void invalidate_page(uint32_t addr) {
     asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
 }
 
+void get_cr3(uint32_t *cr3) {
+    asm volatile("mov %%cr3, %0" : "=r"(*cr3));
+}
+
 void paging_init() {
     temp_mem = bitmap + bitmap_size;
 
@@ -266,29 +257,17 @@ void paging_init() {
     kpage_dir = (page_directory_t*) dumb_kmalloc(sizeof(page_directory_t), 1);
     memset(kpage_dir, 0, sizeof(page_directory_t));
 
-    // Map the first 4MB of memory to the first 4MB of physical memory
-    uint32_t i = LOAD_MEMORY_ADDRESS;
-    int count = 0;
-    while (i < LOAD_MEMORY_ADDRESS + 4 * 0x100000) {
-        alloc_page(get_page(i, 1, kpage_dir), 0x3);
-        i += BLOCK_SIZE;
-        count += 1;
-    }
-
     register_interrupt_handler(14, page_fault_handler);
 
-    // Map some memory for the kernel heap
-    while (i < LOAD_MEMORY_ADDRESS + 4 * 0x100000 + KHEAP_INITIAL_SIZE) {
-        alloc_page(get_page(i, 1, kpage_dir), 0x3);
+    // Map the first 4MB of memory to the first 4MB of physical memory
+    kmap_memory(LOAD_MEMORY_ADDRESS, 0, 4 * 0x100000, 0x3);
 
-        i += BLOCK_SIZE;
-        count += 1;
-    }
+    // Map some memory for the kernel heap
+    kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, 0x3);
 
     // Setup a guard page for the kernel stack
     free_page(get_page((uint32_t) &stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
-    // printf("Paging initialized with %d pages\n", count);
     // Switch to the new page directory
     switch_page_directory(kpage_dir);
     enable_paging();
@@ -340,16 +319,20 @@ void page_fault_handler(registers_t *regs) {
 
     if (faulting_address >= &stack_bottom && faulting_address < &stack_bottom + BLOCK_SIZE) {
         printf("Stack overflow at %x\n", faulting_address);
-        print_stack_trace();
+        print_stack_trace(regs);
         for (;;) ;
     }
 
+    uint32_t cr3;
+    get_cr3(&cr3);
+
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);
-    printf("At Instruction %x\n", regs->eip);
-    printf("Stack: %x\n", regs->esp);
-    printf("CS: %x\n", regs->cs);
-
+    print_debug_info(regs);
+    printf("Page Directory: %x (kernel: %s)\n", cr3, cr3 == (uint32_t)kpage_dir ? "yes" : "no");
+    
+    process_t *proc = get_current_process();
+    if (proc) printf("PID: %d\n", proc->pid);
 
     uint32_t present = regs->err_code & PF_ERR_PRESENT;
     uint32_t rw = regs->err_code & PF_ERR_RW;

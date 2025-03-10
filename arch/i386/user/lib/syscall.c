@@ -92,6 +92,18 @@ int syscall_getpid()
     return result;
 }
 
+void *syscall_sbrk(int incr)
+{
+    void *result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_SBRK),
+          "b"(incr)
+        : "memory");
+    return result;
+}
+
 int syscall_mkdir(const char *path, int mode)
 {
     int result;

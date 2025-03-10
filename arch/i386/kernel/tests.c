@@ -3,8 +3,6 @@
 #include "kernel/process.h"
 #include "kernel/locks.h"
 #include "kernel/printf.h"
-#include "kernel/vfs.h"
-#include "kernel/elf.h"
 #include "libc/stdio.h"
 #include "libc/string.h"
 #include "drivers/pit.h"
@@ -34,12 +32,6 @@ void test_heap() {
 	print_kheap();
 	kfree(ptr1);
 	kfree(ptr2);
-}
-
-uint32_t get_esp() {
-    uint32_t esp;
-    asm volatile("mov %%esp, %0" : "=r"(esp));
-    return esp;
 }
 
 static void uprintf(const char* format, ...) {
@@ -72,7 +64,29 @@ static void fgets(int fd, char* buffer, int size) {
 		  "d" (size)            // Size in edx
 		: "memory"
 	);
-	// uprintf("fgets: %x\n", size);
+}
+
+static int ufork() {
+	int pid;
+	asm volatile (
+		"int $0x80"
+		: "=a" (pid)
+		: "a" (7)
+		: "memory"
+	);
+	uprintf("Forked process with PID: %d\n", pid);
+	return pid;
+}
+
+static int getpid() {
+	int pid;
+	asm volatile (
+		"int $0x80"
+		: "=a" (pid)
+		: "a" (10)
+		: "memory"
+	);
+	return pid;
 }
 
 spinlock_t lock;
@@ -81,19 +95,13 @@ static void test_process1() {
     while (1) {
 		uprintf("Hello from process 1!\n");
 		sleep(10);
-		// spinlock_acquire(&lock);
-        // uprintf("Process 1: ESP = %x\n", get_esp());
-		// spinlock_release(&lock);
     }
 }
 
 static void test_process2() {
 	while (1) {
-		// spinlock_acquire(&lock);
-		// printf("Process 2: ESP = %x\n", get_esp());
 		uprintf("Hello from process 2!\n");
 		sleep(10);
-		// spinlock_release(&lock);
 	}
 }
 
@@ -121,28 +129,42 @@ static void shell() {
 	exit(0);
 }
 
-void test_scheduler() {
-	// initialize_lock(&lock);
+void fork_proc() {
+	int my_pid = getpid();
+    uprintf("[PID %d] Starting test_fork()\n", my_pid);
 
+	int pid = ufork();
+	if (pid == 0) {
+		my_pid = getpid();
+        uprintf("[PID %d] Hello from child process!\n", my_pid);
+		sleep(200);
+	} else if (pid > 0) {
+        uprintf("[PID %d] Hello from parent process! Child PID: %d\n", my_pid, pid);
+		sleep(200);
+	} else {
+        uprintf("[PID %d] Fork failed\n", my_pid);
+	}
+
+	uprintf("[PID %d] Exiting test_fork()\n", my_pid);
+	exit(0);
+}
+
+void test_scheduler() {
 	process_t* process1 = create_process("process1", &test_process1);
 	add_process(process1);
 
 	process_t* process2 = create_process("process2", &test_process2);
 	add_process(process2);
 
-	// process_t* process3 = create_process("shell", &shell);
-	// add_process(process3);
-
 	print_process_list();
 }
 
-void test_elf_loader() {
-	process_t* user_process = load_elf("/USER.BIN");
-	if (user_process == NULL) {
-		printf("Failed to load ELF file\n");
-		return;
-	}
+void test_fork() {
+	process_t* process3 = create_process("fork", &fork_proc);
+	add_process(process3);
+}
 
-	add_process(user_process);
-	printf("Loaded ELF file\n");
+void test_shell() {
+	process_t* process = create_process("shell", &shell);
+	add_process(process);
 }

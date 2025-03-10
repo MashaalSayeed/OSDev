@@ -1,38 +1,51 @@
 #include "kernel/isr.h"
 #include "kernel/exceptions.h"
 #include "kernel/printf.h"
+#include "kernel/elf.h"
+
+extern elf_t kernel_elf;
+
+static void panic() {
+    asm volatile("cli");
+    while (1) asm volatile("hlt");
+}
 
 // TODO: make implementation of all exception handlers
-static void print_debug_info(registers_t *regs) {
-    printf("  EIP: %x\n", regs->eip);
+void print_debug_info(registers_t *regs) {
+    char * symbol = elf_lookup_symbol(regs->eip, &kernel_elf);
+    if (!symbol) symbol = "N/A";
+    printf("  EIP: %x <%s>\n", regs->eip, symbol);
     printf("  CS: %x\n", regs->cs);
     printf("  EFLAGS: %x\n", regs->eflags);
     printf("  ESP: %x\n", regs->esp);
     printf("  SS: %x\n", regs->ss);
 }
 
-// void print_stack_trace() {
-//     uint32_t *ebp;
-//     asm volatile("mov %%ebp, %0" : "=r" (ebp));
+void print_stack_trace(registers_t *regs) {
+    uint32_t *ebp, *eip;
+    uint32_t count = 0;
+    ebp = (uint32_t *)regs->ebp;
 
-//     printf("Stack Trace:\n");
-//     while (ebp) {
-//         uint32_t eip = ebp[1];
-//         printf("  [%x]\n", eip);
-
-//         ebp = (uint32_t *)ebp[0];  // Move to previous frame
-//     }
-// }
+    printf("\nStack Trace:\n");
+    while (ebp) {
+        if (count > 15) return;
+        
+        eip = ebp + 1;
+        printf(" %d %x <%s>\n", count, *eip, elf_lookup_symbol(*eip, &kernel_elf));
+        ebp = (uint32_t *)ebp[0];  // Move to previous frame
+        count++;
+    }
+}
 
 static void divide_by_zero_handler(registers_t *regs) {
-    printf("Error: Divide by Zero Exception\n");
+    printf("\nError: Divide by Zero Exception\n");
     print_debug_info(regs);
-    
-    while (1) asm volatile("hlt");
+    print_stack_trace(regs);
+    panic();
 }
 
 static void gpf_handler(registers_t *regs) {
-    printf("Error: General Protection Fault (GPF)\n");
+    printf("\nError: General Protection Fault (GPF)\n");
     printf("  Error Code: %x\n", regs->err_code);
 
     // Decode error code
@@ -45,16 +58,13 @@ static void gpf_handler(registers_t *regs) {
 
     // Print CPU state at time of exception
     print_debug_info(regs);
-
-    // Halt system
-    while (1) asm volatile("hlt");
+    panic();
 }
 
 static void double_fault_handler(registers_t *regs) {
-    printf("Error: Double Fault\n");
+    printf("\nError: Double Fault\n");
     print_debug_info(regs);
-
-    while (1) asm volatile("hlt");
+    panic();
 }
 
 void exceptions_install() {

@@ -16,16 +16,18 @@
 #include "kernel/process.h"
 #include "kernel/tests.h"
 #include "kernel/printf.h"
-#include "libc/string.h"
 #include "kernel/vfs.h"
+#include "kernel/elf.h"
+#include "libc/string.h"
 #include "drivers/pci.h"
 #include "drivers/ata.h"
 #include "drivers/rtc.h"
 
 framebuffer_t* framebuffer;
 bool is_gui_enabled = false;
+elf_t kernel_elf;
 
-void multiboot2_init(struct multiboot_tag* mbd) {
+static void multiboot2_init(struct multiboot_tag* mbd) {
 	struct multiboot_tag* tag = mbd;
 	struct multiboot_tag_framebuffer* fb;
 	struct multiboot_tag_string* boot_loader_name;
@@ -65,6 +67,7 @@ void multiboot2_init(struct multiboot_tag* mbd) {
 		else if (tag->type == MULTIBOOT_TAG_TYPE_ELF_SECTIONS) {
 			struct multiboot_tag_elf_sections* elf_sections = (struct multiboot_tag_elf_sections*) tag;
 			printf("ELF Sections: %d\n", elf_sections->num);
+			kernel_elf = elf_from_multiboot(elf_sections);
 		}
 		else if (tag->type == MULTIBOOT_TAG_TYPE_BASIC_MEMINFO) {
 			struct multiboot_tag_basic_meminfo* meminfo = (struct multiboot_tag_basic_meminfo*) tag;
@@ -79,6 +82,19 @@ void multiboot2_init(struct multiboot_tag* mbd) {
 void print_time() {
 	rtc_time_t time = rtc_read_time();
 	printf("Current Time: %d:%d:%d %d/%d/%d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
+}
+
+static void load_user_program() {
+	elf_header_t* user_bin = load_elf("/USER.BIN");
+	if (user_bin == NULL) {
+		printf("Failed to load ELF file\n");
+		return;
+	}
+	
+	process_t* user_process = create_process("user_bin", user_bin->entry);
+	add_process(user_process);
+	kfree(user_bin);
+	printf("Loaded ELF file\n");
 }
 
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
@@ -122,6 +138,8 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	printf("\n");
 
 	kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
+	kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
+	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 	log_to_serial("Hello, Serial World 1!\n");
 
 
@@ -136,21 +154,11 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 
 	// find_rsdt();
-	// printf("Creating processes\n");
-	// terminal_clear();
 	scheduler_init();
-	// print_process_list();
 	init_timer(100);
-	// test_scheduler();
 
 	vfs_init();
-
-	test_elf_loader();
-
-	// printf("Enter a string: ");
-	// char buffer[100];
-	// kgets(buffer, 100);
-	// printf("You entered: %s\n", buffer);
+	load_user_program();
 
 	for (;;) ;
 }

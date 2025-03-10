@@ -5,6 +5,7 @@
 #include <kernel/vfs.h>
 #include <user/dirent.h>
 #include <kernel/process.h>
+#include "libc/string.h"
 
 int sys_write(int fd, const char *buffer, size_t size) {
     if (!buffer) return -1; // Validate pointer
@@ -41,6 +42,13 @@ int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
     return ret;
 }
 
+int sys_fork(registers_t *regs) {
+    process_t *proc = get_current_process();
+    memcpy(&proc->context, regs, sizeof(registers_t));
+    int ret = fork();
+    return ret;
+}
+
 int sys_mkdir(const char *path, int mode) {
     if (!path) return -1; // Validate pointer
 
@@ -61,7 +69,7 @@ int sys_unlink(const char *path) {
 
 void *sys_sbrk(int incr) {
     process_t *proc = get_current_process();
-    return NULL;
+    return sbrk(proc, incr);
 }
 
 void syscall_handler(registers_t *regs) {
@@ -88,7 +96,7 @@ void syscall_handler(registers_t *regs) {
             regs->eax = get_current_process()->pid;
             break;
         case SYSCALL_FORK:
-            printf("Fork not implemented\n");
+            regs->eax = sys_fork(regs);
             break;
         case SYSCALL_EXEC:
             printf("Exec not implemented\n");
@@ -97,7 +105,7 @@ void syscall_handler(registers_t *regs) {
             printf("Waitpid not implemented\n");
             break;
         case SYSCALL_SBRK:
-            printf("Sbrk not implemented\n");
+            regs->eax = (uint32_t)sys_sbrk(regs->ebx);
             break;
         case SYSCALL_GETCWD:
             printf("Getcwd not implemented\n");

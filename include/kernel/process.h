@@ -31,7 +31,6 @@ typedef struct process {
 
     char cwd[256];
 
-
     struct process* next;
 } process_t;
 
@@ -43,3 +42,5 @@ void kill_process(process_t *process);
 void kill_current_process();
 void print_process_list();
 process_t* get_current_process();
+void *sbrk(process_t *proc, int incr);
+int fork();

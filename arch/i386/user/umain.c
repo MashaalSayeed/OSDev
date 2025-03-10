@@ -3,21 +3,24 @@
 #include "libc/string.h"
 #include "user/syscall.h"
 #include "user/dirent.h"
+#include "user/stdlib.h"
 
 #define MAX_INPUT 256
 #define MAX_ARGS 10
 
-void parse_input(char *input, char **args) {
-    int i = 0;
-    args[i] = strtok(input, " \n"); // Tokenize input by spaces
-    while (args[i] != NULL && i < MAX_ARGS - 1) {
-        i++;
-        args[i] = strtok(NULL, " \n");
+void echo_command(char **args) {
+    if (args[1]) {
+        printf("%s\n", args[1]);
     }
-    args[i] = NULL; // Null-terminate the argument list
 }
 
-void ls_command(char *path) {
+void exit_command() {
+    puts("Exiting shell\n");
+    syscall_exit(0);
+}
+
+void ls_command(char **args) {
+    char *path = args[1];
     if (path == NULL) path = ".";
 
     int fd = syscall_open(path, O_RDONLY);
@@ -41,7 +44,8 @@ void ls_command(char *path) {
     syscall_close(fd);
 }
 
-void cat_command(char *path) {
+void cat_command(char **args) {
+    char *path = args[1];
     int fd = syscall_open(path, O_RDONLY);
     if (fd < 0) {
         printf("Error: Failed to open file\n");
@@ -61,7 +65,8 @@ void cat_command(char *path) {
     syscall_close(fd);
 }
 
-void touch_command(char *path) {
+void touch_command(char **args) {
+    char *path = args[1];
     int fd = syscall_open(path, O_WRONLY | O_CREAT);
     if (fd < 0) {
         printf("Error: Failed to create file\n");
@@ -71,50 +76,72 @@ void touch_command(char *path) {
     syscall_close(fd);
 }
 
-void rm_command(char *path) {
+void rm_command(char **args) {
+    char *path = args[1];
     if (syscall_unlink(path) < 0) {
         printf("Error: Failed to remove file\n");
     }
 }
 
-void mkdir_command(char *path) {
+void mkdir_command(char **args) {
+    char *path = args[1];
     if (syscall_mkdir(path, 0) < 0) {
         printf("Error: Failed to create directory\n");
     }
 }
 
-void rmdir_command(char *path) {
+void rmdir_command(char **args) {
+    char *path = args[1];
     if (syscall_rmdir(path) < 0) {
         printf("Error: Failed to remove directory\n");
     }
 }
 
-void execute_command(char **args) {
-    if (args[0] == NULL) return; // Empty input, do nothing
+void check_command() {
+    // printf("Check command\n");
+    // int *arr = malloc(10 * sizeof(int));
+    // printf("Allocated memory at: %x\n", arr);
+    // arr[0] = 42;
+    // printf("Value at arr[0]: %d\n", arr[0]);
+    // free(arr);
+    // printf("Freed memory\n");
+    int a = 1 / 0;
+}
 
-    if (strcmp(args[0], "exit") == 0) {
-        printf("Exiting shell...\n");
-        syscall_exit(0);
-    } else if (strcmp(args[0], "echo") == 0) {
-        if (args[1] != NULL) {
-            printf("%s\n", args[1]);
+command_t commands[] = {
+    {"echo", echo_command},
+    {"exit", exit_command},
+    {"ls", ls_command},
+    {"cat", cat_command},
+    {"touch", touch_command},
+    {"rm", rm_command},
+    {"mkdir", mkdir_command},
+    {"rmdir", rmdir_command},
+    {"check", check_command},
+    {NULL, NULL}
+};
+
+void parse_input(char *input, char **args) {
+    int i = 0;
+    args[i] = strtok(input, " \n"); // Tokenize input by spaces
+    while (args[i] != NULL && i < MAX_ARGS - 1) {
+        i++;
+        args[i] = strtok(NULL, " \n");
+    }
+    args[i] = NULL; // Null-terminate the argument list
+}
+
+void execute_command(char **args) {
+    if (!args[0]) return; // Empty input
+
+    for (int i = 0; commands[i].name != NULL; i++) {
+        if (strcmp(args[0], commands[i].name) == 0) {
+            commands[i].func(args);
+            return;
         }
-        return;
-    } else if (strcmp(args[0], "ls") == 0) {
-        ls_command(args[1]);
-    } else if (strcmp(args[0], "cat") == 0) {
-        cat_command(args[1]);
-    } else if (strcmp(args[0], "touch") == 0) {
-        touch_command(args[1]);
-    } else if (strcmp(args[0], "rm") == 0) {
-        rm_command(args[1]);
-    } else if (strcmp(args[0], "mkdir") == 0) {
-        mkdir_command(args[1]);
-    } else if (strcmp(args[0], "rmdir") == 0) {
-        rmdir_command(args[1]);
-    } else {
-        printf("Unknown command: %s\n", args[0]);
-    }    
+    }
+
+    printf("Unknown command: %s\n", args[0]);
 }
 
 void user_program() {

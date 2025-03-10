@@ -3,6 +3,7 @@
 #include "kernel/paging.h"
 #include "kernel/printf.h"
 #include "libc/string.h"
+#include "kernel/elf.h"
 #include <stdbool.h>
 
 #define USER_STACK_BASE  0xB0000000
@@ -28,6 +29,7 @@ void idle_process() {
 
 void scheduler_init() {
     init_process = create_process("init", idle_process);
+    int a = 1 / 0;
     // add_process(init_process);
 }
 
@@ -63,6 +65,30 @@ void schedule(registers_t* context) {
     }
 }
 
+void* sbrk(process_t *proc, int increment) {
+    if (increment == 0) return proc->brk;
+
+    void *old_brk = proc->brk;
+    void *new_brk = proc->brk + increment;
+
+    if (increment > 0) {
+        // Expand heap by allocating pages
+        while (proc->brk < new_brk) {
+            alloc_page(get_page(proc->brk, 1, proc->root_page_table), 0x7);
+            proc->brk += PAGE_SIZE;
+        }
+    } 
+    else if (increment < 0) {
+        // Shrink heap (optional)
+        while (proc->brk > new_brk) {
+            free_page(get_page(proc->brk - PAGE_SIZE, 0, proc->root_page_table));
+            proc->brk -= PAGE_SIZE;
+        }
+    }
+
+    // proc->brk = new_brk;
+    return old_brk;
+}
 
 process_t* create_process(char *process_name, void (*entry_point)()) {
     process_t *new_process = (process_t *)kmalloc(sizeof(process_t));
@@ -75,18 +101,21 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     strncpy(new_process->process_name, process_name, PROCESS_NAME_MAX_LEN);
     new_process->root_page_table = clone_page_directory(kpage_dir);
     
-    uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
-    alloc_page(get_page(stack - PROCESS_STACK_SIZE, 1, new_process->root_page_table), 0x7);
+    // TODO: stack = USER_STACK_BASE
+    // uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
+    new_process->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
+    map_memory(new_process->root_page_table, new_process->stack, 0, PROCESS_STACK_SIZE, 0x7);
 
-    new_process->stack = (void *)stack - PROCESS_STACK_SIZE;
-    new_process->heap_start = NULL;
-    new_process->brk = NULL;
-    new_process->heap_end = NULL;
+    new_process->heap_start = USER_HEAP_START;
+    new_process->brk = new_process->heap_start;
+    new_process->heap_end = new_process->heap_start;
+
+    strncpy(new_process->cwd, "/", 1);
 
     // Initialize process context
     new_process->context.eip = (uint32_t)entry_point;
     new_process->context.eflags = 0x202;
-    new_process->context.esp = (uint32_t)stack;
+    new_process->context.esp = (uint32_t)USER_STACK_BASE;
     new_process->context.ebp = new_process->context.esp;
 
     new_process->context.cs = USER_CS;
@@ -121,7 +150,6 @@ void add_process(process_t *process) {
 
 void kill_process(process_t *process) {
     process->status = TERMINATED;
-
     if (process == process_list) {
         process_list = process_list->next;
     }
@@ -135,11 +163,12 @@ void kill_process(process_t *process) {
     if (process == current_process) {
         current_process = NULL;
     }
-
     // Free the process stack and process structure
+    // TODO: unmap all pages and heap
     free_page(get_page((uint32_t)process->stack, 0, process->root_page_table));
     free_page_directory(process->root_page_table);
     kfree(process);
+
     schedule(NULL);
 }
 
@@ -158,4 +187,70 @@ void print_process_list() {
         printf("PID: %d, Name: %s, Status: %d\n", temp->pid, temp->process_name, temp->status);
         temp = temp->next;
     } while (temp != process_list);
+}
+
+int fork() {
+    process_t *parent = get_current_process();
+    process_t *child = (process_t *)kmalloc(sizeof(process_t));
+    if (!child) {
+        printf("Error: Failed to allocate memory for child process\n");
+        return -1;
+    }
+
+    // Copy parent process info
+    child->pid = allocate_pid();
+    printf("Forking process %d (%s) to %d\n", parent->pid, parent->process_name, child->pid);
+
+    strncpy(child->process_name, parent->process_name, PROCESS_NAME_MAX_LEN);
+    child->status = READY;
+    child->heap_start = parent->heap_start;
+    child->heap_end = parent->heap_end;
+    child->brk = parent->brk;
+    strncpy(child->cwd, parent->cwd, sizeof(parent->cwd));
+
+    // Copy page directory
+    child->root_page_table = clone_page_directory(parent->root_page_table);
+    child->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
+
+    // Copy process context
+    memcpy(&child->context, &parent->context, sizeof(registers_t));
+    child->context.eax = 0; // Return value for child process
+
+    uint32_t esp_diff = USER_STACK_BASE - parent->context.esp;
+    child->context.esp = (uint32_t)child->stack + (PROCESS_STACK_SIZE - esp_diff);
+    child->context.ebp = (uint32_t)child->stack + (PROCESS_STACK_SIZE - USER_STACK_BASE + parent->context.ebp);
+
+    add_process(child);
+    return child->pid;
+}
+
+int exec(char *path) {
+    elf_header_t* elf = load_elf(path);
+    if (!elf) {
+        printf("Failed to load ELF file\n");
+        return -1;
+    }
+
+    process_t *proc = get_current_process();
+    page_directory_t* new_page_dir = clone_page_directory(kpage_dir);
+    free_page_directory(proc->root_page_table);
+
+    proc->root_page_table = new_page_dir;
+    switch_page_directory(proc->root_page_table);
+
+    proc->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
+    map_memory(proc->root_page_table, proc->stack, 0, PROCESS_STACK_SIZE, 0x7);
+
+    memset(&proc->context, 0, sizeof(registers_t));
+    proc->context.eip = elf->entry;
+    proc->context.esp = USER_STACK_BASE;
+
+    asm volatile (
+        "mov %0, %%esp\n"
+        "jmp *%1\n"
+        :
+        : "r"(proc->context.esp), "r"(proc->context.eip)
+    );
+
+    return 0;
 }

@@ -92,37 +92,6 @@ void *calloc(size_t num, size_t size) {
     return ptr;
 }
 
-// void* sbrk(process_t *proc, int increment) {
-//     if (!proc->heap_start) {
-//         proc->heap_start = (void*)USER_HEAP_START;
-//         proc->brk = proc->heap_start;
-//         proc->heap_end = proc->heap_start;
-//     }
-
-//     void *old_brk = proc->brk;
-//     void *new_brk = proc->brk + increment;
-
-//     if (increment > 0) {
-//         if (new_brk > proc->heap_end) {
-//             size_t pages_needed = ((new_brk - proc->heap_end) + PAGE_SIZE - 1) / PAGE_SIZE;
-//             if (!vmm_alloc_pages(proc->root_page_table, proc->heap_end, pages_needed, VM_READ | VM_WRITE)) {
-//                 return (void*)-1;
-//             }
-//             proc->heap_end += pages_needed * PAGE_SIZE;
-//         }
-//     } 
-//     else if (increment < 0) {
-//         if (new_brk < proc->heap_start) return (void*)-1;
-        
-//         size_t pages_to_free = (proc->heap_end - new_brk) / PAGE_SIZE;
-//         vmm_free_pages(proc->root_page_table, proc->heap_end - pages_to_free * PAGE_SIZE, pages_to_free);
-//         proc->heap_end -= pages_to_free * PAGE_SIZE;
-//     }
-
-//     proc->brk = new_brk;
-//     return old_brk;
-// }
-
 void kheap_init() {
     // Allocate 48MB of memory for the kernel heap
     kheap_start = (uint8_t *)KHEAP_START;

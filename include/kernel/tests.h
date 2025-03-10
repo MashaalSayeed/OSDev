@@ -5,4 +5,5 @@
 void test_divide_by_zero();
 void test_heap();
 void test_scheduler();
-void test_elf_loader();
+void test_fork();
+void test_shell();

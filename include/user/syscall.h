@@ -25,6 +25,7 @@ int syscall_close(int fd);
 void syscall_exit(int status);
 int syscall_getdents(int fd, void *dirp, size_t count);
 int syscall_getpid();
+void *syscall_sbrk(int increment);
 int syscall_mkdir(const char *path, int mode);
 int syscall_rmdir(const char *path);
 int syscall_unlink(const char *path);
