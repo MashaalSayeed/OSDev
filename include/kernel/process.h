@@ -5,7 +5,12 @@
 #include "kernel/isr.h"
 
 #define PROCESS_NAME_MAX_LEN 32
+#define PATH_NAME_MAX_LEN 256
+
 #define PROCESS_STACK_SIZE 4096
+
+#define PROCESS_FLAG_USER 0x1
+#define PROCESS_FLAG_KERNEL 0x2
 
 typedef enum {
     INIT,
@@ -36,11 +41,11 @@ typedef struct process {
 
 void scheduler_init();
 void schedule(registers_t* context);
-process_t* create_process(char *process_name, void (*entry_point)());
+process_t* create_process(char *process_name, void (*entry_point)(), uint32_t flags);
 void add_process(process_t *process);
 void kill_process(process_t *process);
-void kill_current_process();
 void print_process_list();
 process_t* get_current_process();
 void *sbrk(process_t *proc, int incr);
 int fork();
+int exec(char *path);

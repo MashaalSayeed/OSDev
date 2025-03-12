@@ -37,7 +37,7 @@ void ata_irq_handler(registers_t *regs) {
         // TODO: Read the data if a read operation is in progress.
         // ata_read_sector_interrupt();
     } else {
-        printf("ATA IRQ: No data ready\n");
+        // printf("ATA IRQ: No data ready\n");
     }
 
     // Acknowledge the interrupt
@@ -136,12 +136,6 @@ void ata_init() {
     if (ata_identify(ATA_PRIMARY_BASE_PORT, ATA_MASTER) != ATA_SUCCESS) {
         printf("No primary master ATA device found\n");
     } else {
-        // uint32_t lba = 10;
-        // // ata_write_sector(ATA_PRIMARY_BASE_PORT, ATA_MASTER, lba, "Hello, World!");
-        // char buffer[512];
-        // ata_read_sector(ATA_PRIMARY_BASE_PORT, ATA_MASTER, lba, buffer);
-        // printf("Read from sector: %s\n", buffer);
-
         register_block_device(&ata);
     }
 

@@ -113,6 +113,10 @@ char *strchr(const char *s, char c) {
         }
         s++;
     }
+    // Check if the null terminator is the target character
+    if (c == '\0') {
+        return (char *)s;
+    }
     return NULL; // Return NULL if character not found
 }
 
@@ -164,6 +168,33 @@ char *strtok(char *str, const char *delim) {
     return token_start;
 }
 
+char *strtok_r(char *str, const char *delim, char **saveptr) {
+    if (str) *saveptr = str;
+    if (!*saveptr) return NULL;
+
+    // Skip leading delimiters
+    char *token_start = *saveptr;
+    while (*token_start && strchr(delim, *token_start)) token_start++;
+
+    if (!*token_start) {
+        *saveptr = NULL;
+        return NULL;
+    }
+
+    // Find the end of the token
+    char *token_end = token_start;
+    while (*token_end && !strchr(delim, *token_end)) token_end++;
+
+    if (*token_end) {
+        *token_end = '\0';
+        *saveptr = token_end + 1;
+    } else {
+        *saveptr = NULL;
+    }
+
+    return token_start;
+}
+
 char toupper(char c) {
     if (c >= 'a' && c <= 'z') {
         return c - 'a' + 'A';
@@ -171,7 +202,7 @@ char toupper(char c) {
     return c;
 }
 
-void int_to_ascii(uint32_t num, char *buffer) {
+void int_to_ascii(int num, char *buffer) {
     // Handle zero case
     if (num == 0) {
         buffer[0] = '0';
@@ -181,19 +212,26 @@ void int_to_ascii(uint32_t num, char *buffer) {
 
     char *ptr = buffer;
     char *ptr1 = buffer; // Pointer to the start of the string
-    int temp;
+    int is_negative = 0;
+
+    // Handle negative numbers
+    if (num < 0) {
+        is_negative = 1;
+        num = -num; // Convert to positive for processing
+    }
 
     while (num != 0) {
-        temp = num % 10;
+        *ptr++ = (num % 10) + '0';
         num /= 10;
-        *ptr++ = temp + '0';
     }
-    *ptr = '\0';                    // Null-terminate the string
 
+    if (is_negative) *ptr++ = '-';
+
+    *ptr = '\0';
     reverse(ptr1);
 }
 
-void hex_to_ascii(uint32_t num, char* buffer) {
+void hex_to_ascii(unsigned int num, char* buffer) {
     char *ptr = buffer;
     char *ptr1 = buffer; // Pointer to the start of the string
 
@@ -221,7 +259,7 @@ void hex_to_ascii(uint32_t num, char* buffer) {
     reverse(ptr1 + 2);
 }
 
-void bin_to_ascii(uint32_t num, char* buffer) {
+void bin_to_ascii(unsigned int num, char* buffer) {
     char *ptr = buffer;
     char *ptr1 = buffer; // Pointer to the start of the string
 

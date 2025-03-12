@@ -84,19 +84,6 @@ void print_time() {
 	printf("Current Time: %d:%d:%d %d/%d/%d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
 }
 
-static void load_user_program() {
-	elf_header_t* user_bin = load_elf("/USER.BIN");
-	if (user_bin == NULL) {
-		printf("Failed to load ELF file\n");
-		return;
-	}
-	
-	process_t* user_process = create_process("user_bin", user_bin->entry);
-	add_process(user_process);
-	kfree(user_bin);
-	printf("Loaded ELF file\n");
-}
-
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
 	gdt_install();
@@ -158,7 +145,13 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	init_timer(100);
 
 	vfs_init();
-	load_user_program();
+	// test_printf();
+	// load_user_program();
+	// test_scheduler();
+	// test_fork();
+	
+	printf("\n");
+	exec("/BIN/USER.BIN");
 
 	for (;;) ;
 }

@@ -34,6 +34,13 @@ void test_heap() {
 	kfree(ptr2);
 }
 
+void test_printf() {
+	printf("Hello, %s!\n", "world");
+	printf("Number: %d\n", -42);
+	printf("Hex: %x\n", 0x1234);
+	printf("Binary: %b\n", 0b1010);
+}
+
 static void uprintf(const char* format, ...) {
 	va_list args;
 	va_start(args, format);
@@ -89,18 +96,10 @@ static int getpid() {
 	return pid;
 }
 
-spinlock_t lock;
-static void test_process1() {
-	int a = 0;
-    while (1) {
-		uprintf("Hello from process 1!\n");
-		sleep(10);
-    }
-}
-
-static void test_process2() {
+static void test_process() {
+	int pid = getpid();
 	while (1) {
-		uprintf("Hello from process 2!\n");
+		uprintf("Hello from process %d!\n", pid);
 		sleep(10);
 	}
 }
@@ -150,21 +149,22 @@ void fork_proc() {
 }
 
 void test_scheduler() {
-	process_t* process1 = create_process("process1", &test_process1);
+	process_t* process1 = create_process("process1", &test_process, PROCESS_FLAG_USER);
+	process_t* process2 = create_process("process2", &test_process, PROCESS_FLAG_USER);
+	process_t* process3 = create_process("process3", &test_process, PROCESS_FLAG_USER);
+
 	add_process(process1);
-
-	process_t* process2 = create_process("process2", &test_process2);
 	add_process(process2);
-
+	add_process(process3);
 	print_process_list();
 }
 
 void test_fork() {
-	process_t* process3 = create_process("fork", &fork_proc);
+	process_t* process3 = create_process("fork", &fork_proc, PROCESS_FLAG_USER);
 	add_process(process3);
 }
 
 void test_shell() {
-	process_t* process = create_process("shell", &shell);
+	process_t* process = create_process("shell", &shell, PROCESS_FLAG_USER);
 	add_process(process);
 }

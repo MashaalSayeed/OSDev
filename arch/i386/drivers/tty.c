@@ -12,6 +12,14 @@ size_t terminal_column;
 uint8_t terminal_color;
 uint16_t* terminal_buffer;
 
+typedef enum {
+    STATE_NORMAL,
+    STATE_ESC,
+    STATE_CSI
+} ansi_state_t;
+
+ansi_state_t ansi_state = STATE_NORMAL;
+
 void update_cursor(size_t row, size_t col) 
 {
     uint16_t pos = row * VGA_WIDTH + col;
@@ -47,46 +55,99 @@ void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
     terminal_buffer[index] = vga_entry(c, color);
 }
 
-void terminal_putchar(char c) 
-{
-    serial_write(c);
-    switch (c)
-    {
-    case '\n':
-        terminal_column = 0;
-        if (++terminal_row == VGA_HEIGHT) {
-            terminal_row--;
-            scroll_terminal();
-        }
-        break;
-    case '\b':
-        if (terminal_column == 0 && terminal_row != 0){
-            terminal_row--;
-            terminal_column = VGA_WIDTH;
-        }
-        terminal_buffer[terminal_row * VGA_WIDTH + (--terminal_column)] = ' ' | terminal_color;
-        break;
-    case '\t':
-        terminal_column += 4;
-        if (terminal_column >= VGA_WIDTH) {
-            terminal_column = 0;
-            if (++terminal_row == VGA_HEIGHT) {
-                terminal_row--;
-                scroll_terminal();
+void terminal_putchar(char c) {
+    static char ansi_buffer[16];
+    static int ansi_len = 0;
+
+    switch (ansi_state) {
+        case STATE_NORMAL:
+            if (c == '\033') {
+                ansi_state = STATE_ESC;
+                ansi_len = 0;
+            } else {
+                // Handle regular characters
+                serial_write(c);
+                if (c == '\n') {
+                    terminal_column = 0;
+                    if (++terminal_row == VGA_HEIGHT) {
+                        terminal_row--;
+                        scroll_terminal();
+                    }
+                } else if (c == '\b') {
+                    if (terminal_column == 0 && terminal_row > 0) {
+                        terminal_row--;
+                        terminal_column = VGA_WIDTH - 1;
+                    } else if (terminal_column > 0) {
+                        terminal_column--;
+                    }
+
+                    terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
+                } else {
+                    terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
+                    if (++terminal_column == VGA_WIDTH) {
+                        terminal_column = 0;
+                        if (++terminal_row == VGA_HEIGHT) {
+                            terminal_row--;
+                            scroll_terminal();
+                        }
+                    }
+                }
             }
-        }
-        break;
-    default:
-        terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
-        if (++terminal_column == VGA_WIDTH) {
-            terminal_column = 0;
-            if (++terminal_row == VGA_HEIGHT) {
-                terminal_row--;
-                scroll_terminal();
+            break;
+
+        case STATE_ESC:
+            if (c == '[') {
+                ansi_state = STATE_CSI;
+            } else {
+                ansi_state = STATE_NORMAL;
             }
-        }
-        break;
+            break;
+
+        case STATE_CSI:
+            if ((c >= '0' && c <= '9') || c == ';') {
+                if (ansi_len < sizeof(ansi_buffer) - 1) {
+                    ansi_buffer[ansi_len++] = c;
+                }
+            } else {
+                ansi_buffer[ansi_len] = '\0';
+
+                if (c == 'J') { // Clear screen
+                    if (ansi_buffer[0] == '2') {
+                        terminal_clear(); // Clear entire screen
+                    }
+                } else if (c == 'H') { // Move cursor to 0,0
+                    terminal_row = 0;
+                    terminal_column = 0;
+                } else if (c == '@') { // Insert character
+                    for (size_t i = VGA_WIDTH - 1; i > terminal_column; i--) {
+                        terminal_buffer[terminal_row * VGA_WIDTH + i] = terminal_buffer[terminal_row * VGA_WIDTH + i - 1];
+                    }
+                    terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
+                } else if (c == 'P') { // Delete character
+                    for (size_t i = terminal_column; i < VGA_WIDTH - 1; i++) {
+                        terminal_buffer[terminal_row * VGA_WIDTH + i] = terminal_buffer[terminal_row * VGA_WIDTH + i + 1];
+                    }
+                    terminal_putentryat(' ', terminal_color, VGA_WIDTH - 1, terminal_row);
+                } else if (c == 'A') { // Move cursor up
+                    if (terminal_row > 0) terminal_row--;
+                } else if (c == 'B') { // Move cursor down
+                    if (terminal_row < VGA_HEIGHT - 1) terminal_row++;
+                } else if (c == 'C') { // Move cursor right
+                    if (terminal_column < VGA_WIDTH - 1) terminal_column++;
+                } else if (c == 'D') { // Move cursor left
+                    if (terminal_column > 0) terminal_column--;
+                } else {
+                    // Unknown CSI sequence
+                    log_to_serial("Unknown CSI sequence: ");
+                    log_to_serial(ansi_buffer);
+                    log_to_serial("\n");
+                }
+
+                ansi_state = STATE_NORMAL;
+            }
+            break;
     }
+
     update_cursor(terminal_row, terminal_column);
 }
 

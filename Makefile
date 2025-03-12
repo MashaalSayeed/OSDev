@@ -46,9 +46,9 @@ LIBC_OBJ = $(BUILD_DIR)/libc/libc.a
 OBJS = $(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ) $(FONT_OBJ)
 
 # Build rules
-.PHONY: all run debug clean help userland libc
+.PHONY: all run debug clean help userland libc disk_image
 
-all: libc userland $(ISO_IMAGE)
+all: libc userland $(ISO_IMAGE) disk_image
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc \
@@ -90,6 +90,7 @@ $(ISO_IMAGE): $(KERNEL_BIN_ARCH) $(DRIVER_OBJ)
 	cp $(KERNEL_BIN_ARCH) $(KERNEL_BIN)
 	grub-mkrescue -o $(ISO_IMAGE) $(ISO_DIR)
 
+disk_image: $(DISK_IMAGE)
 $(DISK_IMAGE):
 	dd if=/dev/zero of=$(DISK_IMAGE) bs=1M count=64
 	mkfs.fat -F 32 $(DISK_IMAGE)

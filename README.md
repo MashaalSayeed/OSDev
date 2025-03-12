@@ -10,26 +10,21 @@ cd OSDev
 2. Run setup.sh to install all dependencies
 ```bash
 chmod +x scripts/setup.sh
-scripts/setup.sh
+./scripts/setup.sh
 ```
 
 3. Run build.sh to build the OS and build grub
 ```bash
 chmod +x scripts/build.sh
-scripts/build.sh
+./scripts/build.sh
 ```
 
-4. Create a virtual disk for your system
+4. Install the user binaries onto the virtual disk
 ```bash
-dd if=/dev/zero of=zdisk.img bs=1M count=64
-mkfs.fat -F 32 zdisk.img
+./scripts/install.sh
 ```
 
 5. Boot the generated ISO file
-```bash
-qemu-system-i386 -cdrom iso/zineos-i386.iso -hda iso/zdisk.img
-```
-Or, you have a nicer way:
 ```bash
 make run
 ```
@@ -50,9 +45,9 @@ Thank me later 😊
 9. Process Scheduling ✅
 10. Virtual File System ✅
 11. Userspace Mode (Ring 3) ✅
-12. Make a [Complete ISO](https://wiki.osdev.org/GRUB#Disk_image_instructions) (GRUB + Kernel + Disk Image)
-13. Multithreading
-14. Shell
+12. Shell ✅
+13. Syscalls ✅
+14. Multithreading 
 
 ### 2. Memory Management
 
@@ -60,16 +55,26 @@ Thank me later 😊
 2. Virtual Memory Manager ✅
 3. Paging Setup ✅
 4. Heap Allocation ✅
+5. Slab Allocator
 
-### 3. File System
+### 3. Process Scheduling
+
+1. Round Robin Scheduler ✅
+2. Process heap & stack ✅
+3. `fork()` / `exec()` 🟡
+4. Threads
+5. Signals and IPC
+
+### 4. File System
 
 1. Virtual File System ✅
 2. FAT32 System ✅
 3. Subdirectory Support ✅
-4. Long Filenames Support
-5. EXT2 ?
+4. Load ELF Binaries ✅
+5. Long Filenames Support 🟡
+6. EXT2 ?
 
-### 4. Drivers
+### 5. Drivers
 
 1. VGA Driver ✅
 2. Serial Driver ✅
@@ -82,27 +87,33 @@ Thank me later 😊
 9. Mouse Driver
 10. Network Drivers
 
-### 5. Video Output
+### 6. Video Output
+
 1. VBE Driver ✅
 2. Draw Images ✅
 3. Draw Fonts ✅
-4. Window Manager
+4. Window Manager 🟡
 
-### 6. Others
+### 7. Shell
 
-1. Libc string functions ✅
-2. Basic printf debugging ✅
-3. ACPI ✅
-4. ELF Loader ✅
-5. APIC
-6. Exception Handling
-7. Kernel Panics
-8. Test Cases
+1. Basic Commands Handling ✅
+2. Movement with arrow keys 🟡
+3. Piping and Redirection 🟡
+4. Text Editor
+
+### 8. Others
+
+1. Basic printf debugging ✅
+3. Exception Handling ✅
+4. Test Cases 🟡
+5. Make a [Complete ISO](https://wiki.osdev.org/GRUB#Disk_image_instructions) (GRUB + Kernel + Disk Image)
+6. Build setup on other platforms 
 
 ## Resources
 
 1. https://wiki.osdev.org/
-2. http://www.osdever.net/tutorials/
-3. https://github.com/dreamportdev/Osdev-Notes
-4. https://github.com/szhou42/osdev
-5. https://forum.osdev.org/viewtopic.php?t=30577
+2. https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
+3. http://www.osdever.net/tutorials/
+4. https://github.com/dreamportdev/Osdev-Notes
+5. https://github.com/szhou42/osdev
+6. https://forum.osdev.org/viewtopic.php?t=30577

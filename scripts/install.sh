@@ -17,7 +17,8 @@ sudo mkdir -p "$MOUNT_POINT"
 sudo mount -t msdos -o rw "$DEVICE" "$MOUNT_POINT"
 
 # Copy the file
-cp "$FILE_TO_COPY" "$MOUNT_POINT/user.bin"
+mkdir -p "$MOUNT_POINT/bin"
+cp "$FILE_TO_COPY" "$MOUNT_POINT/bin/user.bin"
 
 # # Unmount and detach
 sync

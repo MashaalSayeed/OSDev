@@ -81,6 +81,19 @@ int syscall_getdents(int fd, void *dirp, size_t count)
     return result;
 }
 
+int syscall_dup2(int oldfd, int newfd)
+{
+    int result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_DUP2),
+          "b"(oldfd),
+          "c"(newfd)
+        : "memory");
+    return result;
+}
+
 int syscall_getpid()
 {
     int result;
@@ -100,6 +113,31 @@ void *syscall_sbrk(int incr)
         : "=a"(result)
         : "a"(SYSCALL_SBRK),
           "b"(incr)
+        : "memory");
+    return result;
+}
+
+char * syscall_getcwd(char *buf, size_t size)
+{
+    char * result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_GETCWD),
+          "b"(buf),
+          "c"(size)
+        : "memory");
+    return result;
+}
+
+int syscall_chdir(const char *path)
+{
+    int result;
+    asm volatile(
+        "int $0x80"
+        : "=a"(result)
+        : "a"(SYSCALL_CHDIR),
+          "b"(path)
         : "memory");
     return result;
 }

@@ -25,11 +25,13 @@ void reverse(char s[]);
 
 char *strchr(const char *s, char c);
 char *strrchr(const char *s, char c);
-char *strtok(char *str, const char *delim);
 
-void int_to_ascii(uint32_t num, char *buffer);
-void hex_to_ascii(uint32_t num, char *buffer);
-void bin_to_ascii(uint32_t num, char *buffer);
+char *strtok(char *str, const char *delim);
+char *strtok_r(char *str, const char *delim, char **saveptr);
+
+void int_to_ascii(int num, char *buffer);
+void hex_to_ascii(unsigned int num, char *buffer);
+void bin_to_ascii(unsigned int num, char *buffer);
 
 // Character functions
 char toupper(char c);

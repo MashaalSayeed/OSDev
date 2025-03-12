@@ -8,61 +8,15 @@
 
 #define USER_STACK_BASE  0xB0000000
 
-process_t *process_list = NULL;
-process_t *current_process = NULL;
-process_t *init_process = NULL;
 size_t pid_counter = 0;
-bool scheduler_started = false;
 
 extern page_directory_t* kpage_dir;
-extern void switch_context(registers_t* context);
+extern process_t* process_list;
+extern process_t* current_process;
 
 // Bump Allocator
 size_t allocate_pid() {
     return pid_counter++;
-}
-
-void idle_process() {
-    while (1) {
-    }
-}
-
-void scheduler_init() {
-    init_process = create_process("init", idle_process);
-    int a = 1 / 0;
-    // add_process(init_process);
-}
-
-void schedule(registers_t* context) {
-    if (!process_list) return;
-
-    // // Save the context of the current processs
-    if (current_process != NULL && context != NULL && scheduler_started == true) {
-        current_process->context = *context;
-        current_process->status = READY;
-    }
-
-    scheduler_started = true;
-    process_t *next_process = current_process ? current_process : process_list;
-    do {
-        next_process = next_process->next ? next_process->next : process_list;
-    } while (next_process->status != READY && next_process != current_process);
-
-    if (next_process == current_process && (current_process == NULL || current_process->status != READY)) {
-        next_process = init_process;  // Always have a fallback
-    }
-    
-    // printf("Current process %d (%d) | Next Process: %d (%d)\n", current_process->pid, current_process->status, next_process->pid, next_process->status);
-    if (next_process != current_process || next_process->status == READY) {
-        current_process = next_process;
-        current_process->status = RUNNING;
-        
-        // Restore context and switch page directory
-        switch_page_directory(current_process->root_page_table);
-        switch_context(&current_process->context);
-    } else {
-        current_process->status = RUNNING;
-    }
 }
 
 void* sbrk(process_t *proc, int increment) {
@@ -90,7 +44,7 @@ void* sbrk(process_t *proc, int increment) {
     return old_brk;
 }
 
-process_t* create_process(char *process_name, void (*entry_point)()) {
+process_t* create_process(char *process_name, void (*entry_point)(), uint32_t flags) {
     process_t *new_process = (process_t *)kmalloc(sizeof(process_t));
     if (!new_process) {
         printf("Error: Failed to allocate memory for process %s\n", process_name);
@@ -110,45 +64,31 @@ process_t* create_process(char *process_name, void (*entry_point)()) {
     new_process->brk = new_process->heap_start;
     new_process->heap_end = new_process->heap_start;
 
-    strncpy(new_process->cwd, "/", 1);
+    strncpy(new_process->cwd, "/home", sizeof(new_process->cwd));
 
     // Initialize process context
+    memset(&new_process->context, 0, sizeof(registers_t));
     new_process->context.eip = (uint32_t)entry_point;
     new_process->context.eflags = 0x202;
     new_process->context.esp = (uint32_t)USER_STACK_BASE;
     new_process->context.ebp = new_process->context.esp;
 
-    new_process->context.cs = USER_CS;
-    new_process->context.ds = USER_DS;
-    new_process->context.ss = USER_SS;
-    new_process->context.eax = 0;
-    new_process->context.ebx = 0;
-    new_process->context.ecx = 0;
-    new_process->context.edx = 0;
-    new_process->context.edi = 0;
-    new_process->context.esi = 0;
+    if (flags & PROCESS_FLAG_USER) {
+        new_process->context.cs = USER_CS;
+        new_process->context.ds = USER_DS;
+        new_process->context.ss = USER_SS;
+    } else {
+        new_process->context.cs = KERNEL_CS;
+        new_process->context.ds = KERNEL_DS;
+        new_process->context.ss = KERNEL_DS;
+    }
 
     new_process->status = READY;
     return new_process;
 }
 
-void add_process(process_t *process) {
-    if (!process_list) {
-        process_list = process;
-        current_process = process;
-    } else {
-        process_t *temp = process_list;
-        while (temp->next != process_list) {
-            temp = temp->next;
-        }
-        temp->next = process;
-    }
-
-    // Circular linked list
-    process->next = process_list;
-}
-
 void kill_process(process_t *process) {
+    if (!process) return;
     process->status = TERMINATED;
     if (process == process_list) {
         process_list = process_list->next;
@@ -170,23 +110,6 @@ void kill_process(process_t *process) {
     kfree(process);
 
     schedule(NULL);
-}
-
-void kill_current_process() {
-    kill_process(current_process);
-}
-
-process_t* get_current_process() {
-    return current_process;
-}
-
-void print_process_list() {
-    process_t *temp = process_list;
-    if (temp == NULL) return;
-    do {
-        printf("PID: %d, Name: %s, Status: %d\n", temp->pid, temp->process_name, temp->status);
-        temp = temp->next;
-    } while (temp != process_list);
 }
 
 int fork() {
@@ -216,9 +139,10 @@ int fork() {
     memcpy(&child->context, &parent->context, sizeof(registers_t));
     child->context.eax = 0; // Return value for child process
 
-    uint32_t esp_diff = USER_STACK_BASE - parent->context.esp;
-    child->context.esp = (uint32_t)child->stack + (PROCESS_STACK_SIZE - esp_diff);
-    child->context.ebp = (uint32_t)child->stack + (PROCESS_STACK_SIZE - USER_STACK_BASE + parent->context.ebp);
+    uint32_t esp_offset = parent->context.esp - (uint32_t)parent->stack;
+    uint32_t ebp_offset = parent->context.ebp - (uint32_t)parent->stack;
+    child->context.esp = (uint32_t)child->stack + esp_offset;
+    child->context.ebp = (uint32_t)child->stack + ebp_offset;
 
     add_process(child);
     return child->pid;
@@ -244,13 +168,31 @@ int exec(char *path) {
     memset(&proc->context, 0, sizeof(registers_t));
     proc->context.eip = elf->entry;
     proc->context.esp = USER_STACK_BASE;
+    proc->context.cs = USER_CS;
+    proc->context.ds = USER_DS;
+    proc->context.ss = USER_SS;
 
-    asm volatile (
-        "mov %0, %%esp\n"
-        "jmp *%1\n"
-        :
-        : "r"(proc->context.esp), "r"(proc->context.eip)
-    );
+    kfree(elf);
+    // asm volatile (
+    //     "mov %0, %%esp\n"
+    //     "jmp *%1\n"
+    //     :
+    //     : "r"(proc->context.esp), "r"(proc->context.eip)
+    // );
+    switch_context(&proc->context);
+    // asm volatile (
+    //     "cli\n"                        // Disable interrupts
+    //     "mov %0, %%esp\n"              // Set up new stack
+    //     "push $0x23\n"                 // User data segment (0x23) - RPL 3
+    //     "push %0\n"                    // Push stack pointer
+    //     "pushf\n"                      // Push flags
+    //     "push $0x1B\n"                 // User code segment (0x1B) - RPL 3
+    //     "push %1\n"                    // Push entry point
+    //     "iret\n"                       // Start execution in user mode
+    //     :
+    //     : "r"(proc->context.esp), "r"(proc->context.eip)
+    //     : "memory"
+    // );
 
     return 0;
 }

@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #define MAX_OPEN_FILES 256
+#define MAX_PATH_LEN 256
 
 #define VFS_MODE_DIR 0x10
 #define VFS_MODE_FILE 0x20
@@ -92,6 +93,8 @@ typedef struct {
 
 vfs_file_t *vfs_get_file(int fd);
 block_device_t *get_block_device(const char *path);
+
+int vfs_relative_path(const char *cwd, const char *path, char *resolved_path);
 
 static vfs_mount_t *find_mount(const char *path);
 static vfs_inode_t *resolve_path(const char *path, vfs_mount_t **mount);

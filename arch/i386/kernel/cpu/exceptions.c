@@ -24,7 +24,12 @@ void print_debug_info(registers_t *regs) {
 void print_stack_trace(registers_t *regs) {
     uint32_t *ebp, *eip;
     uint32_t count = 0;
-    ebp = (uint32_t *)regs->ebp;
+
+    if (regs) {
+        ebp = (uint32_t *)regs->ebp;
+    } else {
+        asm volatile("mov %%ebp, %0" : "=r" (ebp));
+    }
 
     printf("\nStack Trace:\n");
     while (ebp) {
@@ -58,6 +63,7 @@ static void gpf_handler(registers_t *regs) {
 
     // Print CPU state at time of exception
     print_debug_info(regs);
+    print_stack_trace(regs);
     panic();
 }
 

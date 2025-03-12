@@ -15,10 +15,7 @@ int is_valid_elf(elf_header_t *header) {
 
 elf_header_t* load_elf(const char *path) {
     int fd = vfs_open(path, VFS_FLAG_READ);
-    if (fd < 0) {
-        printf("Error: Failed to open file\n");
-        return NULL;
-    }
+    if (fd < 0) return NULL;
 
     elf_header_t * header = kmalloc(sizeof(elf_header_t));
     if (vfs_read(fd, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {

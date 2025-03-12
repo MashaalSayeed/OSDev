@@ -5,6 +5,7 @@
 #include "kernel/isr.h"
 #include "io.h"
 #include "system.h"
+#include "kernel/printf.h"
 
 #define KEYBOARD_DATA_PORT 0x60
 
@@ -95,63 +96,49 @@ void keyboard_callback(registers_t *regs) {
         return;
     }
 
-    char c = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
-    if (c && c != UNKNOWN) {
-        keyboard_buffer[buffer_end++] = c;
-        if (buffer_end >= BUFFER_SIZE) {
-            buffer_end = 0;
-        }
-        terminal_putchar(c);
+    switch (scancode) {
+        case 0x48: // Up arrow
+            keyboard_buffer[buffer_end] = '\033';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = '[';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = 'A'; // Up
+            break;
+        case 0x50: // Down arrow
+            keyboard_buffer[buffer_end] = '\033';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = '[';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = 'B'; // Up
+            break;
+        case 0x4B: // Left arrow
+            keyboard_buffer[buffer_end] = '\033';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = '[';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = 'D'; // Left
+            break;
+        case 0x4D: // Right arrow
+            keyboard_buffer[buffer_end] = '\033';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = '[';
+            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+            keyboard_buffer[buffer_end] = 'C'; // Right
+            break;
+        default:
+            // if (scancode >= 128) return;
+            char c = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
+            if (c && c != UNKNOWN) {
+                keyboard_buffer[buffer_end] = c;
+                if (buffer_end >= BUFFER_SIZE) {
+                    buffer_end = 0;
+                }
+            }
+            break;
     }
-    
 
-    // switch (scancode) {
-    //     case 1:
-    //         terminal_writestring("ESC");
-    //         break;
-    //     case 29:
-    //         terminal_writestring("CTRL");
-    //         break;
-    //     case 56:
-    //         terminal_writestring("ALT");
-    //         break;
-    //     case 59:
-    //     case 60:
-    //     case 61:
-    //     case 62:
-    //     case 63:
-    //     case 64:
-    //     case 65:
-    //     case 66:
-    //     case 67:
-    //     case 68:
-    //     case 87:
-    //     case 88:
-    //         terminal_writestring("Function Keys");
-    //         break;
-    //     case 42:
-    //     case 54:
-    //         if (press == 0) shift_on = 1;
-    //         else shift_on = 0;
-    //         break;
-    //     case 58:
-    //         if (!caps_lock && press == 0) caps_lock = 1;
-    //         else if (caps_lock && press == 0) caps_lock = 0;
-    //         break;
-    //     case 13:
-    //         terminal_putchar('\n');
-    //         break;
-    //     default:
-    //         if (press == 0) {
-    //             if (caps_lock || shift_on) {
-    //                 terminal_putchar(keyboard_map_shift[scancode]);
-    //             } else {
-    //                 terminal_putchar(keyboard_map[scancode]);
-    //             }
-    //         }
-    //         break;
-    // }
-
+    // terminal_putchar(c);
+    buffer_end = (buffer_end + 1) % BUFFER_SIZE;
     UNUSED(regs);
 }
 
@@ -161,30 +148,36 @@ char kgetch() {
         // Wait for a key press
     }
 
-    char c = keyboard_buffer[buffer_start++];
-    if (buffer_start >= BUFFER_SIZE) buffer_start = 0;
-
+    char c = keyboard_buffer[buffer_start];
+    buffer_start = (buffer_start + 1) % BUFFER_SIZE;
     return c;
 }
 
-char *kgets(char *buffer, size_t size) {
+int kgets(char *buffer, size_t size) {
     size_t i = 0;
-    while (i < size - 1) {
+    while (i < size) {
         char c = kgetch();
         if (c == '\n') {
             buffer[i] = '\0';
             return buffer;
         } else if (c == '\b' && i > 0) {
             i--;
-            // terminal_putchar(c);
         } else if (c != '\b') {
             buffer[i++] = c;
-            // terminal_putchar(c);
         }
     }
 
     buffer[i] = '\0';
-    return buffer;
+    return i + 1;
+}
+
+size_t read_keyboard_buffer(uint8_t *buf, size_t size) {
+    size_t count = 0;
+    while (count < size) {
+        buf[count] = kgetch();
+        count++;
+    }
+    return count;
 }
 
 void init_keyboard() {

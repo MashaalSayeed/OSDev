@@ -1,0 +1,351 @@
+#include "user/stdio.h"
+#include "user/shell.h"
+#include "libc/string.h"
+#include "user/syscall.h"
+#include "user/dirent.h"
+#include "user/stdlib.h"
+
+#define MAX_INPUT 256
+#define MAX_ARGS 10
+#define MAX_HISTORY 10
+
+char cwd[256];
+char history_buffer[MAX_HISTORY][MAX_INPUT];
+int history_pos = 0;
+int history_count = 0;
+
+void echo_command(char **args) {
+    if (args[1]) {
+        printf("%s\n", args[1]);
+    }
+}
+
+void exit_command() {
+    puts("Exiting shell\n");
+    syscall_exit(0);
+}
+
+void history_command() {
+    for (int i = 0; i < history_count; i++) {
+        printf("%d: %s\n", i, history_buffer[i]);
+    }
+}
+
+void ls_command(char **args) {
+    char *path = args[1];
+    if (path == NULL) path = ".";
+
+    int fd = syscall_open(path, O_RDONLY);
+    if (fd < 0) {
+        printf("Error: Failed to open directory\n");
+        return;
+    }
+
+    linux_dirent_t entries[8];
+    int bytes_read = syscall_getdents(fd, entries, sizeof(entries));
+    if (bytes_read < 0) {
+        printf("Error: Failed to read directory\n");
+        return;
+    }
+
+    for (int i = 0; i < bytes_read / sizeof(linux_dirent_t); i++) {
+        // printf("Inode: %d, Name: %s, Type: %d\n", entries[i].d_ino, entries[i].d_name, entries[i].d_type);
+        printf("    %s\n", entries[i].d_name);
+    }
+
+    syscall_close(fd);
+}
+
+void cat_command(char **args) {
+    char *path = args[1];
+    int fd = syscall_open(path, O_RDONLY);
+    if (fd < 0) {
+        printf("Error: Failed to open file\n");
+        return;
+    }
+
+    char buffer[256];
+    int bytes_read = syscall_read(fd, buffer, sizeof(buffer));
+    if (bytes_read < 0) {
+        printf("Error: Failed to read file\n");
+        return;
+    }
+
+    printf("Bytes Read: %d\n", bytes_read);
+    printf("%s\n", buffer);
+
+    syscall_close(fd);
+}
+
+void touch_command(char **args) {
+    char *path = args[1];
+    int fd = syscall_open(path, O_WRONLY | O_CREAT);
+    if (fd < 0) {
+        printf("Error: Failed to create file\n");
+        return;
+    }
+
+    syscall_close(fd);
+}
+
+void rm_command(char **args) {
+    char *path = args[1];
+    if (syscall_unlink(path) < 0) {
+        printf("Error: Failed to remove file\n");
+    }
+}
+
+void mkdir_command(char **args) {
+    char *path = args[1];
+    if (syscall_mkdir(path, 0) < 0) {
+        printf("Error: Failed to create directory\n");
+    }
+}
+
+void rmdir_command(char **args) {
+    char *path = args[1];
+    if (syscall_rmdir(path) < 0) {
+        printf("Error: Failed to remove directory\n");
+    }
+}
+
+void pwd_command() {
+    syscall_getcwd(cwd, sizeof(cwd));
+    printf("%s\n", cwd);
+}
+
+void cd_command(char **args) {
+    char *path = args[1];
+    if (syscall_chdir(path) < 0) {
+        printf("Error: Failed to change directory\n");
+    } else {
+        syscall_getcwd(cwd, sizeof(cwd));
+    }
+}
+
+void clear_command() {
+    printf("\033[2J\033[H");
+}
+
+void check_command() {
+    // printf("Check command\n");
+    // int *arr = malloc(10 * sizeof(int));
+    // printf("Allocated memory at: %x\n", arr);
+    // arr[0] = 42;
+    // printf("Value at arr[0]: %d\n", arr[0]);
+    // free(arr);
+    // printf("Freed memory\n");
+    int a = 1 / 0;
+}
+
+void help_command() {
+    printf("Commands:\n");
+    printf("    echo <text> - Print text\n");
+    printf("    exit - Exit the shell\n");
+    printf("    ls [path] - List directory contents\n");
+    printf("    cat <file> - Print file contents\n");
+    printf("    touch <file> - Create a file\n");
+    printf("    rm <file> - Remove a file\n");
+    printf("    mkdir <dir> - Create a directory\n");
+    printf("    rmdir <dir> - Remove a directory\n");
+    printf("    pwd - Print working directory\n");
+    printf("    cd <dir> - Change directory\n");
+    printf("    clear - Clear the screen\n");
+    printf("    check - Check for memory leaks\n");
+    printf("    help - Display this help message\n");
+}
+
+command_t commands[] = {
+    {"echo", echo_command},
+    {"exit", exit_command},
+    {"ls", ls_command},
+    {"cat", cat_command},
+    {"touch", touch_command},
+    {"rm", rm_command},
+    {"mkdir", mkdir_command},
+    {"rmdir", rmdir_command},
+    {"pwd", pwd_command},
+    {"cd", cd_command},
+    {"clear", clear_command},
+    {"check", check_command},
+    {"history", history_command},
+    {"help", help_command},
+    {NULL, NULL}
+};
+
+void add_to_history(char *buffer) {
+    if (history_count < MAX_HISTORY) {
+        strcpy(history_buffer[history_count++], buffer);
+    } else {
+        for (int i = 0; i < MAX_HISTORY - 1; i++) {
+            strcpy(history_buffer[i], history_buffer[i + 1]);
+        }
+        strcpy(history_buffer[MAX_HISTORY - 1], buffer);
+    }
+
+    history_pos = history_count;
+}
+
+void load_history(char *buffer, int *cur, int *len, int direction) {
+    if (history_count == 0) return;
+    if (direction == 1 && history_pos < history_count) {
+        history_pos++;
+    } else if (direction == -1 && history_pos > 0) {
+        history_pos--;
+    }
+
+    *cur = 0;
+    *len = 0;
+    if (history_pos < history_count) {
+        strcpy(buffer, history_buffer[history_pos]);
+        *len = strlen(buffer);
+        *cur = *len;
+        printf("%s", buffer);
+    }
+}
+
+void parse_input(char *input, char **args) {
+    int i = 0;
+    args[i] = strtok(input, " \n"); // Tokenize input by spaces
+    while (args[i] != NULL && i < MAX_ARGS - 1) {
+        i++;
+        args[i] = strtok(NULL, " \n");
+    }
+    args[i] = NULL; // Null-terminate the argument list
+}
+
+void execute_command(char **args) {
+    if (!args[0]) return; // Empty input
+
+    int input_fd = -1;
+    int output_fd = -1;
+
+    for (int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], ">") == 0) { // Output redirection
+            output_fd = syscall_open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC);
+            if (output_fd < 0) {
+                printf("Error: Failed to open file %s\n", args[i + 1]);
+                return;
+            }
+            args[i] = NULL; // Remove redirection part from args
+            break;
+        } else if (strcmp(args[i], ">>") == 0) { // Append redirection
+            output_fd = syscall_open(args[i + 1], O_WRONLY | O_CREAT | O_APPEND);
+            if (output_fd < 0) {
+                printf("Error: Failed to open file %s\n", args[i + 1]);
+                return;
+            }
+            args[i] = NULL;
+            break;
+        } else if (strcmp(args[i], "<") == 0) { // Input redirection
+            input_fd = syscall_open(args[i + 1], O_RDONLY);
+            if (input_fd < 0) {
+                printf("Error: Failed to open file %s\n", args[i + 1]);
+                return;
+            }
+            args[i] = NULL;
+            break;
+        }
+    }
+
+    // Redirect input if necessary
+    if (input_fd != -1) {
+        syscall_dup2(input_fd, stdin);
+        syscall_close(input_fd);
+    }
+    // Redirect output if necessary
+    if (output_fd != -1) {
+        syscall_dup2(output_fd, stdout);
+        syscall_close(output_fd);
+    }
+
+    for (int i = 0; commands[i].name != NULL; i++) {
+        if (strcmp(args[0], commands[i].name) == 0) {
+            commands[i].func(args);
+            return;
+        }
+    }
+
+    printf("Unknown command: %s\n", args[0]);
+}
+
+void read_input(char *buffer) {
+    int cur = 0, len = 0;
+    char c;
+    while (1) {
+        if (syscall_read(stdin, &c, 1) < 0) return;
+
+        // printf("%d\n", c);
+        switch (c) {
+            case '\n':
+                buffer[len] = '\0';
+                printf("\n");
+                return;
+            case '\b':
+                if (cur > 0) {
+                    cur--;
+                    len--;
+                    for (int i = cur; i < len; i++) {
+                        buffer[i] = buffer[i + 1];
+                    }
+                    buffer[len] = '\0';
+                    printf("\033[D\033[P");
+                }
+                break;
+            case '\033':
+                char seq[2];
+                if (syscall_read(stdin, seq, 2) < 0) return;
+                if (seq[0] == '[') {
+                    if (seq[1] == 'D' && cur > 0) {
+                        cur--;
+                        printf("\033[D");
+                    } else if (seq[1] == 'C' && cur < len) {
+                        cur++;
+                        printf("\033[C");
+                    } else if (seq[1] == 'A') {
+                        // load_history(buffer, &cur, &len, 1);
+                    } else if (seq[1] == 'B') {
+                        // load_history(buffer, &cur, &len, -1);
+                    }
+                }
+                break;
+            default:
+                for (int i = len; i >= cur; i--) {
+                    buffer[i] = buffer[i - 1];
+                }
+                buffer[cur] = c;
+                len++;
+                cur++;
+
+                printf("\033[@"); // Insert space at cursor
+                printf("%c", c);  // Write the new character
+                break;
+        }
+
+        if (cur > len) cur = len;
+        if (cur < 0) cur = 0;
+        if (len >= MAX_INPUT - 1) break;
+    }
+
+    buffer[len] = '\0';
+}
+
+void user_program() {
+    char buffer[MAX_INPUT];
+    char *args[MAX_ARGS];
+
+    syscall_getcwd(cwd, sizeof(cwd));
+	printf("\n");
+    while (1) {
+        printf("%s$ ", cwd);
+        // fgets(buffer, sizeof(buffer), stdin);
+        read_input(buffer);
+
+        // printf("Command: %s\n", buffer);
+        parse_input(buffer, args);
+        execute_command(args);
+        add_to_history(buffer);
+    }
+
+    syscall_exit(0);
+}

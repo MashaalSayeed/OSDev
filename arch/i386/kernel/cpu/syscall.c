@@ -14,17 +14,20 @@ int sys_write(int fd, const char *buffer, size_t size) {
     return vfs_write(fd, buffer, size); // Call proper VFS write
 }
 
-int sys_read(int fd, char *buffer, size_t size) {
+int sys_read(int fd, void *buffer, size_t size) {
     if (!buffer) return -1; // Validate pointer
 
-    if (fd == 0) return kgets(buffer, size); // Read from stdin
+    if (fd == 0) return read_keyboard_buffer(buffer, size); // Read from stdin
     return vfs_read(fd, buffer, size);
 }
 
 int sys_open(const char *path, int flags) {
     if (!path) return -1; // Validate pointer
 
-    return vfs_open(path, flags);
+    process_t *proc = get_current_process();
+    char resolved_path[256];
+    if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
+    return vfs_open(resolved_path, flags);
 }
 
 int sys_close(int fd) {
@@ -33,13 +36,37 @@ int sys_close(int fd) {
 
 int sys_exit(int status) {
     printf("Exited with status: %d\n", status);
-    kill_current_process();
+    kill_process(get_current_process());
     return 0; // Should never return
 }
 
 int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
     int ret = vfs_getdents(fd, dirp, count);
     return ret;
+}
+
+int sys_dup2(int oldfd, int newfd) {
+    printf("Dup2 not implemented\n");
+    return -1;
+}
+
+char * sys_getcwd(char *buf, size_t size) {
+    process_t *proc = get_current_process();
+    if (!buf) return NULL; // Validate pointer
+
+    strncpy(buf, proc->cwd, size);
+    return buf;
+}
+
+int sys_chdir(const char *path) {
+    if (!path) return -1; // Validate pointer
+
+    process_t *proc = get_current_process();
+    char resolved_path[256];
+    if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
+
+    strncpy(proc->cwd, resolved_path, sizeof(proc->cwd));
+    return 0;
 }
 
 int sys_fork(registers_t *regs) {
@@ -51,14 +78,18 @@ int sys_fork(registers_t *regs) {
 
 int sys_mkdir(const char *path, int mode) {
     if (!path) return -1; // Validate pointer
-
-    return vfs_create(path, VFS_MODE_DIR);
+    process_t *proc = get_current_process();
+    char resolved_path[256];
+    if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
+    return vfs_create(resolved_path, VFS_MODE_DIR);
 }
 
 int sys_rmdir(const char *path) {
     if (!path) return -1; // Validate pointer
-
-    return vfs_unlink(path);
+    process_t *proc = get_current_process();
+    char resolved_path[256];
+    if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
+    return vfs_unlink(resolved_path);
 }
 
 int sys_unlink(const char *path) {
@@ -108,13 +139,13 @@ void syscall_handler(registers_t *regs) {
             regs->eax = (uint32_t)sys_sbrk(regs->ebx);
             break;
         case SYSCALL_GETCWD:
-            printf("Getcwd not implemented\n");
+            regs->eax = (uint32_t)sys_getcwd((char *)regs->ebx, regs->ecx);
             break;
         case SYSCALL_CHDIR:
-            printf("Chdir not implemented\n");
+            regs->eax = sys_chdir((const char *)regs->ebx);
             break;
         case SYSCALL_DUP2:
-            printf("Dup2 not implemented\n");
+            regs->eax = sys_dup2(regs->ebx, regs->ecx);
             break;
         case SYSCALL_PIPE:
             printf("Pipe not implemented\n");

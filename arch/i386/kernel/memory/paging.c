@@ -319,7 +319,6 @@ void page_fault_handler(registers_t *regs) {
 
     if (faulting_address >= &stack_bottom && faulting_address < &stack_bottom + BLOCK_SIZE) {
         printf("Stack overflow at %x\n", faulting_address);
-        print_stack_trace(regs);
         for (;;) ;
     }
 
@@ -329,6 +328,7 @@ void page_fault_handler(registers_t *regs) {
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);
     print_debug_info(regs);
+    print_stack_trace(regs);
     printf("Page Directory: %x (kernel: %s)\n", cr3, cr3 == (uint32_t)kpage_dir ? "yes" : "no");
     
     process_t *proc = get_current_process();

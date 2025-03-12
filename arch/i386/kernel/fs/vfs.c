@@ -2,16 +2,17 @@
 #include "kernel/kheap.h"
 #include "kernel/ramfs.h"
 #include "kernel/fat32.h"
-#include "libc/string.h"
 #include "kernel/printf.h"
 #include "user/dirent.h"
 #include "kernel/hashtable.h"
+#include "libc/string.h"
+#include "libc/stdio.h"
 
 #define MAX_BLOCK_DEVICES 16
 
 static block_device_t* block_device_table[MAX_BLOCK_DEVICES] = {0};
 
-vfs_file_t* vfs_fd_table[MAX_OPEN_FILES];
+vfs_file_t* vfs_fd_table[MAX_OPEN_FILES] = {0};
 vfs_mount_t* vfs_mount_list = NULL;
 vfs_mount_t* root_mount = NULL;
 hash_table_t vfs_table = {0};
@@ -38,6 +39,55 @@ block_device_t *get_block_device(const char *device) {
         }
     }
     return NULL;
+}
+
+void simplify_path(char *path) {
+    char stack[MAX_PATH_LEN][MAX_PATH_LEN];
+    int top = 0;
+    char *saveptr;
+    char temp[MAX_PATH_LEN];
+    int i = 0;
+
+    strcpy(temp, path);
+
+    char *token = strtok_r(temp, "/", &saveptr);
+    while (token) {
+        // if (i++ == 0) token++;  // Skip the leading slash
+        if (strcmp(token, "..") == 0) {
+            if (top > 0) top--;  // Go up one directory
+        } else if (strcmp(token, ".") != 0 && strcmp(token, "") != 0) {
+            strcpy(stack[top++], token);  // Store a copy of the token
+        }
+        token = strtok_r(NULL, "/", &saveptr);
+    }
+
+    // Rebuild the normalized path
+    path[0] = '\0';  // Clear the path
+
+    if (top == 0) {
+        strcpy(path, "/");  // Root case
+    } else {
+        for (int i = 0; i < top; i++) {
+            strcat(path, "/");
+            strcat(path, stack[i]);
+        }
+    }
+}
+
+int vfs_relative_path(const char *cwd, const char *path, char *out) {
+    if (path[0] == '/') {  
+        // Absolute path
+        strncpy(out, path, MAX_PATH_LEN);
+    } else if (strcmp(cwd, "/") == 0) {
+        // Root directory
+        snprintf(out, MAX_PATH_LEN, "/%s", path);
+    } else {
+        // Relative path: concatenate with `cwd`
+        snprintf(out, MAX_PATH_LEN, "%s/%s", cwd, path);
+    }
+
+    simplify_path(out);
+    return 1;
 }
 
 int split_path(const char* path, char** dirname, char** filename) {
@@ -387,20 +437,19 @@ void test_vfs(vfs_superblock_t *root_sb) {
     // for (int i = 0; i < bytes_read / sizeof(linux_dirent_t); i++) {
     //     printf("Inode: %d, Name: %s, Type: %d\n", entries[i].d_ino, entries[i].d_name, entries[i].d_type);
     // }
-    
-    // vfs_dir_entry_t entries[16];
-    // file_count = vfs_readdir(fd, &entries, sizeof(entries) / sizeof(vfs_dir_entry_t));
-    // vfs_close(fd);
-    // printf("Files in root (%d):\n", file_count);
-    // for (int i = 0; i < file_count; i++) {
-    //     if (entries[i].type == VFS_MODE_DIR) {
-    //         printf(">  %s\n", entries[i].name);
-    //     } else {
-    //         printf("   %s\n", entries[i].name);
-    //     }
-    // }
+    int fd = vfs_open("/", VFS_FLAG_READ);
 
-
+    vfs_dir_entry_t entries[16];
+    int file_count = vfs_readdir(fd, &entries, sizeof(entries) / sizeof(vfs_dir_entry_t));
+    vfs_close(fd);
+    printf("Files in root (%d):\n", file_count);
+    for (int i = 0; i < file_count; i++) {
+        if (entries[i].type == VFS_MODE_DIR) {
+            printf(">  %s\n", entries[i].name);
+        } else {
+            printf("   %s\n", entries[i].name);
+        }
+    }
 
     // int fd = vfs_open("/sofa.txt", VFS_FLAG_READ);
     // int fd = vfs_open("/k", VFS_FLAG_READ);
@@ -412,7 +461,6 @@ void test_vfs(vfs_superblock_t *root_sb) {
 }
 
 void ramfs_init() {
-    memset(vfs_fd_table, 0, sizeof(vfs_fd_table));
     vfs_fs_type_t ramfs = {
         .name = "ramfs",
         .mount = ramfs_mount
@@ -433,11 +481,9 @@ void ramfs_init() {
         printf("Failed to mount at /ram\n");
         return;
     }
-
-    test_vfs(sb);
 }
 
-void vfs_init() {
+void fat32_init() {
     block_device_t *ata = get_block_device("/dev/sda1");
     if (!ata) {
         printf("ATA block device not found\n");
@@ -464,5 +510,25 @@ void vfs_init() {
         return;
     }
 
-    test_vfs(sb);
+    if (vfs_create("/home", VFS_MODE_DIR) != 0) {
+        printf("Failed to create directory: /home\n");
+        return;
+    }
+
+    // if (vfs_create("/tmp", VFS_MODE_DIR) != 0) {
+    //     printf("Failed to create directory: /tmp\n");
+    //     return;
+    // }
+    // test_vfs(sb);
+}
+
+void vfs_init() {
+    block_device_t *ata = get_block_device("/dev/sda1");
+    if (!ata) {
+        printf("ATA block device not found\n");
+        return;
+    }
+
+    fat32_init();
+    // ramfs_init();
 }
