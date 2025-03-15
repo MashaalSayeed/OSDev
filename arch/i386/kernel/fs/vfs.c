@@ -3,23 +3,76 @@
 #include "kernel/ramfs.h"
 #include "kernel/fat32.h"
 #include "kernel/printf.h"
+#include "kernel/process.h"
 #include "user/dirent.h"
 #include "kernel/hashtable.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
+#include <drivers/keyboard.h>
+#include <drivers/tty.h>
+
 
 #define MAX_BLOCK_DEVICES 16
 
 static block_device_t* block_device_table[MAX_BLOCK_DEVICES] = {0};
 
-vfs_file_t* vfs_fd_table[MAX_OPEN_FILES] = {0};
+// vfs_file_t* vfs_fd_table[MAX_OPEN_FILES] = {0};
 vfs_mount_t* vfs_mount_list = NULL;
 vfs_mount_t* root_mount = NULL;
 hash_table_t vfs_table = {0};
 
+struct vfs_file_operations vfs_default_file_ops = {
+    .read = vfs_read,
+    .write = vfs_write,
+    .close = vfs_close,
+    .seek = vfs_seek,
+};
+
+vfs_file_t* console_fds[3];
+
 vfs_file_t* vfs_get_file(int fd) {
     if (fd < 0 || fd >= MAX_OPEN_FILES) return NULL;
-    return vfs_fd_table[fd];
+    if (fd < 3) return console_fds[fd];
+    
+    process_t *proc = get_current_process();
+    return proc->fds[fd];
+}
+
+int console_read(vfs_file_t* file, void* buf, size_t count) {
+    return read_keyboard_buffer(buf, count);
+}
+
+int console_write(vfs_file_t* file, void* buf, size_t count) {
+    // printf("%d", count);
+    terminal_write(buf, count);
+    return count;
+}
+
+struct vfs_file_operations vfs_console_ops = {
+    .read = console_read,
+    .write = console_write,
+    .close = vfs_close,
+    .seek = NULL,
+};
+
+void console_init() {
+    console_fds[0] = (vfs_file_t*) kmalloc(sizeof(vfs_file_t));
+    console_fds[0]->fd = 0;
+    console_fds[0]->file_ops = &vfs_console_ops;
+    console_fds[0]->flags = O_RDONLY;
+    console_fds[0]->ref_count = 1;
+
+    console_fds[1] = (vfs_file_t*) kmalloc(sizeof(vfs_file_t));
+    console_fds[1]->fd = 1;
+    console_fds[1]->file_ops = &vfs_console_ops;
+    console_fds[1]->flags = O_WRONLY;
+    console_fds[1]->ref_count = 1;
+
+    console_fds[2] = (vfs_file_t*) kmalloc(sizeof(vfs_file_t));
+    console_fds[2]->fd = 2;
+    console_fds[2]->file_ops = &vfs_console_ops;
+    console_fds[2]->flags = O_WRONLY;
+    console_fds[2]->ref_count = 1;
 }
 
 int register_block_device(block_device_t *device) {
@@ -208,6 +261,7 @@ vfs_inode_t *vfs_traverse(const char *path) {
 }
 
 int vfs_open(const char *path, int flags) {
+    process_t *proc = get_current_process();
     vfs_mount_t *mount;
     vfs_inode_t *inode = resolve_path(path, &mount);
 
@@ -233,7 +287,7 @@ int vfs_open(const char *path, int flags) {
     // Find an available file descriptor
     int fd;
     for (fd = 3; fd < MAX_OPEN_FILES; fd++) {
-        if (!vfs_fd_table[fd]) break;
+        if (!proc->fds[fd]) break;
     }
 
     if (fd == MAX_OPEN_FILES) {
@@ -248,20 +302,27 @@ int vfs_open(const char *path, int flags) {
     file->inode = inode;
     file->offset = 0;
     file->flags = flags;
+    file->ref_count = 1;
 
-    vfs_fd_table[fd] = file;
+
+    file->file_ops = &vfs_default_file_ops;
+
+    proc->fds[fd] = file;
     return fd;
 }
 
-int vfs_close(int fd) {
-    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
-    vfs_file_t *file = vfs_fd_table[fd];
-    vfs_fd_table[fd] = NULL;
+int vfs_close(vfs_file_t *file) {
+    process_t *proc = get_current_process();
+    proc->fds[file->fd] = NULL;
 
-    // Don't allow closing the root directory
-    if (file->inode == file->inode->superblock->root) return -1;
+    if (--file->ref_count > 0) return 0;
 
-    file->inode->inode_ops->close(file);
+    if (file->inode && file->inode->inode_ops->close) {
+        // Don't allow closing the root directory
+        if (file->inode == file->inode->superblock->root) return -1;
+        file->inode->inode_ops->close(file);
+    }
+
     kfree(file);
     return 0;
 }
@@ -308,18 +369,17 @@ int vfs_unlink(const char *path) {
     return result;
 }
 
-uint32_t vfs_write(int fd, const void* buf, size_t count) {
-    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
-    vfs_file_t *file = vfs_fd_table[fd];
+uint32_t vfs_write(vfs_file_t *file, const void* buf, size_t count) {
+    if (!file || file->inode->mode != VFS_MODE_FILE) {
+        printf("Error: Not a file\n");
+        return -1;
+    }
 
     return file->inode->inode_ops->write(file, buf, count);
 }
 
-uint32_t vfs_read(int fd, void* buf, size_t count) {
-    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
-    vfs_file_t *file = vfs_fd_table[fd];
-
-    if (file->inode->mode != VFS_MODE_FILE) {
+uint32_t vfs_read(vfs_file_t *file, void* buf, size_t count) {
+    if (!file || file->inode->mode != VFS_MODE_FILE) {
         printf("Error: Not a file\n");
         return -1;
     }
@@ -332,9 +392,8 @@ uint32_t vfs_read(int fd, void* buf, size_t count) {
     return file->inode->inode_ops->read(file, buf, count);
 }
 
-int vfs_seek(int fd, uint32_t offset, int whence) {
-    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd]) return -1;
-    vfs_file_t *file = vfs_fd_table[fd];
+int vfs_seek(vfs_file_t *file, uint32_t offset, int whence) {
+    if (!file) return -1;
 
     int new_offset = file->offset;
     switch (whence) {
@@ -375,8 +434,8 @@ int vfs_rmdir(const char *path) {
 }
 
 int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries) {
-    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd] || !entries) return -1;
-    vfs_file_t *file = vfs_fd_table[fd];
+    vfs_file_t *file = vfs_get_file(fd);
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !file || !entries) return -1;
 
     if (file->inode->mode != VFS_MODE_DIR) {
         printf("Error: Not a directory\n");
@@ -387,8 +446,8 @@ int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries) {
 }
 
 int vfs_getdents(int fd, void* buf, int size) {
-    if (fd < 0 || fd >= MAX_OPEN_FILES || !vfs_fd_table[fd] || !buf) return -1;
-    vfs_file_t *file = vfs_fd_table[fd];
+    vfs_file_t *file = vfs_get_file(fd);
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !file || !buf) return -1;
 
     if (file->inode->mode != VFS_MODE_DIR) {
         printf("Error: Not a directory %d\n", file->inode->mode);
@@ -529,6 +588,7 @@ void vfs_init() {
         return;
     }
 
+    console_init();
     fat32_init();
     // ramfs_init();
 }

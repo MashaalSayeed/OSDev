@@ -20,6 +20,7 @@ void idle_process() {
 
 void scheduler_init() {
     init_process = create_process("init", idle_process, PROCESS_FLAG_KERNEL);
+    init_process->status = INIT;
     add_process(init_process);
 }
 
@@ -28,10 +29,10 @@ void schedule(registers_t* context) {
 
     // // Save the context of the current processs
     scheduler_started = true;
-
-    if (current_process != NULL && context != NULL && scheduler_started == true) {
+    // printf("Scheduling process\n");
+    if (current_process != NULL && context != NULL) {
         current_process->context = *context;
-        current_process->status = READY;
+        if (current_process->status == RUNNING) current_process->status = READY;
     }
 
     process_t *next_process = current_process ? current_process : process_list;
@@ -43,11 +44,10 @@ void schedule(registers_t* context) {
         next_process = init_process;  // Always have a fallback
     }
     
-    // printf("Current process %d (%d) | Next Process: %d (%d)\n", current_process->pid, current_process->status, next_process->pid, next_process->status);
+    // printf("Current process (%d) | Next Process: %d\n", current_process->pid, next_process->pid);
     if (next_process != current_process || next_process->status == READY) {
         current_process = next_process;
         current_process->status = RUNNING;
-        // printf("Switching to process %s\n", current_process->process_name);
         
         // Restore context and switch page directory
         switch_page_directory(current_process->root_page_table);
@@ -59,6 +59,17 @@ void schedule(registers_t* context) {
 
 process_t* get_current_process() {
     return current_process;
+}
+
+process_t* get_process(size_t pid) {
+    process_t *temp = process_list;
+    if (temp == NULL) return NULL;
+    do {
+        if (temp->pid == pid) return temp;
+        temp = temp->next;
+    } while (temp != process_list);
+
+    return NULL;
 }
 
 void add_process(process_t *process) {

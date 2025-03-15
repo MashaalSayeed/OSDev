@@ -4,15 +4,19 @@
 #include "kernel/printf.h"
 #include "libc/string.h"
 #include "kernel/elf.h"
+#include "kernel/vfs.h"
 #include <stdbool.h>
 
 #define USER_STACK_BASE  0xB0000000
 
-size_t pid_counter = 0;
+size_t pid_counter = 1;
 
 extern page_directory_t* kpage_dir;
 extern process_t* process_list;
 extern process_t* current_process;
+extern void sys_exit(int status);
+
+extern vfs_file_t* console_fds[3];
 
 // Bump Allocator
 size_t allocate_pid() {
@@ -55,8 +59,6 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
     strncpy(new_process->process_name, process_name, PROCESS_NAME_MAX_LEN);
     new_process->root_page_table = clone_page_directory(kpage_dir);
     
-    // TODO: stack = USER_STACK_BASE
-    // uint32_t stack = USER_STACK_BASE - (new_process->pid * PROCESS_STACK_SIZE);
     new_process->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
     map_memory(new_process->root_page_table, new_process->stack, 0, PROCESS_STACK_SIZE, 0x7);
 
@@ -65,6 +67,10 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
     new_process->heap_end = new_process->heap_start;
 
     strncpy(new_process->cwd, "/home", sizeof(new_process->cwd));
+
+    new_process->fds[0] = vfs_get_file(0);
+    new_process->fds[1] = vfs_get_file(1);
+    new_process->fds[2] = vfs_get_file(2);
 
     // Initialize process context
     memset(&new_process->context, 0, sizeof(registers_t));
@@ -87,29 +93,46 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
     return new_process;
 }
 
-void kill_process(process_t *process) {
-    if (!process) return;
+void kill_process(process_t *process, int status) {
+    if (!process || process->status == TERMINATED) return;
     process->status = TERMINATED;
-    if (process == process_list) {
+
+    // wake up parent if waiting
+    if (process->parent && process->parent->status == WAITING) {
+        process->parent->status = READY;
+        process->parent->context.eax = status; // TODO: save child status
+        // TODO: save child status
+        cleanup_process(process);
+    } else {
+        cleanup_process(process);
+    }
+
+    schedule(NULL);
+}
+
+void cleanup_process(process_t *proc) {
+    if (!proc || proc->status != TERMINATED) return;
+
+    // Remove process from process list
+    if (proc == process_list) {
         process_list = process_list->next;
     }
 
     process_t *temp = process_list;
-    while (temp->next != process) {
+    while (temp->next != proc) {
         temp = temp->next;
     }
 
-    temp->next = process->next;
-    if (process == current_process) {
+    temp->next = proc->next;
+    if (proc == current_process) {
         current_process = NULL;
     }
+
     // Free the process stack and process structure
     // TODO: unmap all pages and heap
-    free_page(get_page((uint32_t)process->stack, 0, process->root_page_table));
-    free_page_directory(process->root_page_table);
-    kfree(process);
-
-    schedule(NULL);
+    free_page(get_page((uint32_t)proc->stack, 0, proc->root_page_table));
+    free_page_directory(proc->root_page_table);
+    kfree(proc);
 }
 
 int fork() {
@@ -122,7 +145,7 @@ int fork() {
 
     // Copy parent process info
     child->pid = allocate_pid();
-    printf("Forking process %d (%s) to %d\n", parent->pid, parent->process_name, child->pid);
+    child->parent = parent;
 
     strncpy(child->process_name, parent->process_name, PROCESS_NAME_MAX_LEN);
     child->status = READY;
@@ -134,6 +157,7 @@ int fork() {
     // Copy page directory
     child->root_page_table = clone_page_directory(parent->root_page_table);
     child->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
+    memcpy(child->stack, parent->stack, PROCESS_STACK_SIZE);
 
     // Copy process context
     memcpy(&child->context, &parent->context, sizeof(registers_t));
@@ -148,9 +172,13 @@ int fork() {
     return child->pid;
 }
 
+void user_sys_exit(int code) {
+    asm volatile("int $0x80" : : "a"(5), "b"(code));
+}
+
 int exec(char *path) {
-    elf_header_t* elf = load_elf(path);
-    if (!elf) {
+    int fd = vfs_open(path, VFS_FLAG_READ);
+    if (fd < 0) {
         printf("Failed to load ELF file\n");
         return -1;
     }
@@ -162,37 +190,36 @@ int exec(char *path) {
     proc->root_page_table = new_page_dir;
     switch_page_directory(proc->root_page_table);
 
+    elf_header_t* elf = load_elf(proc->fds[fd]);
+    if (!elf) {
+        printf("Failed to load ELF file\n");
+        return -1;
+    }
+
     proc->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
     map_memory(proc->root_page_table, proc->stack, 0, PROCESS_STACK_SIZE, 0x7);
 
+    proc->fds[0] = vfs_get_file(0);
+    proc->fds[1] = vfs_get_file(1);
+    proc->fds[2] = vfs_get_file(2);
+
+    uint32_t *stack = USER_STACK_BASE - 12;
+    *--stack = 0; // Return value
+    *--stack = (uint32_t)user_sys_exit;
+
+    proc->status = READY;
+    strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
+
     memset(&proc->context, 0, sizeof(registers_t));
     proc->context.eip = elf->entry;
-    proc->context.esp = USER_STACK_BASE;
+    proc->context.esp = stack; // offset by 4 bytes for first push
+    proc->context.ebp = proc->context.esp;
     proc->context.cs = USER_CS;
     proc->context.ds = USER_DS;
     proc->context.ss = USER_SS;
+    proc->context.eflags = 0x202;
 
     kfree(elf);
-    // asm volatile (
-    //     "mov %0, %%esp\n"
-    //     "jmp *%1\n"
-    //     :
-    //     : "r"(proc->context.esp), "r"(proc->context.eip)
-    // );
     switch_context(&proc->context);
-    // asm volatile (
-    //     "cli\n"                        // Disable interrupts
-    //     "mov %0, %%esp\n"              // Set up new stack
-    //     "push $0x23\n"                 // User data segment (0x23) - RPL 3
-    //     "push %0\n"                    // Push stack pointer
-    //     "pushf\n"                      // Push flags
-    //     "push $0x1B\n"                 // User code segment (0x1B) - RPL 3
-    //     "push %1\n"                    // Push entry point
-    //     "iret\n"                       // Start execution in user mode
-    //     :
-    //     : "r"(proc->context.esp), "r"(proc->context.eip)
-    //     : "memory"
-    // );
-
-    return 0;
+    return -1;
 }

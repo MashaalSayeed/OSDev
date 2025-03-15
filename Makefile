@@ -45,6 +45,8 @@ FONT_OBJ = $(BUILD_DIR)/font.o
 LIBC_OBJ = $(BUILD_DIR)/libc/libc.a
 OBJS = $(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ) $(FONT_OBJ)
 
+USER_BIN=$(wildcard $(BUILD_DIR)/user/bin/*)
+
 # Build rules
 .PHONY: all run debug clean help userland libc disk_image
 

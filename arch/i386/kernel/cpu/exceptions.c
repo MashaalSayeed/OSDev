@@ -34,9 +34,12 @@ void print_stack_trace(registers_t *regs) {
     printf("\nStack Trace:\n");
     while (ebp) {
         if (count > 15) return;
+
+        char *symbol = elf_lookup_symbol(*eip, &kernel_elf);
+        if (!symbol) symbol = "N/A";
         
         eip = ebp + 1;
-        printf(" %d %x <%s>\n", count, *eip, elf_lookup_symbol(*eip, &kernel_elf));
+        printf(" %d %x <%s>\n", count, *eip, symbol);
         ebp = (uint32_t *)ebp[0];  // Move to previous frame
         count++;
     }

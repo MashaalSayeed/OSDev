@@ -149,9 +149,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// load_user_program();
 	// test_scheduler();
 	// test_fork();
-	
-	printf("\n");
-	exec("/BIN/USER.BIN");
+	exec("/BIN/SHELL");
 
 	for (;;) ;
 }

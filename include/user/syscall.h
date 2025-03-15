@@ -11,24 +11,18 @@
 #define O_TRUNC 32
 #define O_CREAT 64
 
-static inline void syscall(int num, const char* arg1) {
-    asm volatile (
-        "int $0x80"
-        : // No return value
-        : "a" (num), "b" (arg1)
-        : "memory"
-    );
-}
-
 int syscall_write(int fd, const char *buffer, size_t size);
 int syscall_read(int fd, char *buffer, size_t size);
 int syscall_open(const char *path, int flags);
 int syscall_close(int fd);
 void syscall_exit(int status);
 int syscall_getdents(int fd, void *dirp, size_t count);
+int syscall_fork();
+int syscall_exec(const char *path);
 int syscall_dup2(int oldfd, int newfd);
 char *syscall_getcwd(char *buf, size_t size);
 int syscall_chdir(const char *path);
+int syscall_waitpid(int pid, int *status, int options);
 int syscall_getpid();
 void *syscall_sbrk(int increment);
 int syscall_mkdir(const char *path, int mode);

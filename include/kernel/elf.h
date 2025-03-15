@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "kernel/vfs.h"
 #include "multiboot.h"
 
 #define ELF_MAGIC 0x464C457F
@@ -79,6 +80,6 @@ typedef struct {
 } elf_t;
 
 int is_valid_elf(elf_header_t *header);
-elf_header_t* load_elf(const char *path);
+elf_header_t* load_elf(vfs_file_t *file);
 elf_t elf_from_multiboot(struct multiboot_tag_elf_sections *elf_sec);
 const char *elf_lookup_symbol(uint32_t addr, elf_t *elf);

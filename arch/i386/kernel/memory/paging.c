@@ -97,7 +97,8 @@ page_table_entry_t *get_page(uint32_t virtual, int make, page_directory_t *dir) 
 
 void alloc_page(page_directory_entry_t *page, uint32_t flags) {
     if (page->present) {
-        printf("alloc_page: Page already allocated\n");
+        // Maybe bad?
+        printf("alloc_page: Page already allocated %x\n", page);
         return;
     }
 
@@ -328,7 +329,7 @@ void page_fault_handler(registers_t *regs) {
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);
     print_debug_info(regs);
-    print_stack_trace(regs);
+    // print_stack_trace(regs);
     printf("Page Directory: %x (kernel: %s)\n", cr3, cr3 == (uint32_t)kpage_dir ? "yes" : "no");
     
     process_t *proc = get_current_process();

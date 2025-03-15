@@ -5,28 +5,40 @@ LD=i686-elf-ld
 AS=nasm
 
 CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I../../../include -std=gnu99 -g
-LDFLAGS=-nostdlib -ffreestanding -O2 -lgcc -T linker.ld
+LDFLAGS=-nostdlib -ffreestanding -O2 -lgcc -Tlinker.ld
 
 BUILD_DIR=../../../build/$(ARCH)
 USER_BUILD_DIR=$(BUILD_DIR)/user
+CORE_BUILD_DIR=$(USER_BUILD_DIR)/core
+LIB_BUILD_DIR=$(USER_BUILD_DIR)/lib
+BIN_DIR=$(USER_BUILD_DIR)/bin
 
-USER_SRC=$(wildcard core/*.c) $(wildcard lib/*.c)
-USER_OBJS=$(USER_SRC:%.c=$(USER_BUILD_DIR)/%.o)
-LIBC_OBJS=$(BUILD_DIR)/libc/libc.a
-OBJS=$(USER_OBJS) $(LIBC_OBJS)
+CORE_SRC=$(wildcard core/*.c)
+LIB_SRC=$(wildcard lib/*.c)
+LIB_OBJS=$(LIB_SRC:%.c=$(USER_BUILD_DIR)/%.o) $(BUILD_DIR)/libc/libc.a
 
-USER_BIN=$(USER_BUILD_DIR)/user.bin
+PROGS = shell hello
+PROG_OBJS = $(patsubst %, $(CORE_BUILD_DIR)/%.o, $(PROGS))
+PROG_BINS = $(patsubst %, $(BIN_DIR)/%, $(PROGS))
 
-all: $(USER_BIN)
+.PHONY: all clean
+
+all: $(PROG_BINS)
 
 $(USER_BUILD_DIR):
-	mkdir -p $(USER_BUILD_DIR) $(USER_BUILD_DIR)/core $(USER_BUILD_DIR)/lib
+	mkdir -p $(USER_BUILD_DIR) $(CORE_BUILD_DIR) $(LIB_BUILD_DIR) $(BIN_DIR)
 
-$(USER_BUILD_DIR)/%.o: %.c | $(USER_BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@ 
+$(CORE_BUILD_DIR)/%.o: core/%.c | $(USER_BUILD_DIR)
+# @echo "Compiling $< to $@"
+	$(CC) $(CFLAGS) -c $< -o $@
 
-$(USER_BIN): $(OBJS) | $(USER_BUILD_DIR)
-	$(CC) $(LDFLAGS) $(OBJS) -o $@
+$(LIB_BUILD_DIR)/%.o: lib/%.c | $(USER_BUILD_DIR)
+# @echo "Compiling $< to $@"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BIN_DIR)/%: $(CORE_BUILD_DIR)/%.o $(LIB_OBJS) | $(USER_BUILD_DIR)
+# @echo "Linking $< $(LIB_OBJS)"
+	$(CC) $(LDFLAGS) $< $(LIB_OBJS) -o $@
 
 clean:
-	rm -f $(USER_BUILD_DIR)
+	rm -rf $(USER_BUILD_DIR)

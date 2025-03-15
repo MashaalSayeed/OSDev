@@ -61,14 +61,11 @@ static void uprintf(const char* format, ...) {
     );
 }
 
-static void fgets(int fd, char* buffer, int size) {
+static void do_syscall(int syscall_number, int arg1, int arg2, int arg3) {
 	asm volatile (
-		"int $0x80"             // Trigger system call
-		: "=a" (size)         // Return value in eax
-		: "a" (2),      // Syscall number in eax
-		  "b" (fd),             // File descriptor in ebx
-		  "c" (buffer),         // Buffer address in ecx
-		  "d" (size)            // Size in edx
+		"int $0x80"
+		:
+		: "a"(syscall_number), "b"(arg1), "c"(arg2), "d"(arg3)
 		: "memory"
 	);
 }
@@ -104,20 +101,12 @@ static void test_process() {
 	}
 }
 
-static void exit(int arg) {
-	asm volatile (
-		"int $0x80"
-		:
-		: "a"(5), "b"(arg)
-		: "memory"
-	);
-}
 
 static void shell() {
 	while (1) {
 		char buffer[80];
 		uprintf("%x> ", buffer);
-		fgets(0, buffer, 80);
+		do_syscall(2, 0, (int)buffer, 80); // fgets
 		uprintf("You entered: %s\n", buffer);
 
 		if (strcmp(buffer, "exit") == 0) {
@@ -125,7 +114,7 @@ static void shell() {
 		}
 	}
 
-	exit(0);
+	do_syscall(5, 0, 0, 0);
 }
 
 void fork_proc() {
@@ -136,16 +125,16 @@ void fork_proc() {
 	if (pid == 0) {
 		my_pid = getpid();
         uprintf("[PID %d] Hello from child process!\n", my_pid);
-		sleep(200);
+		sleep(50);
 	} else if (pid > 0) {
         uprintf("[PID %d] Hello from parent process! Child PID: %d\n", my_pid, pid);
-		sleep(200);
+		do_syscall(9, pid, 0, 0);
 	} else {
         uprintf("[PID %d] Fork failed\n", my_pid);
 	}
 
 	uprintf("[PID %d] Exiting test_fork()\n", my_pid);
-	exit(0);
+	do_syscall(5, 0, 0, 0);
 }
 
 void test_scheduler() {

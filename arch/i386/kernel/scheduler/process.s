@@ -27,4 +27,7 @@ switch_context:
     IRET
 
 
-
+global read_eip
+read_eip:
+	pop eax
+	jmp eax

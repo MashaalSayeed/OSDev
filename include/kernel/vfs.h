@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define MAX_OPEN_FILES 256
+// #define MAX_OPEN_FILES 256
 #define MAX_PATH_LEN 256
 
 #define VFS_MODE_DIR 0x10
@@ -37,6 +37,8 @@ typedef struct {
     vfs_inode_t *inode;     // The inode of the file
     uint32_t offset;        // The offset in the file
     int flags;              // The flags of the file
+    int ref_count;          // The reference count
+    struct vfs_file_operations *file_ops;
 } vfs_file_t;
 
 typedef struct {
@@ -104,12 +106,12 @@ int vfs_unmount(const char *path);
 int vfs_create(const char *path, uint32_t mode);
 int vfs_unlink(const char *path);
 int vfs_open(const char *path, int flags);
-int vfs_close(int fd);
+int vfs_close(vfs_file_t *file);
 
-uint32_t vfs_write(int fd, const void *buf, size_t count);
-uint32_t vfs_read(int fd, void *buf, size_t count);
+uint32_t vfs_write(vfs_file_t *file, const void *buf, size_t count);
+uint32_t vfs_read(vfs_file_t *file, void *buf, size_t count);
 
-int vfs_seek(int fd, uint32_t offset, int whence);
+int vfs_seek(vfs_file_t *file, uint32_t offset, int whence);
 int vfs_rmdir(const char *path);
 int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries);
 int vfs_getdents(int fd, void *buf, int size);

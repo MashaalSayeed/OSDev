@@ -129,7 +129,6 @@ static uint32_t fat32_set_next_cluster(fat32_superblock_t *sb, uint32_t cluster,
         return -1;
     }
 
-    printf("Setting next cluster %d for cluster %d\n", next_cluster, cluster);
     *(uint32_t *)(buffer + offset) = next_cluster & 0x0FFFFFFF;
     if (sb->device->write_block(sb->device, fat_sector, buffer) != 0) {
         printf("Error: Failed to write FAT sector %d\n", fat_sector);
@@ -257,7 +256,7 @@ static int fat32_is_directory_empty(fat32_superblock_t *sb, uint32_t cluster) {
         fat32_dir_entry_t *entry = (fat32_dir_entry_t*)buffer;
         for (int i = 2; i < sb->cluster_size / sizeof(fat32_dir_entry_t); i++) { 
             if (entry[i].filename[0] != FAT32_DELETED_ENTRY && entry[i].filename[0] != 0) {
-                printf("Entry: %s\n", entry[i].filename);
+                // printf("Entry: %s\n", entry[i].filename);
                 return 0; // Directory is not empty
             }
         }
@@ -379,20 +378,18 @@ static uint32_t fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode) 
         return -1;
     }
 
-    // If creating a directory, allocate a new cluster and set directory attributes
+    uint32_t new_cluster = fat32_allocate_cluster(sb);
+    if (new_cluster == (uint32_t)-1) return -1;
+    entry.first_cluster_low = new_cluster & 0xFFFF;
+    entry.first_cluster_high = (new_cluster >> 16) & 0xFFFF;
+    
+    fat32_set_next_cluster(sb, new_cluster, FAT32_CLUSTER_LAST);
+    
+    // Write the new entry to the parent directory
+    memcpy(free_entry, &entry, sizeof(fat32_dir_entry_t));
+    if (fat32_write_cluster(sb, cluster, buffer) != 0) return -1;
+
     if (mode & VFS_MODE_DIR) {
-        uint32_t new_cluster = fat32_allocate_cluster(sb);
-        if (new_cluster == (uint32_t)-1) return -1;
-        
-        entry.first_cluster_low = new_cluster & 0xFFFF;
-        entry.first_cluster_high = (new_cluster >> 16) & 0xFFFF;
-
-        fat32_set_next_cluster(sb, new_cluster, FAT32_CLUSTER_LAST);
-
-        // Write the new entry to the parent directory
-        memcpy(free_entry, &entry, sizeof(fat32_dir_entry_t));
-        if (fat32_write_cluster(sb, cluster, buffer) != 0) return -1;
-
         // Initialize "." and ".." entries
         uint8_t new_buffer[sb->cluster_size];
         memset(new_buffer, 0, sb->cluster_size);
@@ -416,10 +413,6 @@ static uint32_t fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode) 
 
         // Write the "." and ".." entries to the newly allocated cluster
         if (fat32_write_cluster(sb, new_cluster, new_buffer) != 0) return -1;
-    } else { 
-        // If it's a regular file, just write the entry
-        memcpy(free_entry, &entry, sizeof(fat32_dir_entry_t));
-        if (fat32_write_cluster(sb, cluster, buffer) != 0) return -1;
     }
 
     return 0;
@@ -469,7 +462,7 @@ static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count) {
         return written;
     }
 
-    while (written < count) {
+    while (written < count && cluster != FAT32_CLUSTER_LAST) {
         uint8_t buffer[sb->cluster_size];
         uint32_t cluster_offset = offset % sb->cluster_size;
         uint32_t to_write = sb->cluster_size - cluster_offset;
@@ -704,7 +697,6 @@ static int fat32_readdir_2(vfs_inode_t *dir, uint32_t offset, vfs_dir_entry_t *e
             }
 
             // Populate VFS entry
-            // printf("Entry: %s | Attr: %d | %x.%x \n", dir_entry->filename, dir_entry->attributes, dir_entry->first_cluster_high, dir_entry->first_cluster_low);
             if (lfn_length > 0) {
                 strncpy(entry->name, lfn_buffer, sizeof(entry->name) - 1);
                 memset(lfn_buffer, 0, sizeof(lfn_buffer));

@@ -8,7 +8,6 @@ idt_flush:
 %macro ISR_NOERRCODE 1
     global isr%1
     isr%1:
-        CLI
         PUSH LONG 0 ; Push a dummy error code
         PUSH LONG %1
         JMP isr_common_stub

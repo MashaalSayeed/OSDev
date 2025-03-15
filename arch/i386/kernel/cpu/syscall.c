@@ -7,22 +7,31 @@
 #include <kernel/process.h>
 #include "libc/string.h"
 
-int sys_write(int fd, const char *buffer, size_t size) {
-    if (!buffer) return -1; // Validate pointer
+extern uint32_t read_eip();
 
-    if (fd == 1) return printf("%s", buffer); // Write to stdout
-    return vfs_write(fd, buffer, size); // Call proper VFS write
+int sys_write(int fd, const char *buffer, size_t size) {
+    if (!buffer) return -1;
+
+    process_t *proc = get_current_process();
+    vfs_file_t* file = proc->fds[fd];
+    if (!file) return -1;
+    if (fd != file->fd) printf("fd: %d, fd?: %d, buf: %s\n", fd, file->fd, buffer); // Debug Redirected FD
+
+    return file->file_ops->write(file, buffer, size);
 }
 
 int sys_read(int fd, void *buffer, size_t size) {
-    if (!buffer) return -1; // Validate pointer
+    if (!buffer) return -1;
 
-    if (fd == 0) return read_keyboard_buffer(buffer, size); // Read from stdin
-    return vfs_read(fd, buffer, size);
+    process_t *proc = get_current_process();
+    vfs_file_t* file = proc->fds[fd];
+    if (!file) return -1;
+    
+    return file->file_ops->read(file, buffer, size); // Call proper VFS read
 }
 
 int sys_open(const char *path, int flags) {
-    if (!path) return -1; // Validate pointer
+    if (!path) return -1;
 
     process_t *proc = get_current_process();
     char resolved_path[256];
@@ -31,13 +40,42 @@ int sys_open(const char *path, int flags) {
 }
 
 int sys_close(int fd) {
-    return vfs_close(fd);
+    process_t *proc = get_current_process();
+    vfs_file_t* file = proc->fds[fd];
+    if (!file) return -1;
+    return file->file_ops->close(file);
 }
 
 int sys_exit(int status) {
-    printf("Exited with status: %d\n", status);
-    kill_process(get_current_process());
+    kill_process(get_current_process(), status);
     return 0; // Should never return
+}
+
+
+int sys_waitpid(int pid, int *status, int options) {
+    process_t *child, *proc;
+    child = get_process(pid);
+    proc = get_current_process();
+    if (!child || child->parent != proc) return -1;
+
+    if (child->status != TERMINATED) {
+        proc->status = WAITING;
+        // Save current process state and schedule another process
+        schedule(NULL);
+    }
+
+    // Never reaches here :(
+    // printf("pid: %d, status: %x, options: %d\n", pid, status, options);
+    // proc = get_current_process();
+    // child = get_process(pid);
+    // if (child && child->status == TERMINATED) {
+    //     printf("Child Cleanup\n");
+    //     if (status) *status = 0;
+    //     cleanup_process(child);
+    //     return pid;
+    // }
+
+    return -1;
 }
 
 int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
@@ -45,21 +83,34 @@ int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
     return ret;
 }
 
+int sys_getpid() {
+    return get_current_process()->pid;
+}
+
 int sys_dup2(int oldfd, int newfd) {
-    printf("Dup2 not implemented\n");
-    return -1;
+    process_t *proc = get_current_process();
+    if (oldfd == newfd) return newfd;
+    if (oldfd < 0 || oldfd >= MAX_OPEN_FILES || newfd < 0 || newfd >= MAX_OPEN_FILES) return -1;
+
+    if (proc->fds[oldfd] == NULL) return -1;
+    if (proc->fds[newfd] != NULL) sys_close(newfd);
+
+    proc->fds[newfd] = proc->fds[oldfd];
+    proc->fds[newfd]->ref_count++;
+    // printf("dup2: %d -> %d\n", oldfd, newfd);
+    return newfd;
 }
 
 char * sys_getcwd(char *buf, size_t size) {
     process_t *proc = get_current_process();
-    if (!buf) return NULL; // Validate pointer
+    if (!buf) return NULL;
 
     strncpy(buf, proc->cwd, size);
     return buf;
 }
 
 int sys_chdir(const char *path) {
-    if (!path) return -1; // Validate pointer
+    if (!path) return -1;
 
     process_t *proc = get_current_process();
     char resolved_path[256];
@@ -70,14 +121,16 @@ int sys_chdir(const char *path) {
 }
 
 int sys_fork(registers_t *regs) {
-    process_t *proc = get_current_process();
-    memcpy(&proc->context, regs, sizeof(registers_t));
     int ret = fork();
     return ret;
 }
 
+int sys_exec(const char *path) {
+    return exec(path);
+}
+
 int sys_mkdir(const char *path, int mode) {
-    if (!path) return -1; // Validate pointer
+    if (!path) return -1;
     process_t *proc = get_current_process();
     char resolved_path[256];
     if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
@@ -85,7 +138,7 @@ int sys_mkdir(const char *path, int mode) {
 }
 
 int sys_rmdir(const char *path) {
-    if (!path) return -1; // Validate pointer
+    if (!path) return -1;
     process_t *proc = get_current_process();
     char resolved_path[256];
     if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
@@ -93,9 +146,11 @@ int sys_rmdir(const char *path) {
 }
 
 int sys_unlink(const char *path) {
-    if (!path) return -1; // Validate pointer
-
-    return vfs_unlink(path);
+    if (!path) return -1;
+    process_t *proc = get_current_process();
+    char resolved_path[256];
+    if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
+    return vfs_unlink(resolved_path);
 }
 
 void *sys_sbrk(int incr) {
@@ -103,65 +158,40 @@ void *sys_sbrk(int incr) {
     return sbrk(proc, incr);
 }
 
+syscall_t syscall_table[] = {
+    [SYSCALL_WRITE]    = (syscall_t)sys_write,
+    [SYSCALL_READ]     = (syscall_t)sys_read,
+    [SYSCALL_OPEN]     = (syscall_t)sys_open,
+    [SYSCALL_CLOSE]    = (syscall_t)sys_close,
+    [SYSCALL_EXIT]     = (syscall_t)sys_exit,
+    [SYSCALL_GETDENTS] = (syscall_t)sys_getdents,
+    [SYSCALL_GETPID]   = (syscall_t)sys_getpid, // Wrap in a function for consistency
+    [SYSCALL_FORK]     = (syscall_t)sys_fork,
+    [SYSCALL_EXEC]     = (syscall_t)sys_exec,
+    [SYSCALL_WAITPID]  = (syscall_t)sys_waitpid,
+    [SYSCALL_SBRK]     = (syscall_t)sys_sbrk,
+    [SYSCALL_GETCWD]   = (syscall_t)sys_getcwd,
+    [SYSCALL_CHDIR]    = (syscall_t)sys_chdir,
+    [SYSCALL_DUP2]     = (syscall_t)sys_dup2,
+    [SYSCALL_MKDIR]    = (syscall_t)sys_mkdir,
+    [SYSCALL_RMDIR]    = (syscall_t)sys_rmdir,
+    [SYSCALL_UNLINK]   = (syscall_t)sys_unlink,
+    // [SYSCALL_YIELD]    = (syscall_t)schedule,
+};
+
+
 void syscall_handler(registers_t *regs) {
-    switch (regs->eax) {
-        case SYSCALL_WRITE: // Syscall write
-            regs->eax = sys_write(regs->ebx, (const char *)regs->ecx, regs->edx);
-            break;
-        case SYSCALL_READ: // Syscall read
-            regs->eax = sys_read(regs->ebx, (char *)regs->ecx, regs->edx);
-            break;
-        case SYSCALL_OPEN: // Syscall open
-            regs->eax = sys_open((const char *)regs->ebx, regs->ecx);
-            break;
-        case SYSCALL_CLOSE: // Syscall close
-            regs->eax = sys_close(regs->ebx);
-            break;
-        case SYSCALL_EXIT: // Syscall exit
-            sys_exit(regs->ebx);
-            break;
-        case SYSCALL_GETDENTS: // Syscall getdents
-            regs->eax = sys_getdents(regs->ebx, (linux_dirent_t *)regs->ecx, regs->edx);
-            break;
-        case SYSCALL_GETPID:
-            regs->eax = get_current_process()->pid;
-            break;
-        case SYSCALL_FORK:
-            regs->eax = sys_fork(regs);
-            break;
-        case SYSCALL_EXEC:
-            printf("Exec not implemented\n");
-            break;
-        case SYSCALL_WAITPID:
-            printf("Waitpid not implemented\n");
-            break;
-        case SYSCALL_SBRK:
-            regs->eax = (uint32_t)sys_sbrk(regs->ebx);
-            break;
-        case SYSCALL_GETCWD:
-            regs->eax = (uint32_t)sys_getcwd((char *)regs->ebx, regs->ecx);
-            break;
-        case SYSCALL_CHDIR:
-            regs->eax = sys_chdir((const char *)regs->ebx);
-            break;
-        case SYSCALL_DUP2:
-            regs->eax = sys_dup2(regs->ebx, regs->ecx);
-            break;
-        case SYSCALL_PIPE:
-            printf("Pipe not implemented\n");
-            break;
-        case SYSCALL_MKDIR:
-            regs->eax = sys_mkdir((const char *)regs->ebx, regs->ecx);
-            break;
-        case SYSCALL_RMDIR:
-            regs->eax = sys_rmdir((const char *)regs->ebx);
-            break;
-        case SYSCALL_UNLINK:
-            regs->eax = sys_unlink((const char *)regs->ebx);
-            break;
-        default:
-            printf("Unknown syscall: %d\n", regs->eax);
-            regs->eax = -1;
-            break;
+    process_t *proc = get_current_process();
+    memcpy(&proc->context, regs, sizeof(registers_t));
+
+    if (regs->eax < sizeof(syscall_table) / sizeof(syscall_table[0]) &&
+        syscall_table[regs->eax] != NULL) {
+        regs->eax = syscall_table[regs->eax](regs->ebx, regs->ecx, regs->edx);
+    } else if(regs->eax == SYSCALL_YIELD) {
+        // printf("eip: %x, esp: %x, ebp: %x\n", regs->eip, regs->esp, regs->ebp);
+        schedule(NULL);
+    } else {
+        printf("Unknown syscall: %d\n", regs->eax);
+        regs->eax = -1;
     }
 }

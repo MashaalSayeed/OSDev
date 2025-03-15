@@ -5,6 +5,7 @@
 #include "libc/string.h"
 #include "kernel/printf.h"
 #include "kernel/multiboot.h"
+#include "kernel/process.h"
 
 extern int paging_enabled;
 
@@ -13,20 +14,20 @@ int is_valid_elf(elf_header_t *header) {
     return 1;
 }
 
-elf_header_t* load_elf(const char *path) {
-    int fd = vfs_open(path, VFS_FLAG_READ);
-    if (fd < 0) return NULL;
-
+elf_header_t* load_elf(vfs_file_t* file) {
+    process_t *proc = get_current_process();
     elf_header_t * header = kmalloc(sizeof(elf_header_t));
-    if (vfs_read(fd, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {
+
+    if (file->file_ops->read(file, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {
         printf("Error: Failed to read ELF header\n");
-        vfs_close(fd);
+        // file->file_ops->close(file);
+        file->file_ops->close(file);
         return NULL;
     }
 
     if (!is_valid_elf(header)) {
         printf("Error: Invalid ELF file\n");
-        vfs_close(fd);
+        file->file_ops->close(file);
         return NULL;
     }
 
@@ -34,29 +35,29 @@ elf_header_t* load_elf(const char *path) {
     elf_program_header_t ph;
 
     for (int i = 0; i < header->ph_entry_count; i++) {
-        vfs_seek(fd, header->ph_offset + i * sizeof(elf_program_header_t), VFS_SEEK_SET);
-        if (vfs_read(fd, &ph, sizeof(elf_program_header_t)) != sizeof(elf_program_header_t)) {
+        file->file_ops->seek(file, header->ph_offset + i * sizeof(elf_program_header_t), VFS_SEEK_SET);
+        if (file->file_ops->read(file, &ph, sizeof(elf_program_header_t)) != sizeof(elf_program_header_t)) {
             printf("Error: Failed to read program header\n");
-            vfs_close(fd);
+            file->file_ops->close(file);
             return NULL;
         }
 
         if (ph.type != PT_LOAD) continue;
-        kmap_memory(ph.vaddr, 0, ph.mem_size, 0x7);
+        map_memory(proc->root_page_table, ph.vaddr, 0, ph.mem_size, 0x7);
         void *buf = (void *)ph.vaddr;
 
-        vfs_seek(fd, ph.offset, VFS_SEEK_SET);
-        if (vfs_read(fd, buf, ph.file_size) != ph.file_size) {
+        file->file_ops->seek(file, ph.offset, VFS_SEEK_SET);
+        if (file->file_ops->read(file, buf, ph.file_size) != ph.file_size) {
             printf("Error: Failed to read program header\n");
             kfree(buf);
-            vfs_close(fd);
+            file->file_ops->close(file);
             return NULL;
         }
 
         memset((uint8_t*)(buf + ph.file_size), 0, ph.mem_size - ph.file_size);
     }
 
-    vfs_close(fd);
+    file->file_ops->close(file);
     return header;
 }
 

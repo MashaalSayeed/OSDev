@@ -1,9 +1,10 @@
 #include "user/stdio.h"
 #include "user/shell.h"
-#include "libc/string.h"
 #include "user/syscall.h"
 #include "user/dirent.h"
 #include "user/stdlib.h"
+#include "libc/string.h"
+#include "libc/stdio.h"
 
 #define MAX_INPUT 256
 #define MAX_ARGS 10
@@ -71,9 +72,7 @@ void cat_command(char **args) {
         return;
     }
 
-    printf("Bytes Read: %d\n", bytes_read);
     printf("%s\n", buffer);
-
     syscall_close(fd);
 }
 
@@ -127,15 +126,25 @@ void clear_command() {
     printf("\033[2J\033[H");
 }
 
+void write_command(char ** args) {
+    char *path = args[1];
+    int fd = syscall_open(path, O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd < 0) {
+        printf("Error: Failed to open file\n");
+        return;
+    }
+
+    char buffer[256];
+    printf("Enter text to write: ");
+    fgets(buffer, 256, stdin);
+    syscall_write(fd, buffer, strlen(buffer));
+    syscall_close(fd);
+}
+
 void check_command() {
-    // printf("Check command\n");
-    // int *arr = malloc(10 * sizeof(int));
-    // printf("Allocated memory at: %x\n", arr);
-    // arr[0] = 42;
-    // printf("Value at arr[0]: %d\n", arr[0]);
-    // free(arr);
-    // printf("Freed memory\n");
-    int a = 1 / 0;
+    char buffer[256];
+    fgets(buffer, 256, stdin);
+    printf("You entered: %s", buffer);
 }
 
 void help_command() {
@@ -151,7 +160,7 @@ void help_command() {
     printf("    pwd - Print working directory\n");
     printf("    cd <dir> - Change directory\n");
     printf("    clear - Clear the screen\n");
-    printf("    check - Check for memory leaks\n");
+    printf("    check - For debugging\n");
     printf("    help - Display this help message\n");
 }
 
@@ -168,6 +177,7 @@ command_t commands[] = {
     {"cd", cd_command},
     {"clear", clear_command},
     {"check", check_command},
+    {"write", write_command},
     {"history", history_command},
     {"help", help_command},
     {NULL, NULL}
@@ -212,6 +222,17 @@ void parse_input(char *input, char **args) {
         args[i] = strtok(NULL, " \n");
     }
     args[i] = NULL; // Null-terminate the argument list
+}
+
+int is_valid_command(char *command) {
+    char *bin_commands[] = {"HELLO"};
+    for (int i = 0; i < sizeof(bin_commands) / sizeof(bin_commands[0]); i++) {
+        if (strcmp(command, bin_commands[i]) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 void execute_command(char **args) {
@@ -266,7 +287,23 @@ void execute_command(char **args) {
         }
     }
 
-    printf("Unknown command: %s\n", args[0]);
+    if (!is_valid_command(args[0])) {
+        printf("Unknown command: %s\n", args[0]);
+        return;
+    }
+    
+    char path[256];
+    snprintf(path, sizeof(path), "/BIN/%s", args[0]);
+    int pid = syscall_fork();
+    if (pid == 0) {
+        if (syscall_exec(path) < 0) {
+            printf("Error: Failed to execute command\n");
+            syscall_exit(1); // Exit child process
+        }
+    } else {
+        int status;
+        syscall_waitpid(pid, &status, 0);
+    }
 }
 
 void read_input(char *buffer) {
@@ -330,7 +367,7 @@ void read_input(char *buffer) {
     buffer[len] = '\0';
 }
 
-void user_program() {
+void main() {
     char buffer[MAX_INPUT];
     char *args[MAX_ARGS];
 
