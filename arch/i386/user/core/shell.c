@@ -49,8 +49,7 @@ void ls_command(char **args) {
         return;
     }
 
-    for (int i = 0; i < bytes_read / sizeof(linux_dirent_t); i++) {
-        // printf("Inode: %d, Name: %s, Type: %d\n", entries[i].d_ino, entries[i].d_name, entries[i].d_type);
+    for (size_t i = 0; i < bytes_read / sizeof(linux_dirent_t); i++) {
         printf("    %s\n", entries[i].d_name);
     }
 
@@ -150,7 +149,6 @@ void check_command() {
 void help_command() {
     printf("Commands:\n");
     printf("    echo <text> - Print text\n");
-    printf("    exit - Exit the shell\n");
     printf("    ls [path] - List directory contents\n");
     printf("    cat <file> - Print file contents\n");
     printf("    touch <file> - Create a file\n");
@@ -161,7 +159,10 @@ void help_command() {
     printf("    cd <dir> - Change directory\n");
     printf("    clear - Clear the screen\n");
     printf("    check - For debugging\n");
+    printf("    write <file> - Write to a file\n");
+    printf("    history - Display command history\n");
     printf("    help - Display this help message\n");
+    printf("    exit - Exit the shell\n");
 }
 
 command_t commands[] = {
@@ -225,8 +226,8 @@ void parse_input(char *input, char **args) {
 }
 
 int is_valid_command(char *command) {
-    char *bin_commands[] = {"HELLO"};
-    for (int i = 0; i < sizeof(bin_commands) / sizeof(bin_commands[0]); i++) {
+    char *bin_commands[] = {"HELLO", "EDITOR"};
+    for (size_t i = 0; i < sizeof(bin_commands) / sizeof(bin_commands[0]); i++) {
         if (strcmp(command, bin_commands[i]) == 0) {
             return 1;
         }
@@ -296,7 +297,7 @@ void execute_command(char **args) {
     snprintf(path, sizeof(path), "/BIN/%s", args[0]);
     int pid = syscall_fork();
     if (pid == 0) {
-        if (syscall_exec(path) < 0) {
+        if (syscall_exec(path, args) < 0) {
             printf("Error: Failed to execute command\n");
             syscall_exit(1); // Exit child process
         }
@@ -312,7 +313,6 @@ void read_input(char *buffer) {
     while (1) {
         if (syscall_read(stdin, &c, 1) < 0) return;
 
-        // printf("%d\n", c);
         switch (c) {
             case '\n':
                 buffer[len] = '\0';

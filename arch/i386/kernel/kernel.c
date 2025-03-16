@@ -81,7 +81,7 @@ static void multiboot2_init(struct multiboot_tag* mbd) {
 
 void print_time() {
 	rtc_time_t time = rtc_read_time();
-	printf("Current Time: %d:%d:%d %d/%d/%d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
+	printf("Current Time: %02d:%02d:%02d %02d/%02d/%02d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
 }
 
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
@@ -134,7 +134,9 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 		psf_font_t *font = load_psf_font();
 		fill_screen(0x000000);
 		// draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
-		draw_string_at("Hello, GUI World!", 0, 0, 0xFFFFFF, 0x000000);
+		// draw_string_at("Hello, GUI World!", 0, 0, 0xFFFFFF, 0x000000);
+		// put_pixel(100, 100, 0xFFFFFF);
+		draw_rect(100, 100, 200, 200, 0xFFFFFF);
 	} else {
 		printf("No GUI\n");
 	}
@@ -149,7 +151,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// load_user_program();
 	// test_scheduler();
 	// test_fork();
-	exec("/BIN/SHELL");
+	exec("/BIN/SHELL", NULL);
 
 	for (;;) ;
 }

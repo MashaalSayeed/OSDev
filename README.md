@@ -117,3 +117,8 @@ Thank me later 😊
 4. https://github.com/dreamportdev/Osdev-Notes
 5. https://github.com/szhou42/osdev
 6. https://forum.osdev.org/viewtopic.php?t=30577
+
+## Known Issues
+
+1. Cannot run a binary executable more than 5 times
+2. write command not writing properly?

@@ -9,7 +9,7 @@ static uint32_t fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode);
 static uint32_t fat32_unlink(vfs_inode_t *dir, const char *name);
 static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count);
 static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count);
-static int fat32_close(vfs_file_t *file);
+static int fat32_close(vfs_inode_t *inode);
 static int fat32_readdir(vfs_inode_t *dir, vfs_dir_entry_t *entries, size_t max_entries);
 static int fat32_readdir_2(vfs_inode_t *dir, uint32_t offset, vfs_dir_entry_t *entry);
 
@@ -552,9 +552,10 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
     return read;
 }
 
-static int fat32_close(vfs_file_t *file) {
-    kfree(file->inode->fs_data);
-    kfree(file->inode);
+static int fat32_close(vfs_inode_t *inode) {
+    if (!inode || inode == inode->superblock->root) return -1;
+    kfree(inode->fs_data);
+    kfree(inode);
     return 0;
 }
 

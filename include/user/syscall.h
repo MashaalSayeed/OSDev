@@ -18,7 +18,7 @@ int syscall_close(int fd);
 void syscall_exit(int status);
 int syscall_getdents(int fd, void *dirp, size_t count);
 int syscall_fork();
-int syscall_exec(const char *path);
+int syscall_exec(const char *path, char **args);
 int syscall_dup2(int oldfd, int newfd);
 char *syscall_getcwd(char *buf, size_t size);
 int syscall_chdir(const char *path);

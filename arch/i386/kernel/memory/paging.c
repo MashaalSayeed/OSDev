@@ -168,17 +168,19 @@ void switch_page_directory(page_directory_t *dir) {
 uint32_t copy_from_page(page_directory_t* src, uint32_t virt) {
     uint32_t *temp_dest = 0xFFC01000;
     page_directory_entry_t *temp_page = get_page(temp_dest, 1, src);
-    alloc_page(temp_page, 0x7);
 
+    alloc_page(temp_page, 0x7);
     memcpy((void *)temp_dest, (void *)virt, PAGE_SIZE);
-    // free_page(temp_page);
-    temp_page->present = 0;
-    return temp_page->frame;
+
+    uint32_t frame = temp_page->frame;
+    free_page(temp_page);
+    return frame;
 }
 
 // TODO: Implement copy-on-write
 page_directory_t * clone_page_directory(page_directory_t *src) {
     page_directory_t *new_dir = (page_directory_t*) dumb_kmalloc(sizeof(page_directory_t), 1);
+    // page_directory_t *new_dir = (page_directory_t*) kmalloc(sizeof(page_directory_t));
     memset(new_dir, 0, sizeof(page_directory_t));
 
     for (uint32_t i = 0; i < 1024; i++) {
@@ -220,7 +222,7 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
 }
 
 void free_page_directory(page_directory_t *dir) {
-    if (!dir) return;
+    if (!dir || dir == kpage_dir) return;
     for (uint32_t i = 0; i < 1024; i++) {
         if (!dir->tables[i].present) continue;
 
@@ -329,7 +331,7 @@ void page_fault_handler(registers_t *regs) {
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);
     print_debug_info(regs);
-    // print_stack_trace(regs);
+    print_stack_trace(regs);
     printf("Page Directory: %x (kernel: %s)\n", cr3, cr3 == (uint32_t)kpage_dir ? "yes" : "no");
     
     process_t *proc = get_current_process();

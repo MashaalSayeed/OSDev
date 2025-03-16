@@ -9,18 +9,28 @@
 
 #define USER_STACK_BASE  0xB0000000
 
+#define PUSH(stack, type, value) \
+    stack -= sizeof(type); \
+    *((type *)stack) = value;
+
 size_t pid_counter = 1;
 
 extern page_directory_t* kpage_dir;
 extern process_t* process_list;
 extern process_t* current_process;
-extern void sys_exit(int status);
+extern void user_exit();
+extern void switch_context(registers_t* context);
 
 extern vfs_file_t* console_fds[3];
 
 // Bump Allocator
-size_t allocate_pid() {
+static size_t allocate_pid() {
     return pid_counter++;
+}
+
+static void setup_stack(process_t *proc) {
+    proc->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
+    map_memory(proc->root_page_table, proc->stack, 0, PROCESS_STACK_SIZE, 0x7);
 }
 
 void* sbrk(process_t *proc, int increment) {
@@ -49,48 +59,47 @@ void* sbrk(process_t *proc, int increment) {
 }
 
 process_t* create_process(char *process_name, void (*entry_point)(), uint32_t flags) {
-    process_t *new_process = (process_t *)kmalloc(sizeof(process_t));
-    if (!new_process) {
+    process_t *proc = (process_t *)kmalloc(sizeof(process_t));
+    if (!proc) {
         printf("Error: Failed to allocate memory for process %s\n", process_name);
         return NULL;
     }
 
-    new_process->pid = allocate_pid();
-    strncpy(new_process->process_name, process_name, PROCESS_NAME_MAX_LEN);
-    new_process->root_page_table = clone_page_directory(kpage_dir);
-    
-    new_process->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
-    map_memory(new_process->root_page_table, new_process->stack, 0, PROCESS_STACK_SIZE, 0x7);
+    proc->pid = allocate_pid();
+    strncpy(proc->process_name, process_name, PROCESS_NAME_MAX_LEN);
+    proc->root_page_table = clone_page_directory(kpage_dir);
 
-    new_process->heap_start = USER_HEAP_START;
-    new_process->brk = new_process->heap_start;
-    new_process->heap_end = new_process->heap_start;
+    setup_stack(proc);
 
-    strncpy(new_process->cwd, "/home", sizeof(new_process->cwd));
+    proc->heap_start = USER_HEAP_START;
+    proc->brk = proc->heap_start;
+    proc->heap_end = proc->heap_start;
 
-    new_process->fds[0] = vfs_get_file(0);
-    new_process->fds[1] = vfs_get_file(1);
-    new_process->fds[2] = vfs_get_file(2);
+    strncpy(proc->cwd, "/home", sizeof(proc->cwd));
+
+    proc->fds[0] = vfs_get_file(0);
+    proc->fds[1] = vfs_get_file(1);
+    proc->fds[2] = vfs_get_file(2);
 
     // Initialize process context
-    memset(&new_process->context, 0, sizeof(registers_t));
-    new_process->context.eip = (uint32_t)entry_point;
-    new_process->context.eflags = 0x202;
-    new_process->context.esp = (uint32_t)USER_STACK_BASE;
-    new_process->context.ebp = new_process->context.esp;
+    memset(&proc->context, 0, sizeof(registers_t));
+    proc->context.eip = (uint32_t)entry_point;
+    proc->context.eflags = 0x202;
+    proc->context.esp = (uint32_t)USER_STACK_BASE;
+    proc->context.ebp = proc->context.esp;
 
     if (flags & PROCESS_FLAG_USER) {
-        new_process->context.cs = USER_CS;
-        new_process->context.ds = USER_DS;
-        new_process->context.ss = USER_SS;
+        proc->context.cs = USER_CS;
+        proc->context.ds = USER_DS;
+        proc->context.ss = USER_SS;
     } else {
-        new_process->context.cs = KERNEL_CS;
-        new_process->context.ds = KERNEL_DS;
-        new_process->context.ss = KERNEL_DS;
+        proc->context.cs = KERNEL_CS;
+        proc->context.ds = KERNEL_DS;
+        proc->context.ss = KERNEL_DS;
     }
 
-    new_process->status = READY;
-    return new_process;
+    proc->status = READY;
+    return proc;
 }
 
 void kill_process(process_t *process, int status) {
@@ -172,47 +181,90 @@ int fork() {
     return child->pid;
 }
 
-void user_sys_exit(int code) {
-    asm volatile("int $0x80" : : "a"(5), "b"(code));
-}
-
-int exec(char *path) {
+int exec(const char *path, char **argv) {
+    process_t *proc = get_current_process();
     int fd = vfs_open(path, VFS_FLAG_READ);
     if (fd < 0) {
         printf("Failed to load ELF file\n");
         return -1;
     }
 
-    process_t *proc = get_current_process();
+    // Create new address space
     page_directory_t* new_page_dir = clone_page_directory(kpage_dir);
-    free_page_directory(proc->root_page_table);
+    int argc = 0;
+    size_t total_len = 0;
+    if (argv) {
+        while (argv[argc]) {
+            total_len += strlen(argv[argc]) + 1;
+            argc++;
+        }
+    }
 
+    char **k_argv = NULL;
+    char *k_strings = NULL;
+    if (argc > 0) {
+        k_argv = (char **)kmalloc((argc + 1) * sizeof(char *));
+        k_strings = (char *)kmalloc(total_len);
+
+        char *str_ptr = k_strings;
+        for (int i = 0; i < argc; i++) {
+            size_t len = strlen(argv[i]) + 1;
+            memcpy(str_ptr, argv[i], len);
+            k_argv[i] = str_ptr;
+            str_ptr += len;
+        }
+        k_argv[argc] = NULL;
+    }
+
+    free_page_directory(proc->root_page_table);
     proc->root_page_table = new_page_dir;
     switch_page_directory(proc->root_page_table);
 
-    elf_header_t* elf = load_elf(proc->fds[fd]);
+    vfs_file_t *file = proc->fds[fd];
+    elf_header_t* elf = load_elf(file);
+    file->file_ops->close(file);
     if (!elf) {
         printf("Failed to load ELF file\n");
+        if (k_argv) kfree(k_argv);
+        if (k_strings) kfree(k_strings);
         return -1;
     }
 
-    proc->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
-    map_memory(proc->root_page_table, proc->stack, 0, PROCESS_STACK_SIZE, 0x7);
+    setup_stack(proc);
+    uint32_t *stack = (uint32_t *)(USER_STACK_BASE);
+    stack = (uint32_t *)((uint32_t)stack & ~0xF);
+    char *stack_strings = (char *)(stack - total_len);
+    char **stack_argv = (char **)(stack_strings - (sizeof(char *) * (argc + 1)));
+
+    // Copy strings onto the stack
+    char *str_ptr = stack_strings;
+    for (int i = 0; i < argc; i++) {
+        size_t len = strlen(k_argv[i]) + 1;
+        memcpy(str_ptr, k_argv[i], len);
+        stack_argv[i] = str_ptr;
+        str_ptr += len;
+    }
+    stack_argv[argc] = NULL;
+
+    // Free kernel buffer after copying
+    kfree(k_argv);
+    kfree(k_strings);
+
+    stack = (uint32_t *)stack_argv;
+    *--stack = (uint32_t)stack_argv;
+    *--stack = argc;
+    *--stack = (uint32_t)user_exit;
 
     proc->fds[0] = vfs_get_file(0);
     proc->fds[1] = vfs_get_file(1);
     proc->fds[2] = vfs_get_file(2);
-
-    uint32_t *stack = USER_STACK_BASE - 12;
-    *--stack = 0; // Return value
-    *--stack = (uint32_t)user_sys_exit;
 
     proc->status = READY;
     strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
 
     memset(&proc->context, 0, sizeof(registers_t));
     proc->context.eip = elf->entry;
-    proc->context.esp = stack; // offset by 4 bytes for first push
+    proc->context.esp = (uint32_t)stack;
     proc->context.ebp = proc->context.esp;
     proc->context.cs = USER_CS;
     proc->context.ds = USER_DS;

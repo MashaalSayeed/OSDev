@@ -17,7 +17,7 @@ CORE_SRC=$(wildcard core/*.c)
 LIB_SRC=$(wildcard lib/*.c)
 LIB_OBJS=$(LIB_SRC:%.c=$(USER_BUILD_DIR)/%.o) $(BUILD_DIR)/libc/libc.a
 
-PROGS = shell hello
+PROGS = shell hello editor
 PROG_OBJS = $(patsubst %, $(CORE_BUILD_DIR)/%.o, $(PROGS))
 PROG_BINS = $(patsubst %, $(BIN_DIR)/%, $(PROGS))
 

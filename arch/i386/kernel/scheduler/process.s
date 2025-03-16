@@ -31,3 +31,9 @@ global read_eip
 read_eip:
 	pop eax
 	jmp eax
+
+global user_exit
+user_exit:
+    mov ebx, eax
+    mov eax, 5
+    int 0x80

@@ -71,10 +71,13 @@ void kfree(void *ptr) {
 
 void print_kheap() {
     kheap_block_t *cur_block = free_list;
+    uint32_t total_free = 0;
     while (cur_block) {
         printf("Free Blocks: %x, Size: %x\n", cur_block, cur_block->size);
+        total_free += cur_block->size;
         cur_block = cur_block->next;
     }
+    printf("Total Free: %x\n", total_free);
 }
 
 void *calloc(size_t num, size_t size) {

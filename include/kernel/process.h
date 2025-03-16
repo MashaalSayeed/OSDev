@@ -57,4 +57,4 @@ process_t* get_current_process();
 process_t* get_process(size_t pid);
 void *sbrk(process_t *proc, int incr);
 int fork();
-int exec(char *path);
+int exec(const char *path, char **args);

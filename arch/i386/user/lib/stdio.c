@@ -1,5 +1,6 @@
 #include "user/syscall.h"
 #include "libc/stdio.h"
+#include "libc/string.h"
 #include <stdarg.h>
 
 int printf(const char *format, ...) {
@@ -10,11 +11,20 @@ int printf(const char *format, ...) {
     int count = vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
-    return syscall_write(1, buffer, count);
+    if (count > 0) return syscall_write(1, buffer, count);
+    return -1;
 }
 
 int puts(const char *str) {
-    return syscall_write(1, str, 0);
+    if (!str) return -1;
+
+    size_t len = strlen(str);
+    if (syscall_write(1, str, len) < 0) return -1;
+
+    char newline = '\n';
+    if (syscall_write(1, &newline, 1) < 0) return -1;
+
+    return len + 1;
 }
 
 int fgets(char *buffer, int n, int fd) {

@@ -8,6 +8,7 @@
 #include "kernel/hashtable.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
+#include "kernel/string.h"
 #include <drivers/keyboard.h>
 #include <drivers/tty.h>
 
@@ -163,6 +164,18 @@ int split_path(const char* path, char** dirname, char** filename) {
     return 0;
 }
 
+// currently just supports single mount "/"
+static vfs_mount_t * find_mount(const char *path) {
+    vfs_mount_t * mount = vfs_mount_list;
+    while (mount) {
+        size_t mount_path_len = strlen(mount->path);
+        if (strncmp(path, mount->path, mount_path_len) == 0) return mount;
+        mount = mount->next;
+    }
+
+    return NULL;
+}
+
 int vfs_mount(const char *path, vfs_superblock_t *sb) {
     // Check if the mount path already exists
     if (find_mount(path)) {
@@ -208,18 +221,6 @@ int vfs_unmount(const char *path) {
     return -1;
 }
 
-// currently just supports single mount "/"
-static vfs_mount_t * find_mount(const char *path) {
-    vfs_mount_t * mount = vfs_mount_list;
-    while (mount) {
-        size_t mount_path_len = strlen(mount->path);
-        if (strncmp(path, mount->path, mount_path_len) == 0) return mount;
-        mount = mount->next;
-    }
-
-    return NULL;
-}
-
 static vfs_inode_t * resolve_path(const char *path, vfs_mount_t **mount_out) {
     if (path[0] != '/') {
         printf("Error: Path must start with '/'. Got: %s\n", path);
@@ -241,13 +242,14 @@ static vfs_inode_t * resolve_path(const char *path, vfs_mount_t **mount_out) {
     char *path_copy = strdup(path);
     char *token = strtok(path_copy, "/");
     while (token) {
-        // printf("Current: %x | Token: %s\n", current_inode, token);
-        current_inode = current_inode->inode_ops->lookup(current_inode, token);
+        vfs_inode_t *next_inode = current_inode->inode_ops->lookup(current_inode, token);
         if (!current_inode) {
             kfree(path_copy);
             return NULL;
         }
 
+        current_inode->inode_ops->close(current_inode);
+        current_inode = next_inode;
         token = strtok(NULL, "/");
     }
 
@@ -312,15 +314,14 @@ int vfs_open(const char *path, int flags) {
 }
 
 int vfs_close(vfs_file_t *file) {
+    if (!file) return -1;
     process_t *proc = get_current_process();
     proc->fds[file->fd] = NULL;
 
     if (--file->ref_count > 0) return 0;
 
     if (file->inode && file->inode->inode_ops->close) {
-        // Don't allow closing the root directory
-        if (file->inode == file->inode->superblock->root) return -1;
-        file->inode->inode_ops->close(file);
+        file->inode->inode_ops->close(file->inode);
     }
 
     kfree(file);
@@ -569,11 +570,13 @@ void fat32_init() {
         return;
     }
 
+    int fd;
     if (vfs_create("/home", VFS_MODE_DIR) != 0) {
         printf("Failed to create directory: /home\n");
-        return;
+        // return;
     }
 
+    // printf("fd: %d, file: %x\n", fd, vfs_get_file(fd));
     // if (vfs_create("/tmp", VFS_MODE_DIR) != 0) {
     //     printf("Failed to create directory: /tmp\n");
     //     return;

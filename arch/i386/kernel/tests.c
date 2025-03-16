@@ -70,18 +70,6 @@ static void do_syscall(int syscall_number, int arg1, int arg2, int arg3) {
 	);
 }
 
-static int ufork() {
-	int pid;
-	asm volatile (
-		"int $0x80"
-		: "=a" (pid)
-		: "a" (7)
-		: "memory"
-	);
-	uprintf("Forked process with PID: %d\n", pid);
-	return pid;
-}
-
 static int getpid() {
 	int pid;
 	asm volatile (
@@ -121,7 +109,8 @@ void fork_proc() {
 	int my_pid = getpid();
     uprintf("[PID %d] Starting test_fork()\n", my_pid);
 
-	int pid = ufork();
+	int pid;
+	asm volatile ("int $0x80" : "=a" (pid) : "a" (7) : "memory"); // fork
 	if (pid == 0) {
 		my_pid = getpid();
         uprintf("[PID %d] Hello from child process!\n", my_pid);

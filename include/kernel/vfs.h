@@ -51,9 +51,10 @@ struct vfs_inode_operations {
     vfs_inode_t* (*lookup)(vfs_inode_t* dir, const char* name);
     int (*create)(vfs_inode_t* dir, const char* name, uint32_t mode);
     int (*unlink)(vfs_inode_t* dir, const char* name);  // Remove a file
+    int (*close)(vfs_inode_t* inode);
+
     uint32_t (*write)(vfs_file_t* file, const void* buf, size_t count);
     uint32_t (*read)(vfs_file_t* file, void* buf, size_t count);
-    int (*close)(vfs_file_t* file);
     
     int (*mkdir)(vfs_inode_t* dir, const char* name, uint32_t mode);
     int (*rmdir)(vfs_inode_t* dir, const char* name);
@@ -97,9 +98,6 @@ vfs_file_t *vfs_get_file(int fd);
 block_device_t *get_block_device(const char *path);
 
 int vfs_relative_path(const char *cwd, const char *path, char *resolved_path);
-
-static vfs_mount_t *find_mount(const char *path);
-static vfs_inode_t *resolve_path(const char *path, vfs_mount_t **mount);
 
 int vfs_mount(const char *path, vfs_superblock_t *sb);
 int vfs_unmount(const char *path);

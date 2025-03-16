@@ -20,14 +20,11 @@ elf_header_t* load_elf(vfs_file_t* file) {
 
     if (file->file_ops->read(file, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {
         printf("Error: Failed to read ELF header\n");
-        // file->file_ops->close(file);
-        file->file_ops->close(file);
         return NULL;
     }
 
     if (!is_valid_elf(header)) {
         printf("Error: Invalid ELF file\n");
-        file->file_ops->close(file);
         return NULL;
     }
 
@@ -38,7 +35,6 @@ elf_header_t* load_elf(vfs_file_t* file) {
         file->file_ops->seek(file, header->ph_offset + i * sizeof(elf_program_header_t), VFS_SEEK_SET);
         if (file->file_ops->read(file, &ph, sizeof(elf_program_header_t)) != sizeof(elf_program_header_t)) {
             printf("Error: Failed to read program header\n");
-            file->file_ops->close(file);
             return NULL;
         }
 
@@ -49,15 +45,12 @@ elf_header_t* load_elf(vfs_file_t* file) {
         file->file_ops->seek(file, ph.offset, VFS_SEEK_SET);
         if (file->file_ops->read(file, buf, ph.file_size) != ph.file_size) {
             printf("Error: Failed to read program header\n");
-            kfree(buf);
-            file->file_ops->close(file);
             return NULL;
         }
 
         memset((uint8_t*)(buf + ph.file_size), 0, ph.mem_size - ph.file_size);
     }
 
-    file->file_ops->close(file);
     return header;
 }
 

@@ -27,7 +27,7 @@ int sys_read(int fd, void *buffer, size_t size) {
     vfs_file_t* file = proc->fds[fd];
     if (!file) return -1;
     
-    return file->file_ops->read(file, buffer, size); // Call proper VFS read
+    return file->file_ops->read(file, buffer, size);
 }
 
 int sys_open(const char *path, int flags) {
@@ -125,8 +125,8 @@ int sys_fork(registers_t *regs) {
     return ret;
 }
 
-int sys_exec(const char *path) {
-    return exec(path);
+int sys_exec(const char *path, char **args) {
+    return exec(path, args);
 }
 
 int sys_mkdir(const char *path, int mode) {
@@ -187,9 +187,6 @@ void syscall_handler(registers_t *regs) {
     if (regs->eax < sizeof(syscall_table) / sizeof(syscall_table[0]) &&
         syscall_table[regs->eax] != NULL) {
         regs->eax = syscall_table[regs->eax](regs->ebx, regs->ecx, regs->edx);
-    } else if(regs->eax == SYSCALL_YIELD) {
-        // printf("eip: %x, esp: %x, ebp: %x\n", regs->eip, regs->esp, regs->ebp);
-        schedule(NULL);
     } else {
         printf("Unknown syscall: %d\n", regs->eax);
         regs->eax = -1;
