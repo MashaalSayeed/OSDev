@@ -26,6 +26,7 @@
 framebuffer_t* framebuffer;
 bool is_gui_enabled = false;
 elf_t kernel_elf;
+extern page_directory_t* kpage_dir;
 
 static void multiboot2_init(struct multiboot_tag* mbd) {
 	struct multiboot_tag* tag = mbd;
@@ -84,6 +85,8 @@ void print_time() {
 	printf("Current Time: %02d:%02d:%02d %02d/%02d/%02d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
 }
 
+
+
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
 	gdt_install();
@@ -106,7 +109,6 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	multiboot2_init(mbd);
 
-	printf("\n");
 	init_keyboard();
 
 	// Allocate 1096MB of memory
@@ -116,21 +118,27 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	paging_init();
 	kheap_init();
-
 	printf("Initialized Paging!!\n\n");
+
 	
 	pci_init();
 	ata_init();
 	// acpi_init();
 	printf("\n");
 
-	kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
-	kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
-	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
+	// kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
+	// kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
+	// kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
+	// kmap_memory(SYMTAB_VIRT_ADDR, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
+	// kmap_memory(STRTAB_VIRT_ADDR, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
+	// kernel_elf.symtab = (elf_symbol_t *)SYMTAB_VIRT_ADDR;
+	// kernel_elf.strtab = (const char *)STRTAB_VIRT_ADDR;
+
 	log_to_serial("Hello, Serial World 1!\n");
 
 
 	if (is_gui_enabled) {
+		// kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
 		psf_font_t *font = load_psf_font();
 		fill_screen(0x000000);
 		// draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
@@ -151,7 +159,16 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// load_user_program();
 	// test_scheduler();
 	// test_fork();
+	// test_fork();
+	// print_process_list();
+
+	// test_heap();
 	exec("/BIN/SHELL", NULL);
 
-	for (;;) ;
+	// exec("/BIN/HELLO", NULL);
+
+
+	for (;;) {
+		asm volatile("hlt");
+	}
 }

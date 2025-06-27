@@ -65,9 +65,16 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
         return NULL;
     }
 
+    memset(proc, 0, sizeof(process_t));
     proc->pid = allocate_pid();
     strncpy(proc->process_name, process_name, PROCESS_NAME_MAX_LEN);
+
     proc->root_page_table = clone_page_directory(kpage_dir);
+    if (!proc->root_page_table) {
+        printf("Error: Failed to create page directory for process %s\n", process_name);
+        kfree(proc);
+        return NULL;
+    }
 
     setup_stack(proc);
 
@@ -164,13 +171,26 @@ int fork() {
     strncpy(child->cwd, parent->cwd, sizeof(parent->cwd));
 
     // Copy page directory
+
     child->root_page_table = clone_page_directory(parent->root_page_table);
-    child->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
-    memcpy(child->stack, parent->stack, PROCESS_STACK_SIZE);
+    switch_page_directory(parent->root_page_table);
+    child->stack = parent->stack;
 
     // Copy process context
     memcpy(&child->context, &parent->context, sizeof(registers_t));
     child->context.eax = 0; // Return value for child process
+
+    // Copy file descriptors
+    for (int i = 0; i < MAX_OPEN_FILES; i++) {
+        if (parent->fds[i]) {
+            child->fds[i] = vfs_get_file(parent->fds[i]->fd); // TODO: Check if this is correct
+            if (child->fds[i]) {
+                child->fds[i]->ref_count++;
+            }
+        } else {
+            child->fds[i] = NULL;
+        }
+    }
 
     uint32_t esp_offset = parent->context.esp - (uint32_t)parent->stack;
     uint32_t ebp_offset = parent->context.ebp - (uint32_t)parent->stack;
@@ -188,9 +208,15 @@ int exec(const char *path, char **argv) {
         printf("Failed to load ELF file\n");
         return -1;
     }
-
+    
     // Create new address space
     page_directory_t* new_page_dir = clone_page_directory(kpage_dir);
+    switch_page_directory(proc->root_page_table);
+    if (!new_page_dir) {
+        printf("Failed to create new page directory\n");
+        return -1;
+    }
+
     int argc = 0;
     size_t total_len = 0;
     if (argv) {
@@ -216,17 +242,19 @@ int exec(const char *path, char **argv) {
         k_argv[argc] = NULL;
     }
 
+    strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
+    proc->process_name[PROCESS_NAME_MAX_LEN - 1] = '\0'; // Ensure null termination
+
+    switch_page_directory(new_page_dir);
     free_page_directory(proc->root_page_table);
     proc->root_page_table = new_page_dir;
-    switch_page_directory(proc->root_page_table);
 
-    vfs_file_t *file = proc->fds[fd];
-    elf_header_t* elf = load_elf(file);
-    file->file_ops->close(file);
+    vfs_file_t* file = proc->fds[fd];
+    elf_header_t* elf = load_elf(file, new_page_dir);
     if (!elf) {
         printf("Failed to load ELF file\n");
-        if (k_argv) kfree(k_argv);
-        if (k_strings) kfree(k_strings);
+        kfree(k_argv);
+        kfree(k_strings);
         return -1;
     }
 
@@ -260,7 +288,6 @@ int exec(const char *path, char **argv) {
     proc->fds[2] = vfs_get_file(2);
 
     proc->status = READY;
-    strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
 
     memset(&proc->context, 0, sizeof(registers_t));
     proc->context.eip = elf->entry;
@@ -273,5 +300,7 @@ int exec(const char *path, char **argv) {
 
     kfree(elf);
     switch_context(&proc->context);
+
+    // Should not return here
     return -1;
 }

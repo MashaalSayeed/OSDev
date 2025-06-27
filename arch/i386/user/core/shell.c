@@ -146,6 +146,22 @@ void check_command() {
     printf("You entered: %s", buffer);
 }
 
+void test_command() {
+    printf("This is a test command.\n");
+    for (int i = 0; i < 14; i++) {
+        int pid = syscall_fork();
+        printf("[PID: %d] Forked child process\n", pid);
+        if (pid == 0) {
+            printf("[PID: %d] Child process executing...\n", pid);
+            syscall_exit(1); // Exit child process
+        } else {
+            int status;
+            syscall_waitpid(pid, &status, 0);
+            printf("[PID: %d] Child process exited with status %d\n", pid, status);
+        }
+    }
+}
+
 void help_command() {
     printf("Commands:\n");
     printf("    echo <text> - Print text\n");
@@ -181,6 +197,7 @@ command_t commands[] = {
     {"write", write_command},
     {"history", history_command},
     {"help", help_command},
+    {"test", test_command},
     {NULL, NULL}
 };
 
@@ -281,6 +298,7 @@ void execute_command(char **args) {
         syscall_close(output_fd);
     }
 
+    // Check for built-in commands
     for (int i = 0; commands[i].name != NULL; i++) {
         if (strcmp(args[0], commands[i].name) == 0) {
             commands[i].func(args);

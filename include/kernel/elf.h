@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "kernel/vfs.h"
 #include "multiboot.h"
+#include "kernel/paging.h"
 
 #define ELF_MAGIC 0x464C457F
 
@@ -20,6 +21,9 @@
 
 #define ELF32_ST_BIND(i) ((i) >> 4)
 #define ELF32_ST_TYPE(i) ((i) & 0xF)
+
+#define SYMTAB_VIRT_ADDR 0xC1000000
+#define STRTAB_VIRT_ADDR 0xC2000000
 
 typedef struct {
     uint32_t magic;
@@ -80,6 +84,6 @@ typedef struct {
 } elf_t;
 
 int is_valid_elf(elf_header_t *header);
-elf_header_t* load_elf(vfs_file_t *file);
+elf_header_t* load_elf(vfs_file_t *file, page_directory_t *page_dir);
 elf_t elf_from_multiboot(struct multiboot_tag_elf_sections *elf_sec);
 const char *elf_lookup_symbol(uint32_t addr, elf_t *elf);

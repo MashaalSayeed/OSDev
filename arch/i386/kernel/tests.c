@@ -17,8 +17,9 @@ void test_divide_by_zero() {
 }
 
 void test_heap() {
-	uint8_t* ptr1 = (uint8_t *)kmalloc(0x20);
-	uint8_t* ptr2 = (uint8_t *)kmalloc(0x20);
+	print_kheap();
+	uint8_t* ptr1 = (uint8_t *)kmalloc(0x8);
+	uint8_t* ptr2 = (uint8_t *)kmalloc(0x8);
 
 	printf("Allocated memory at %x\n", ptr1);
 	printf("Allocated memory at %x\n", ptr2);
@@ -29,9 +30,9 @@ void test_heap() {
 	ptr2 = kmalloc(0x20);
 	printf("Allocated memory at %x\n\n", ptr2);
 
-	print_kheap();
 	kfree(ptr1);
 	kfree(ptr2);
+	print_kheap();
 }
 
 void test_printf() {

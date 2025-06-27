@@ -5,7 +5,6 @@
 #include "libc/string.h"
 #include "kernel/printf.h"
 #include "kernel/multiboot.h"
-#include "kernel/process.h"
 
 extern int paging_enabled;
 
@@ -14,8 +13,7 @@ int is_valid_elf(elf_header_t *header) {
     return 1;
 }
 
-elf_header_t* load_elf(vfs_file_t* file) {
-    process_t *proc = get_current_process();
+elf_header_t* load_elf(vfs_file_t* file, page_directory_t *page_dir) {
     elf_header_t * header = kmalloc(sizeof(elf_header_t));
 
     if (file->file_ops->read(file, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {
@@ -39,7 +37,7 @@ elf_header_t* load_elf(vfs_file_t* file) {
         }
 
         if (ph.type != PT_LOAD) continue;
-        map_memory(proc->root_page_table, ph.vaddr, 0, ph.mem_size, 0x7);
+        map_memory(page_dir, ph.vaddr, 0, ph.mem_size, 0x7);
         void *buf = (void *)ph.vaddr;
 
         file->file_ops->seek(file, ph.offset, VFS_SEEK_SET);

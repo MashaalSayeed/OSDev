@@ -97,9 +97,10 @@ Thank me later 😊
 ### 7. Shell
 
 1. Basic Commands Handling ✅
-2. Movement with arrow keys 🟡
-3. Piping and Redirection 🟡
-4. Text Editor
+2. Load and Execute ELFs ✅
+3. Movement with arrow keys 🟡
+4. Piping and Redirection 🟡
+5. Text Editor
 
 ### 8. Others
 
@@ -120,5 +121,5 @@ Thank me later 😊
 
 ## Known Issues
 
-1. Cannot run a binary executable more than 5 times
-2. write command not writing properly?
+1. `waitpid()` systemcall doesnt return the exit code - No way to reschedule the syscall and get the exit status
+2. Fix memory leaks all over the codebaseå

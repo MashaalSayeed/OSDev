@@ -306,7 +306,6 @@ int vfs_open(const char *path, int flags) {
     file->flags = flags;
     file->ref_count = 1;
 
-
     file->file_ops = &vfs_default_file_ops;
 
     proc->fds[fd] = file;
@@ -390,6 +389,7 @@ uint32_t vfs_read(vfs_file_t *file, void* buf, size_t count) {
     //     return -1;
     // }
 
+    memset(buf, 0, count);
     return file->inode->inode_ops->read(file, buf, count);
 }
 

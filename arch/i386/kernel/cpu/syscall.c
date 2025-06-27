@@ -6,6 +6,7 @@
 #include <user/dirent.h>
 #include <kernel/process.h>
 #include "libc/string.h"
+#include "kernel/kheap.h"
 
 extern uint32_t read_eip();
 

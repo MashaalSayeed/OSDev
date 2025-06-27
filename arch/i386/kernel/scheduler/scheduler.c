@@ -48,7 +48,7 @@ void schedule(registers_t* context) {
     if (next_process != current_process || next_process->status == READY) {
         current_process = next_process;
         current_process->status = RUNNING;
-        
+
         // Restore context and switch page directory
         switch_page_directory(current_process->root_page_table);
         switch_context(&current_process->context);

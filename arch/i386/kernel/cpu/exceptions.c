@@ -19,6 +19,7 @@ void print_debug_info(registers_t *regs) {
     printf("  EFLAGS: %x\n", regs->eflags);
     printf("  ESP: %x\n", regs->esp);
     printf("  SS: %x\n", regs->ss);
+    printf("  EAX: %x\n", regs->eax);
 }
 
 void print_stack_trace(registers_t *regs) {
@@ -76,8 +77,16 @@ static void double_fault_handler(registers_t *regs) {
     panic();
 }
 
+static void triple_fault_handler(registers_t *regs) {
+    printf("\nError: Triple Fault\n");
+    print_debug_info(regs);
+    print_stack_trace(regs);
+    panic();
+}
+
 void exceptions_install() {
     register_interrupt_handler(0, &divide_by_zero_handler);
     register_interrupt_handler(8, &double_fault_handler);
     register_interrupt_handler(13, &gpf_handler);
+    register_interrupt_handler(30, &triple_fault_handler); // Triple fault handler
 }

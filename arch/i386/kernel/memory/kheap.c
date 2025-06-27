@@ -2,6 +2,8 @@
 #include "kernel/printf.h"
 #include "kernel/process.h"
 
+#define MIN_BLOCK_SIZE (sizeof(kheap_block_t) + KHEAP_ALIGNMENT)
+
 uint8_t *kheap_start;
 uint8_t *kheap_end;
 uint8_t *kheap_curr;
@@ -9,14 +11,19 @@ uint8_t *kheap_curr;
 static kheap_block_t *free_list;
 
 void *kmalloc(size_t size) {
-    size = align(size);
+    if (size < KHEAP_ALIGNMENT) {
+        size = KHEAP_ALIGNMENT;
+    }
+
+    size = ALIGN_UP(size, KHEAP_ALIGNMENT);
+
     kheap_block_t *cur_block = free_list;
     kheap_block_t *prev_block = NULL;
 
     while (cur_block) {
         if (cur_block->size >= size) {
-            if (cur_block->size > size + sizeof(kheap_block_t)) {
-                // Split block: create a new free block
+            if (cur_block->size >= size + MIN_BLOCK_SIZE) {
+                // Split only if the remaining part is big enough for another block
                 kheap_block_t *new_block = (kheap_block_t *)((uint8_t *)cur_block + sizeof(kheap_block_t) + size);
                 new_block->size = cur_block->size - size - sizeof(kheap_block_t);
                 new_block->next = cur_block->next;
@@ -29,7 +36,7 @@ void *kmalloc(size_t size) {
                     free_list = new_block;
                 }
             } else {
-                // Remove the block from free list
+                // Use the whole block
                 if (prev_block) {
                     prev_block->next = cur_block->next;
                 } else {
@@ -51,21 +58,54 @@ void kfree(void *ptr) {
     if (!ptr) return;
 
     kheap_block_t *block = (kheap_block_t *)((uint8_t *)ptr - sizeof(kheap_block_t));
-    block->next = free_list;
-    free_list = block;
 
-
-    // Coalesce free blocks
+    // Insert back into the free list in sorted order
     kheap_block_t *cur_block = free_list;
-    while (cur_block) {
+    kheap_block_t *prev_block = NULL;
+
+    while (cur_block && cur_block < block) {
+        prev_block = cur_block;
+        cur_block = cur_block->next;
+    }
+
+    block->next = cur_block;
+    if (prev_block) {
+        prev_block->next = block;
+    } else {
+        free_list = block;
+    }
+
+    // Coalesce adjacent blocks
+    cur_block = free_list;
+    while (cur_block && cur_block->next) {
         kheap_block_t *next_block = cur_block->next;
 
         if ((uint8_t *)cur_block + cur_block->size + sizeof(kheap_block_t) == (uint8_t *)next_block) {
+            // Combine adjacent blocks
             cur_block->size += next_block->size + sizeof(kheap_block_t);
             cur_block->next = next_block->next;
         } else {
             cur_block = next_block;
         }
+    }
+}
+
+void *kmalloc_aligned(size_t size, size_t align) {
+    uintptr_t raw_mem = (uintptr_t)kmalloc(size + align - 1 + sizeof(void*));
+    if (!raw_mem) return NULL;
+
+    // Store the original pointer just before the aligned pointer
+    uintptr_t aligned = ALIGN_UP(raw_mem + sizeof(void*), align);
+    ((void**)aligned)[-1] = (void*)raw_mem;
+
+    return (void*)aligned;
+}
+
+void kfree_aligned(void *ptr) {
+    if (ptr) {
+        // Get the original pointer from just before the aligned pointer
+        void *raw_ptr = ((void**)ptr)[-1];
+        kfree(raw_ptr);
     }
 }
 

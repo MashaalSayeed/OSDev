@@ -4,6 +4,7 @@
 #include "kernel/isr.h"
 
 #define PAGE_SIZE       0x1000
+#define PAGE_ENTRIES     1024
 #define USER_HEAP_START 0x400000
 
 #define PAGE_PRESENT     0x1
@@ -21,33 +22,33 @@
 #define PAGE_ALIGN(addr) ((uint32_t)(addr) & ~(PAGE_SIZE - 1))
 
 typedef struct page_directory_entry {
-    unsigned int present    : 1;
-    unsigned int rw         : 1;
-    unsigned int user       : 1;
-    unsigned int accessed   : 1;
-    unsigned int reserved   : 1;
-    unsigned int unused     : 7;
-    unsigned int frame      : 20;
-} page_directory_entry_t;
+    uint32_t present    : 1;
+    uint32_t rw         : 1;
+    uint32_t user       : 1;
+    uint32_t accessed   : 1;
+    uint32_t reserved   : 1;
+    uint32_t unused     : 7;
+    uint32_t frame      : 20;
+} __attribute__((packed)) page_directory_entry_t;
 
 typedef struct page_table_entry {
-    unsigned int present    : 1;
-    unsigned int rw         : 1;
-    unsigned int user       : 1;
-    unsigned int accessed   : 1;
-    unsigned int dirty      : 1;
-    unsigned int unused     : 7;
-    unsigned int frame      : 20;
+    uint32_t present    : 1;
+    uint32_t rw         : 1;
+    uint32_t user       : 1;
+    uint32_t accessed   : 1;
+    uint32_t dirty      : 1;
+    uint32_t unused     : 7;
+    uint32_t frame      : 20;
 } page_table_entry_t;
 
 typedef struct page_table {
     page_table_entry_t pages[1024];
-} page_table_t;
+} __attribute__((packed)) page_table_t;
 
 typedef struct page_directory {
     page_directory_entry_t tables[1024]; // Array of page directory entries
     page_table_t *ref_tables[1024];      // Array of pointers to the virtual address page tables
-} page_directory_t;
+} __attribute__((packed)) page_directory_t;
 
 
 extern page_directory_t * initial_page_dir;
@@ -58,8 +59,8 @@ void switch_page_directory(page_directory_t *dir);
 void enable_paging();
 
 page_table_entry_t * get_page(uint32_t virtual, int make, page_directory_t *dir);
-void alloc_page(page_directory_entry_t *page, uint32_t flags);
-void free_page(page_directory_entry_t *page);
+void alloc_page(page_table_entry_t *page, uint32_t flags);
+void free_page(page_table_entry_t *page);
 
 void * physical2virtual(page_directory_t *dir, void *physical);
 void * virtual2physical(page_directory_t *dir, void *virtual);

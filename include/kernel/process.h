@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include "kernel/vfs.h"
 #include "kernel/isr.h"
+#include "kernel/paging.h"
 
 #define PROCESS_NAME_MAX_LEN 32
 #define PATH_NAME_MAX_LEN 256
@@ -30,7 +31,7 @@ typedef struct process {
 
     struct process* parent;
     registers_t context;
-    void *root_page_table;
+    page_directory_t *root_page_table;
     void *stack;
 
     // int priority;
