@@ -21,6 +21,7 @@
 #include "libc/string.h"
 #include "drivers/pci.h"
 #include "drivers/ata.h"
+#include "drivers/mouse.h"
 #include "drivers/rtc.h"
 
 framebuffer_t* framebuffer;
@@ -85,6 +86,22 @@ void print_time() {
 	printf("Current Time: %02d:%02d:%02d %02d/%02d/%02d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
 }
 
+void test_gui() {
+	psf_font_t *font = load_psf_font();
+	// fill_screen(0x000000);
+	// draw_string_at("Hello, GUI World!", 0, 0, 0xFFFFFF, 0x000000);
+	// draw_rect(100, 100, 200, 200, 0xFFFFFF);
+	fill_screen(0x2E3440);
+	draw_rect(100, 100, 300, 200, 0xD8DEE9); // Light grey
+    draw_rect(100, 100, 300, 20, 0x5E81AC);  // Title bar
+
+    // Title
+    draw_string_at("Kernel GUI Test", 110, 102, 0xECEFF4, 0x5E81AC);
+
+    // Window content
+    draw_string_at("Welcome to your GUI!", 120, 140, 0x2E3440, 0xD8DEE9);
+    draw_string_at("Rendering from kernel...", 120, 160, 0x2E3440, 0xD8DEE9);
+}
 
 
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
@@ -126,44 +143,26 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// acpi_init();
 	printf("\n");
 
-	// kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
-	// kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
-	// kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
-	// kmap_memory(SYMTAB_VIRT_ADDR, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
-	// kmap_memory(STRTAB_VIRT_ADDR, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
-	// kernel_elf.symtab = (elf_symbol_t *)SYMTAB_VIRT_ADDR;
-	// kernel_elf.strtab = (const char *)STRTAB_VIRT_ADDR;
 
-	log_to_serial("Hello, Serial World 1!\n");
+	// TODO: Load kernel ELF file at higher virtual address
+	kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
+	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 
 
 	if (is_gui_enabled) {
-		// kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
-		psf_font_t *font = load_psf_font();
-		fill_screen(0x000000);
-		// draw_image(image_data, 0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT);
-		// draw_string_at("Hello, GUI World!", 0, 0, 0xFFFFFF, 0x000000);
-		// put_pixel(100, 100, 0xFFFFFF);
-		draw_rect(100, 100, 200, 200, 0xFFFFFF);
+		kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
+		ps2_mouse_init();
+		test_gui();
 	} else {
 		printf("No GUI\n");
 	}
-
 
 	// find_rsdt();
 	scheduler_init();
 	init_timer(100);
 
 	vfs_init();
-	// test_printf();
-	// load_user_program();
-	// test_scheduler();
-	// test_fork();
-	// test_fork();
-	// print_process_list();
-
-	// test_heap();
-	exec("/BIN/SHELL", NULL);
+	// exec("/BIN/SHELL", NULL);
 
 	// exec("/BIN/HELLO", NULL);
 

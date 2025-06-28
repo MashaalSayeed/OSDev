@@ -5,6 +5,7 @@
 framebuffer_t fb;
 
 psf_font_t *current_font = NULL;
+extern uint16_t *unicode;
 
 framebuffer_t * init_framebuffer(uint32_t width, uint32_t height, uint32_t pitch, uint32_t bpp, uint32_t addr) {
     fb.width = width;
@@ -29,6 +30,23 @@ void fill_screen(uint32_t color) {
     }
 }
 
+// void draw_line(uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color) {
+//     int dx = x2 - x1;
+//     int dy = y2 - y1;
+//     int steps = (abs(dx) > abs(dy)) ? abs(dx) : abs(dy);
+//     float x_inc = dx / (float)steps;
+//     float y_inc = dy / (float)steps;
+
+//     float x = x1;
+//     float y = y1;
+
+//     for (int i = 0; i <= steps; i++) {
+//         put_pixel((uint32_t)x, (uint32_t)y, color);
+//         x += x_inc;
+//         y += y_inc;
+//     }
+// }
+
 void draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
     for (uint32_t i = 0; i < h; ++i) {
         for (uint32_t j = 0; j < w; ++j) {
@@ -51,7 +69,12 @@ int is_pixel_set(unsigned char *glyph, int x) {
 }
 
 void draw_char(char c, uint32_t cx, uint32_t cy, uint32_t fg, uint32_t bg) {
+    // uint16_t glyph_index = unicode[(uint8_t)c]; // safely look up translation
+    // if (glyph_index >= current_font->numglyph) return;
+    // c = glyph_index;
+    c -= 31;
     if ((uint32_t)c >= current_font->numglyph) return;
+
 
     int bytesperline = (current_font->width + 7) / 8;
     unsigned char *glyph = (unsigned char *)current_font + current_font->headersize + (c * current_font->bytesperglyph);

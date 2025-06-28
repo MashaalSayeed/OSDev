@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <syscall.h>
+#include <common/syscall.h>
 
 #define O_RDONLY 0
 #define O_WRONLY 1

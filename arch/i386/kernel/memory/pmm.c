@@ -2,7 +2,7 @@
 #include "kernel/multiboot.h"
 #include "libc/string.h"
 #include "kernel/printf.h"
-#include "system.h"
+#include "kernel/system.h"
 #include <stdbool.h>
  
 uint8_t *bitmap = (uint8_t *)(& _kernel_end);

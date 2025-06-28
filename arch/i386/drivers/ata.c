@@ -5,7 +5,7 @@
 #include "kernel/kheap.h"
 #include "kernel/printf.h"
 #include "libc/string.h"
-#include "io.h"
+#include "kernel/io.h"
 
 #define ATA_TIMEOUT 1000000
 

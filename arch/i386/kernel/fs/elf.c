@@ -74,13 +74,19 @@ elf_t elf_from_multiboot(struct multiboot_tag_elf_sections * elf_sec) {
 
 const char *elf_lookup_symbol(uint32_t addr, elf_t *elf) {
     if (!paging_enabled || !elf) return NULL;
-    for (int i = 0; i < (elf->symtabsz / sizeof(elf_symbol_t)); i++) {
-        if (ELF32_ST_TYPE(elf->symtab[i].info) != 0x2) {
+
+    // elf_symbol_t *symtab = (elf_symbol_t *)SYMTAB_VIRT_ADDR;
+    // const char *strtab = (const char *)STRTAB_VIRT_ADDR;
+    elf_symbol_t *symtab = elf->symtab;
+    const char *strtab = elf->strtab;
+
+    for (size_t i = 0; i < (elf->symtabsz / sizeof(elf_symbol_t)); i++) {
+        if (ELF32_ST_TYPE(symtab[i].info) != 0x2) {
             continue;
         }
 
-        if ((addr >= elf->symtab[i].value) && (addr < (elf->symtab[i].value + elf->symtab[i].size))) {
-            return (const char *)((uint32_t)elf->strtab + elf->symtab[i].name);
+        if ((addr >= symtab[i].value) && (addr < (symtab[i].value + symtab[i].size))) {
+            return (const char *)((uint32_t)strtab + symtab[i].name);
         }
     }
 

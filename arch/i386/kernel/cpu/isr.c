@@ -7,7 +7,7 @@
 #include "libc/string.h"
 #include "kernel/process.h"
 #include "kernel/syscall.h"
-#include "io.h"
+#include "kernel/io.h"
 
 static idt_entry_t idt[256];
 idt_ptr_t idtp;

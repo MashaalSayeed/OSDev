@@ -1,5 +1,5 @@
 #include "drivers/rtc.h"
-#include "io.h"
+#include "kernel/io.h"
 
 uint8_t rtc_read(uint8_t reg) {
     outb(CMOS_ADDRESS, reg);

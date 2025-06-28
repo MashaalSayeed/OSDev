@@ -3,8 +3,8 @@
 #include "drivers/serial.h"
 #include "libc/string.h"
 #include "kernel/isr.h"
-#include "io.h"
-#include "system.h"
+#include "kernel/io.h"
+#include "kernel/system.h"
 #include "kernel/printf.h"
 
 #define KEYBOARD_DATA_PORT 0x60

@@ -3,15 +3,24 @@
 #include "kernel/kheap.h"
 #include <limits.h>
 
-extern uint8_t *_binary_resources_fonts_ter_powerline_v32n_psf_start;
-extern uint8_t *_binary_resources_fonts_ter_powerline_v32n_psf_end;
+extern uint8_t *_binary_resources_fonts_font_psf_start;
+extern uint8_t *_binary_resources_fonts_font_psf_end;
 extern psf_font_t *current_font;
 
 uint16_t *unicode;
 
-psf_font_t *load_psf_font() {    
-    psf_font_t *font = (psf_font_t *)&_binary_resources_fonts_ter_powerline_v32n_psf_start;
+psf_font_t *load_psf_font() {
+    psf_font_t *font = (psf_font_t *)&_binary_resources_fonts_font_psf_start;
     current_font = font;
+
+    if (font->magic != 0x864AB572) {
+        printf("Error: Invalid PSF font magic number\n");
+        return NULL;
+    }
+    if (font->version != 0) {
+        printf("Error: Unsupported PSF font version %d\n", font->version);
+        return NULL;
+    }
 
     printf("Font Num Glyphs %d\n", font->numglyph);
     printf("Font Header Size: %d\n", font->headersize);
@@ -28,7 +37,7 @@ psf_font_t *load_psf_font() {
     unicode = calloc(USHRT_MAX, 2);
     uint16_t glyph = 0;
 
-    while(s < _binary_resources_fonts_ter_powerline_v32n_psf_end) {
+    while(s < _binary_resources_fonts_font_psf_end) {
         uint16_t uc = (uint16_t)(*(unsigned char *)s);
         if(uc == 0xFF) {
             glyph++;

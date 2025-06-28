@@ -35,7 +35,7 @@ LOG_FILE = serial_output.log
 KERNEL_SRC = $(shell find $(KERNEL_DIR) -name "*.c")
 DRIVER_SRC = $(shell find $(DRIVER_DIR) -name "*.c")
 ASM_SRC = $(shell find $(ARCH_DIR) -name "*.s")
-FONT_PSF = resources/fonts/ter-powerline-v32n.psf
+FONT_PSF = resources/fonts/font.psf
 
 # Object files
 KERNEL_OBJ = $(KERNEL_SRC:$(KERNEL_DIR)/%.c=$(BUILD_DIR)/kernel/%.o)

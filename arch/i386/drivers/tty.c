@@ -1,7 +1,7 @@
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "libc/string.h"
-#include "io.h"
+#include "kernel/io.h"
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;

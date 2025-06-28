@@ -2,7 +2,7 @@
 
 #include <kernel/isr.h>
 #include <stdint.h>
-#include <syscall.h>
+#include <common/syscall.h>
 
 typedef int (*syscall_t)(uint32_t, uint32_t, uint32_t);
 

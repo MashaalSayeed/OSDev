@@ -6,7 +6,7 @@
 #include "libc/stdio.h"
 #include "libc/string.h"
 #include "drivers/pit.h"
-#include "system.h"
+#include "kernel/system.h"
 #include <stdarg.h>
 
 void test_divide_by_zero() {
@@ -89,7 +89,6 @@ static void test_process() {
 		sleep(10);
 	}
 }
-
 
 static void shell() {
 	while (1) {

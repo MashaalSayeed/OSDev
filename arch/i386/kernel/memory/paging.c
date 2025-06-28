@@ -6,7 +6,7 @@
 #include "libc/string.h"
 #include "drivers/serial.h"
 #include "kernel/gdt.h"
-#include "system.h"
+#include "kernel/system.h"
 #include "kernel/process.h"
 #include "kernel/exceptions.h"
 
@@ -117,11 +117,6 @@ void alloc_page(page_table_entry_t *page, uint32_t flags) {
     }
 
     uint32_t frame = pmm_alloc_block();
-    if (!frame) {
-        printf("alloc_page: Out of memory\n");
-        return;
-    }
-
     page->frame = (uint32_t)frame;
     page->present = 1;
     page->rw = (flags & PAGE_RW) ? 1 : 0;
@@ -141,10 +136,10 @@ void free_page(page_table_entry_t *page) {
 void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags) {
     uint32_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE; // Round up to full pages
 
-    if (physical_start && !IS_ALIGN(physical_start)) {
-        // printf("Warning: physical_start is not page aligned, aligning it\n");
-        physical_start = PAGE_ALIGN(physical_start);
-    }
+    // if (physical_start && !IS_ALIGN(physical_start)) {
+    //     // printf("Warning: physical_start is not page aligned, aligning it\n");
+    //     physical_start = PAGE_ALIGN(physical_start);
+    // }
 
     for (uint32_t i = 0; i < num_pages; i++) {
         uint32_t virtual_addr = virtual_start + (i * PAGE_SIZE);
