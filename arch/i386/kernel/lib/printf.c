@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include "kernel/printf.h"
 #include "libc/stdio.h"
 #include "kernel/framebuffer.h"
 #include "drivers/tty.h"
@@ -27,6 +28,32 @@ int printf(const char *format, ...) {
     int ret = vsnprintf(buffer, sizeof(buffer), format, args);
     puts(buffer);
     va_end(args);
+    return ret;
+}
+
+int kprintf(log_level_t level, const char *format, ...) {
+    switch (level) {
+        case DEBUG:
+            terminal_setcolor(VGA_COLOR_LIGHT_BLUE, VGA_COLOR_BLACK);
+            break;
+        case INFO:
+            terminal_setcolor(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+            break;
+        case WARNING:
+            terminal_setcolor(VGA_COLOR_BROWN, VGA_COLOR_BLACK);
+            break;
+        case ERROR:
+            terminal_setcolor(VGA_COLOR_RED, VGA_COLOR_BLACK);
+            break;
+    }
+
+    va_list args;
+    va_start(args, format);
+    char buffer[1024];
+    int ret = vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    puts(buffer);
+    terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);  // Reset color
     return ret;
 }
 

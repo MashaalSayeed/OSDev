@@ -21,12 +21,12 @@
 #include "libc/string.h"
 #include "drivers/pci.h"
 #include "drivers/ata.h"
-#include "drivers/mouse.h"
 #include "drivers/rtc.h"
+#include "kernel/gui.h"
 
-framebuffer_t* framebuffer;
 bool is_gui_enabled = false;
 elf_t kernel_elf;
+framebuffer_t fb_data;
 extern page_directory_t* kpage_dir;
 
 static void multiboot2_init(struct multiboot_tag* mbd) {
@@ -45,7 +45,9 @@ static void multiboot2_init(struct multiboot_tag* mbd) {
 		}
 		else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
 			fb = (struct multiboot_tag_framebuffer*) tag;
-			framebuffer = init_framebuffer(fb->framebuffer_width, fb->framebuffer_height, fb->framebuffer_pitch, fb->framebuffer_bpp, fb->framebuffer_addr);
+			fb_data = framebuffer_from_multiboot(fb);
+
+			// framebuffer = init_framebuffer(fb->framebuffer_width, fb->framebuffer_height, fb->framebuffer_pitch, fb->framebuffer_bpp, fb->framebuffer_addr);
 			is_gui_enabled = fb->framebuffer_type == MULTIBOOT_FRAMEBUFFER_TYPE_RGB;
 		}
 		else if (tag->type == MULTIBOOT_TAG_TYPE_MMAP) {
@@ -83,24 +85,7 @@ static void multiboot2_init(struct multiboot_tag* mbd) {
 
 void print_time() {
 	rtc_time_t time = rtc_read_time();
-	printf("Current Time: %02d:%02d:%02d %02d/%02d/%02d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
-}
-
-void test_gui() {
-	psf_font_t *font = load_psf_font();
-	// fill_screen(0x000000);
-	// draw_string_at("Hello, GUI World!", 0, 0, 0xFFFFFF, 0x000000);
-	// draw_rect(100, 100, 200, 200, 0xFFFFFF);
-	fill_screen(0x2E3440);
-	draw_rect(100, 100, 300, 200, 0xD8DEE9); // Light grey
-    draw_rect(100, 100, 300, 20, 0x5E81AC);  // Title bar
-
-    // Title
-    draw_string_at("Kernel GUI Test", 110, 102, 0xECEFF4, 0x5E81AC);
-
-    // Window content
-    draw_string_at("Welcome to your GUI!", 120, 140, 0x2E3440, 0xD8DEE9);
-    draw_string_at("Rendering from kernel...", 120, 160, 0x2E3440, 0xD8DEE9);
+	kprintf(INFO, "Current Time: %02d:%02d:%02d %02d/%02d/%02d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
 }
 
 
@@ -114,13 +99,11 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	log_to_serial("Initialized Serial\n");
 
 	terminal_initialize();
-	printf("Initialized Terminal\n\n");
-	terminal_setcolor(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+	kprintf(DEBUG, "Initialized Terminal\n\n");
 	print_time();
-	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
-        printf("Invalid magic number: %x\n", magic);
+        kprintf(ERROR, "Invalid magic number: %x\n", magic);
         return;
     }
 
@@ -148,21 +131,23 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
 	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 
-
-	if (is_gui_enabled) {
-		kmap_memory(framebuffer->addr, framebuffer->addr, framebuffer->pitch * framebuffer->height, 0x7);
-		ps2_mouse_init();
-		test_gui();
-	} else {
-		printf("No GUI\n");
-	}
-
-	// find_rsdt();
-	scheduler_init();
 	init_timer(100);
 
+	if (is_gui_enabled) {
+		gui_init(&fb_data);
+		gui_loop();
+	} else {
+		kprintf(DEBUG, "No GUI\n");
+	}
+
+	scheduler_init();
+
 	vfs_init();
-	// exec("/BIN/SHELL", NULL);
+
+	// find_rsdt();
+
+	exec("/BIN/SHELL", NULL);
+	// test_string();
 
 	// exec("/BIN/HELLO", NULL);
 

@@ -95,3 +95,69 @@ int snprintf(char *buffer, size_t size, const char *format, ...) {
     va_end(args);
     return ret;
 }
+
+static const char* parse_int(const char *str, int *value) {
+    int val = 0, sign = 1;
+    while (*str == ' ' || *str == '\t') str++; // Skip whitespace
+    if (*str == '-') {
+        sign = -1;
+        str++;
+    } else if (*str == '+') {
+        str++;
+    }
+
+    if (*str < '0' || *str > '9') return NULL;
+
+    while (*str >= '0' && *str <= '9') {
+        val = val * 10 + (*str - '0');
+        str++;
+    }
+    
+    *value = val * sign;
+    return str;
+}
+
+int vsscanf(const char *str, const char *format, va_list args) {
+    int ret = 0;
+
+    while (*format) {
+        if (*format == '%') {
+            format++;
+            if (*format == 'd') {
+                int *val = va_arg(args, int*);
+                str = parse_int(str, val);
+                if (!str) break; // If parsing failed, exit
+
+                ret++;
+            } else if (*format == 's') {
+                char *out = va_arg(args, char*);
+                while (*str == ' ' || *str == '\t' || *str == '\n') str++;
+                while (*str && *str != ' ' && *str != '\t' && *str != '\n') {
+                    *out++ = *str++;
+                }
+
+                *out = '\0'; // Null-terminate the string
+                ret++;
+            }
+ 
+            format++; // Move past the format specifier
+        } else {
+            if (*str == *format) {
+                str++;
+                format++;
+            } else {
+                break;
+            }
+        }
+    }
+
+    return ret;
+}
+
+int sscanf(const char *str, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int ret = vsscanf(str, format, args);
+    va_end(args);
+    return ret;
+}

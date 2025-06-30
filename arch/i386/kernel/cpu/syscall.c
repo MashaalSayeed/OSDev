@@ -8,7 +8,16 @@
 #include "libc/string.h"
 #include "kernel/kheap.h"
 
-extern uint32_t read_eip();
+
+int sys_read(int fd, void *buffer, size_t size) {
+    if (!buffer) return -1;
+
+    process_t *proc = get_current_process();
+    vfs_file_t* file = proc->fds[fd];
+    if (!file) return -1;
+    
+    return file->file_ops->read(file, buffer, size);
+}
 
 int sys_write(int fd, const char *buffer, size_t size) {
     if (!buffer) return -1;
@@ -19,16 +28,6 @@ int sys_write(int fd, const char *buffer, size_t size) {
     if (fd != file->fd) printf("fd: %d, fd?: %d, buf: %s\n", fd, file->fd, buffer); // Debug Redirected FD
 
     return file->file_ops->write(file, buffer, size);
-}
-
-int sys_read(int fd, void *buffer, size_t size) {
-    if (!buffer) return -1;
-
-    process_t *proc = get_current_process();
-    vfs_file_t* file = proc->fds[fd];
-    if (!file) return -1;
-    
-    return file->file_ops->read(file, buffer, size);
 }
 
 int sys_open(const char *path, int flags) {
@@ -45,6 +44,14 @@ int sys_close(int fd) {
     vfs_file_t* file = proc->fds[fd];
     if (!file) return -1;
     return file->file_ops->close(file);
+}
+
+int sys_lseek(int fd, uint32_t offset, int whence) {
+    process_t *proc = get_current_process();
+    vfs_file_t* file = proc->fds[fd];
+    if (!file) return -1;
+
+    return file->file_ops->seek(file, offset, whence);
 }
 
 int sys_exit(int status) {
@@ -159,9 +166,17 @@ void *sys_sbrk(int incr) {
     return sbrk(proc, incr);
 }
 
+
+//////////////// MY SYSCALLS //////////////////////
+#include "drivers/tty.h"
+void sys_set_cursor(int x, int y) {
+    set_terminal_cursor(x, y);
+}
+
+
 syscall_t syscall_table[] = {
-    [SYSCALL_WRITE]    = (syscall_t)sys_write,
     [SYSCALL_READ]     = (syscall_t)sys_read,
+    [SYSCALL_WRITE]    = (syscall_t)sys_write,
     [SYSCALL_OPEN]     = (syscall_t)sys_open,
     [SYSCALL_CLOSE]    = (syscall_t)sys_close,
     [SYSCALL_EXIT]     = (syscall_t)sys_exit,

@@ -51,6 +51,8 @@ void *kmalloc(size_t size) {
         cur_block = cur_block->next;
     }
 
+    printf("kmalloc: Out of memory, requested size: %x\n", size);
+    print_kheap();
     return NULL; // Out of memory
 }
 

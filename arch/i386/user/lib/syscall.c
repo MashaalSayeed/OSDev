@@ -28,6 +28,10 @@ int syscall_close(int fd) {
     return syscall(SYSCALL_CLOSE, fd, 0, 0);
 }
 
+int syscall_lseek(int fd, uint32_t offset, int whence) {
+    return syscall(SYSCALL_LSEEK, fd, offset, whence);
+}
+
 void syscall_exit(int status) {
     syscall(SYSCALL_EXIT, status, 0, 0);
 }
@@ -49,9 +53,7 @@ int syscall_dup2(int oldfd, int newfd) {
 }
 
 int syscall_waitpid(int pid, int *status, int options) {
-    // return syscall(SYSCALL_WAITPID, pid, (int)status, options);
-    asm volatile("int $0x80" : : "a"(9), "b"(pid), "c"((int)status), "d"(options));
-    return 0;
+    return syscall(SYSCALL_WAITPID, pid, (int)status, options);
 }
 
 int syscall_getpid() {

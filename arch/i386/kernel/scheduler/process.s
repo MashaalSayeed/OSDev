@@ -35,5 +35,5 @@ read_eip:
 global user_exit
 user_exit:
     mov ebx, eax
-    mov eax, 5
+    mov eax, 60
     int 0x80

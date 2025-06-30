@@ -1,9 +1,18 @@
+#pragma once
+
+#include <stdint.h>
+#include <stdbool.h>
+
 typedef struct window {
-    int x; // X coordinate of the window
-    int y; // Y coordinate of the window
-    int width; // Width of the window
-    int height; // Height of the window
-    bool isVisible; // Visibility status of the window
+    int x, y;
+    int width, height;
+    const char * title;
+    uint32_t bg_color;
     bool focused;
-    char title[256]; // Title of the window
-} ;
+
+    struct window *next; // Pointer to the next window in the linked list
+} window_t;
+
+window_t *create_window(int x, int y, int width, int height, const char *title, uint32_t bg_color);
+void destroy_window(window_t *window);
+void draw_window(window_t *window);

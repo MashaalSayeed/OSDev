@@ -9,6 +9,8 @@
 #define USER_DS 0x23
 #define USER_SS 0x23
 
+#define IRQ_BASE 32
+
 typedef struct idt_entry {
     uint16_t base_low;
     uint16_t sel;

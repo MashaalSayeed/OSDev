@@ -299,7 +299,7 @@ void paging_init() {
     kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, 0x7);
 
     // Setup a guard page for the kernel stack
-    free_page(get_page((uint32_t) &stack_bottom + BLOCK_SIZE, 0, kpage_dir));
+    // free_page(get_page((uint32_t) &stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
     // Switch to the new page directory
     switch_page_directory(kpage_dir);

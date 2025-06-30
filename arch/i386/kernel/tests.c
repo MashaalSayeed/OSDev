@@ -7,6 +7,7 @@
 #include "libc/string.h"
 #include "drivers/pit.h"
 #include "kernel/system.h"
+#include "common/syscall.h"
 #include <stdarg.h>
 
 void test_divide_by_zero() {
@@ -40,6 +41,24 @@ void test_printf() {
 	printf("Number: %d\n", -42);
 	printf("Hex: %x\n", 0x1234);
 	printf("Binary: %b\n", 0b1010);
+}
+
+void test_string() {
+	char str1[20] = "Hello, ";
+	char str2[] = "world!";
+	strcat(str1, str2);
+	printf("Concatenated string: %s\n", str1);
+
+	char str3[20];
+	strcpy(str3, str1);
+	printf("Copied string: %s\n", str3);
+
+	int cmp_result = strcmp(str1, str3);
+	printf("String comparison result: %d\n", cmp_result);
+
+	int row, col;
+	sscanf("10;20", "%d;%d", &row, &col);
+	printf("Parsed values: row=%d, col=%d\n", row, col);
 }
 
 static void uprintf(const char* format, ...) {
@@ -94,7 +113,7 @@ static void shell() {
 	while (1) {
 		char buffer[80];
 		uprintf("%x> ", buffer);
-		do_syscall(2, 0, (int)buffer, 80); // fgets
+		do_syscall(SYSCALL_READ, 0, (int)buffer, 80); // fgets
 		uprintf("You entered: %s\n", buffer);
 
 		if (strcmp(buffer, "exit") == 0) {
@@ -102,7 +121,7 @@ static void shell() {
 		}
 	}
 
-	do_syscall(5, 0, 0, 0);
+	do_syscall(SYSCALL_EXIT, 0, 0, 0);
 }
 
 void fork_proc() {
@@ -123,7 +142,7 @@ void fork_proc() {
 	}
 
 	uprintf("[PID %d] Exiting test_fork()\n", my_pid);
-	do_syscall(5, 0, 0, 0);
+	do_syscall(SYSCALL_EXIT, 0, 0, 0);
 }
 
 void test_scheduler() {

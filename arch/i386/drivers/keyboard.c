@@ -68,8 +68,8 @@ const uint32_t keyboard_map_shift[128] = {
 };
 
 
-int shift_on;
-int caps_lock;
+static int shift_on, ctrl_on, alt_on;
+static int caps_lock;
 
 #define BUFFER_SIZE 256
 char keyboard_buffer[BUFFER_SIZE];
@@ -83,11 +83,17 @@ void keyboard_callback(registers_t *regs) {
         // Key released
         scancode &= 0x7F;
         if (scancode == 42 || scancode == 54) shift_on = 0;
+        if (scancode == 29 || scancode == 56) ctrl_on = 0;
         return;
     }
 
     if (scancode == 42 || scancode == 54) {
         shift_on = 1;
+        return;
+    }
+
+    if (scancode == 29 || scancode == 56) {
+        ctrl_on = 1;
         return;
     }
 
@@ -129,6 +135,10 @@ void keyboard_callback(registers_t *regs) {
             // if (scancode >= 128) return;
             char c = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
             if (c && c != UNKNOWN) {
+                if (ctrl_on && keyboard_map[scancode] >= 'a' && keyboard_map[scancode] <= 'z') {
+                    c = c & 0x1F; // Convert to control character
+                }
+
                 keyboard_buffer[buffer_end] = c;
                 if (buffer_end >= BUFFER_SIZE) {
                     buffer_end = 0;

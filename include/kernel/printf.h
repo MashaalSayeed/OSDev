@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+typedef enum { DEBUG, INFO, WARNING, ERROR } log_level_t;
+
 int printf(const char *format, ...);
 void puts(const char* str);
 void putchar(char c);

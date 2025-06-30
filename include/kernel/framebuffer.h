@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "kernel/font.h"
+#include "kernel/multiboot.h"
 
 typedef struct framebuffer {
     uint32_t width;
@@ -11,8 +12,15 @@ typedef struct framebuffer {
     uint32_t addr;
 } framebuffer_t;
 
-framebuffer_t * init_framebuffer(uint32_t width, uint32_t height, uint32_t pitch, uint32_t bpp, uint32_t addr);
+framebuffer_t framebuffer_from_multiboot(struct multiboot_tag_framebuffer *fb_tag);
+void init_framebuffer(framebuffer_t *fb_data);
+framebuffer_t * get_framebuffer();
+void update_framebuffer();
+
+
 void put_pixel(uint32_t x, uint32_t y, uint32_t color);
+uint32_t get_pixel(uint32_t x, uint32_t y);
+
 void fill_screen(uint32_t color);
 void draw_image(uint32_t *image_data, uint32_t x, uint32_t y, uint32_t image_width, uint32_t image_height);
 void draw_rect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t color);

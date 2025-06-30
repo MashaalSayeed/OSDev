@@ -1,6 +1,7 @@
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "libc/string.h"
+#include "libc/stdio.h"
 #include "kernel/io.h"
 
 static const size_t VGA_WIDTH = 80;
@@ -20,6 +21,22 @@ typedef enum {
 
 ansi_state_t ansi_state = STATE_NORMAL;
 
+void set_terminal_cursor(size_t row, size_t col) {
+    if (row < VGA_HEIGHT && col < VGA_WIDTH) {
+        terminal_row = row;
+        terminal_column = col;
+        update_cursor(terminal_row, terminal_column);
+    }
+}
+
+void terminal_initialize(void) 
+{
+	terminal_buffer = VGA_MEMORY;
+    
+	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+	terminal_clear();
+}
+
 void update_cursor(size_t row, size_t col) 
 {
     uint16_t pos = row * VGA_WIDTH + col;
@@ -27,16 +44,6 @@ void update_cursor(size_t row, size_t col)
     outb(0x3D5, (uint8_t) (pos & 0xFF));
     outb(0x3D4, 0x0E);
     outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
-}
-
-void terminal_initialize(void) 
-{
-	terminal_row = 0;
-	terminal_column = 0;
-	terminal_buffer = VGA_MEMORY;
-    
-	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-	terminal_clear();
 }
 
 void terminal_setcolor(enum vga_color fg, enum vga_color bg) 
@@ -53,6 +60,52 @@ void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
 {
     const size_t index = y * VGA_WIDTH + x;
     terminal_buffer[index] = vga_entry(c, color);
+}
+
+void handle_csi_command(char command, const char* params) {
+    switch (command) {
+        case 'J':
+            if (params[0] == '2') terminal_clear();
+            break;
+        case 'H': // set cursor position
+            int row = 0, col = 0;
+            sscanf(params, "%d;%d", &row, &col);
+            if (row > 0) terminal_row = row - 1;
+            if (col > 0) terminal_column = col - 1;
+            // terminal_row = 0;
+            // terminal_column = 0;
+            break;
+        case 'A': // Move cursor up
+            if (terminal_row > 0) terminal_row--;
+            break;
+        case 'B': // Move cursor down
+            if (terminal_row < VGA_HEIGHT - 1) terminal_row++;
+            break;
+        case 'C': // Move cursor right
+            if (terminal_column < VGA_WIDTH - 1) terminal_column++;
+            break;
+        case 'D': // Move cursor left 
+            if (terminal_column > 0) terminal_column--;
+            break;
+        case '@': // Insert character
+            for (size_t i = VGA_WIDTH - 1; i > terminal_column; i--) {
+                terminal_buffer[terminal_row * VGA_WIDTH + i] = terminal_buffer[terminal_row * VGA_WIDTH + i - 1];
+            }
+            terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
+            break;
+        case 'P': // Delete character
+            for (size_t i = terminal_column; i < VGA_WIDTH - 1; i++) {
+                terminal_buffer[terminal_row * VGA_WIDTH + i] = terminal_buffer[terminal_row * VGA_WIDTH + i + 1];
+            }
+            terminal_putentryat(' ', terminal_color, VGA_WIDTH - 1, terminal_row);
+            break;
+        default:
+            // Handle other CSI commands or ignore
+            serial_write("Unknown CSI command: ");
+            serial_write(command);
+            serial_write("\n");
+            break;
+    }
 }
 
 void terminal_putchar(char c) {
@@ -97,6 +150,8 @@ void terminal_putchar(char c) {
 
         case STATE_ESC:
             if (c == '[') {
+                ansi_len = 0;
+                memset(ansi_buffer, 0, sizeof(ansi_buffer));
                 ansi_state = STATE_CSI;
             } else {
                 ansi_state = STATE_NORMAL;
@@ -110,39 +165,7 @@ void terminal_putchar(char c) {
                 }
             } else {
                 ansi_buffer[ansi_len] = '\0';
-
-                if (c == 'J') { // Clear screen
-                    if (ansi_buffer[0] == '2') {
-                        terminal_clear(); // Clear entire screen
-                    }
-                } else if (c == 'H') { // Move cursor to 0,0
-                    terminal_row = 0;
-                    terminal_column = 0;
-                } else if (c == '@') { // Insert character
-                    for (size_t i = VGA_WIDTH - 1; i > terminal_column; i--) {
-                        terminal_buffer[terminal_row * VGA_WIDTH + i] = terminal_buffer[terminal_row * VGA_WIDTH + i - 1];
-                    }
-                    terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
-                } else if (c == 'P') { // Delete character
-                    for (size_t i = terminal_column; i < VGA_WIDTH - 1; i++) {
-                        terminal_buffer[terminal_row * VGA_WIDTH + i] = terminal_buffer[terminal_row * VGA_WIDTH + i + 1];
-                    }
-                    terminal_putentryat(' ', terminal_color, VGA_WIDTH - 1, terminal_row);
-                } else if (c == 'A') { // Move cursor up
-                    if (terminal_row > 0) terminal_row--;
-                } else if (c == 'B') { // Move cursor down
-                    if (terminal_row < VGA_HEIGHT - 1) terminal_row++;
-                } else if (c == 'C') { // Move cursor right
-                    if (terminal_column < VGA_WIDTH - 1) terminal_column++;
-                } else if (c == 'D') { // Move cursor left
-                    if (terminal_column > 0) terminal_column--;
-                } else {
-                    // Unknown CSI sequence
-                    log_to_serial("Unknown CSI sequence: ");
-                    log_to_serial(ansi_buffer);
-                    log_to_serial("\n");
-                }
-
+                handle_csi_command(c, ansi_buffer);
                 ansi_state = STATE_NORMAL;
             }
             break;
@@ -185,7 +208,6 @@ void terminal_clear()
             terminal_buffer[index] = vga_entry(' ', terminal_color);
         }
     }
-    terminal_row = 0;
-    terminal_column = 0;
-    update_cursor(terminal_row, terminal_column);
+
+    set_terminal_cursor(0, 0);
 }

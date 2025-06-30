@@ -5,6 +5,7 @@
 #include "user/stdlib.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
+#include "common/syscall.h" // file descriptors
 
 #define MAX_INPUT 256
 #define MAX_ARGS 10
@@ -135,14 +136,14 @@ void write_command(char ** args) {
 
     char buffer[256];
     printf("Enter text to write: ");
-    fgets(buffer, 256, stdin);
+    fgets(buffer, 256, STDIN);
     syscall_write(fd, buffer, strlen(buffer));
     syscall_close(fd);
 }
 
 void check_command() {
     char buffer[256];
-    fgets(buffer, 256, stdin);
+    fgets(buffer, 256, STDIN);
     printf("You entered: %s", buffer);
 }
 
@@ -289,12 +290,12 @@ void execute_command(char **args) {
 
     // Redirect input if necessary
     if (input_fd != -1) {
-        syscall_dup2(input_fd, stdin);
+        syscall_dup2(input_fd, STDIN);
         syscall_close(input_fd);
     }
     // Redirect output if necessary
     if (output_fd != -1) {
-        syscall_dup2(output_fd, stdout);
+        syscall_dup2(output_fd, STDOUT);
         syscall_close(output_fd);
     }
 
@@ -329,7 +330,7 @@ void read_input(char *buffer) {
     int cur = 0, len = 0;
     char c;
     while (1) {
-        if (syscall_read(stdin, &c, 1) < 0) return;
+        if (syscall_read(STDIN, &c, 1) < 0) return;
 
         switch (c) {
             case '\n':
@@ -349,7 +350,7 @@ void read_input(char *buffer) {
                 break;
             case '\033':
                 char seq[2];
-                if (syscall_read(stdin, seq, 2) < 0) return;
+                if (syscall_read(STDIN, seq, 2) < 0) return;
                 if (seq[0] == '[') {
                     if (seq[1] == 'D' && cur > 0) {
                         cur--;

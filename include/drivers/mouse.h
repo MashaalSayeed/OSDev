@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
+#include "kernel/isr.h"
 
 #define PS2_MOUSE_DATA_PORT 0x60
 #define PS2_MOUSE_CMD_PORT 0x64
@@ -15,8 +17,16 @@
 #define PS2_MOUSE_NACK 0xFE
 #define PS2_MOUSE_ERROR 0xFC
 
-void ps2_enable_mouse();
-void ps2_disable_mouse();
-void ps2_set_mouse_sample_rate(uint8_t rate);
-void ps2_set_mouse_resolution(uint8_t resolution);
-void ps2_set_mouse_scaling(uint8_t scaling);
+typedef struct {
+    int x, y;
+    int dx, dy;
+    bool left, right, middle;
+} mouse_state_t;
+
+void ps2_mouse_wait(uint8_t type);
+void ps2_mouse_write(uint8_t data);
+uint8_t ps2_mouse_read();
+
+mouse_state_t* get_mouse_state();
+void mouse_irq_handler(registers_t *regs);
+void ps2_mouse_init();
