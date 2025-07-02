@@ -33,9 +33,6 @@ typedef struct process {
     registers_t context;
     page_directory_t *root_page_table;
     void *stack;
-
-    // int priority;
-    // int file_descriptors[MAX_OPEN_FILES];
     
     void *heap_start;
     void *brk;

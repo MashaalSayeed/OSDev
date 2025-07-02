@@ -7,6 +7,7 @@
 void memset(void *dest, char val, uint32_t count);
 void memcpy(void *dest, const void *src, uint32_t count);
 uint8_t memcmp(void *dest, const void *src, uint32_t count);
+void *memmove(void *dest, const void *src, uint32_t count);
 
 // String functions
 size_t strlen(const char *s);

@@ -16,7 +16,7 @@ void *malloc(size_t size) {
     while (current) {
         if (current->free && current->size >= size) {
             current->free = 0;
-            return (void *)(current + 1);  // Return memory after the header
+            return current->data;
         }
         prev = current;
         current = current->next;
@@ -24,7 +24,7 @@ void *malloc(size_t size) {
 
     // No suitable block found; request more memory
     block_header_t *new_block = (block_header_t *)syscall_sbrk(size + BLOCK_SIZE);
-    if (new_block == (void *)-1) return NULL;  // sbrk failed
+    if (new_block == (void *)-1) return NULL;
 
     new_block->size = size;
     new_block->free = 0;
@@ -33,13 +33,13 @@ void *malloc(size_t size) {
     if (prev) prev->next = new_block; // Append to list
     else heap_start = new_block; // First allocation
 
-    return (void *)(new_block + 1);
+    return new_block->data;
 }
 
 void free(void *ptr) {
     if (!ptr) return;
 
-    block_header_t *block = (block_header_t *)ptr - 1;
+    block_header_t *block = (block_header_t *)((char *)ptr - BLOCK_SIZE);
     block->free = 1;
 
     // Coalesce adjacent free blocks

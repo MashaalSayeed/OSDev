@@ -192,6 +192,8 @@ syscall_t syscall_table[] = {
     [SYSCALL_MKDIR]    = (syscall_t)sys_mkdir,
     [SYSCALL_RMDIR]    = (syscall_t)sys_rmdir,
     [SYSCALL_UNLINK]   = (syscall_t)sys_unlink,
+    [SYSCALL_LSEEK]    = (syscall_t)sys_lseek,
+    [SYSCALL_SBRK]     = (syscall_t)sys_sbrk,
     // [SYSCALL_YIELD]    = (syscall_t)schedule,
 };
 

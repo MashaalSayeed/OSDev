@@ -5,6 +5,7 @@
 #include "user/stdlib.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
+#include "user/term.h"
 #include "common/syscall.h" // file descriptors
 
 #define MAX_INPUT 256
@@ -123,7 +124,7 @@ void cd_command(char **args) {
 }
 
 void clear_command() {
-    printf("\033[2J\033[H");
+    term_clear_screen();
 }
 
 void write_command(char ** args) {
@@ -141,25 +142,16 @@ void write_command(char ** args) {
     syscall_close(fd);
 }
 
-void check_command() {
-    char buffer[256];
-    fgets(buffer, 256, STDIN);
-    printf("You entered: %s", buffer);
-}
-
 void test_command() {
-    printf("This is a test command.\n");
-    for (int i = 0; i < 14; i++) {
-        int pid = syscall_fork();
-        printf("[PID: %d] Forked child process\n", pid);
-        if (pid == 0) {
-            printf("[PID: %d] Child process executing...\n", pid);
-            syscall_exit(1); // Exit child process
-        } else {
-            int status;
-            syscall_waitpid(pid, &status, 0);
-            printf("[PID: %d] Child process exited with status %d\n", pid, status);
-        }
+    void *ptr = malloc(1024); // Allocate 1KB
+    if (ptr == (void *)-1) {
+        printf("Error: Failed to allocate memory\n");
+    } else {
+        printf("Allocated 1KB at %x\n", ptr);
+        *(int *)ptr = 42; // Write to allocated memory
+        printf("Wrote %d to allocated memory\n", *(int *)ptr);
+        free(ptr); // Free the allocated memory
+        printf("Freed allocated memory\n");
     }
 }
 
@@ -175,7 +167,7 @@ void help_command() {
     printf("    pwd - Print working directory\n");
     printf("    cd <dir> - Change directory\n");
     printf("    clear - Clear the screen\n");
-    printf("    check - For debugging\n");
+    printf("    test - For debugging\n");
     printf("    write <file> - Write to a file\n");
     printf("    history - Display command history\n");
     printf("    help - Display this help message\n");
@@ -194,13 +186,28 @@ command_t commands[] = {
     {"pwd", pwd_command},
     {"cd", cd_command},
     {"clear", clear_command},
-    {"check", check_command},
     {"write", write_command},
     {"history", history_command},
     {"help", help_command},
     {"test", test_command},
     {NULL, NULL}
 };
+
+char *history_callback(int direction) {
+    if (direction == -1) { // Up
+        if (history_count == 0 || history_pos + 1 >= history_count) return NULL;
+        history_pos++;
+        return history_buffer[history_count - 1 - history_pos];
+    } else if (direction == +1) { // Down
+        if (history_pos <= 0) {
+            history_pos = -1;
+            return "";
+        }
+        history_pos--;
+        return history_buffer[history_count - 1 - history_pos];
+    }
+    return NULL;
+}
 
 void add_to_history(char *buffer) {
     if (history_count < MAX_HISTORY) {
@@ -213,24 +220,6 @@ void add_to_history(char *buffer) {
     }
 
     history_pos = history_count;
-}
-
-void load_history(char *buffer, int *cur, int *len, int direction) {
-    if (history_count == 0) return;
-    if (direction == 1 && history_pos < history_count) {
-        history_pos++;
-    } else if (direction == -1 && history_pos > 0) {
-        history_pos--;
-    }
-
-    *cur = 0;
-    *len = 0;
-    if (history_pos < history_count) {
-        strcpy(buffer, history_buffer[history_pos]);
-        *len = strlen(buffer);
-        *cur = *len;
-        printf("%s", buffer);
-    }
 }
 
 void parse_input(char *input, char **args) {
@@ -326,65 +315,65 @@ void execute_command(char **args) {
     }
 }
 
-void read_input(char *buffer) {
-    int cur = 0, len = 0;
-    char c;
-    while (1) {
-        if (syscall_read(STDIN, &c, 1) < 0) return;
+// void read_input(char *buffer) {
+//     int cur = 0, len = 0;
+//     char c;
+//     while (1) {
+//         if (syscall_read(STDIN, &c, 1) < 0) return;
 
-        switch (c) {
-            case '\n':
-                buffer[len] = '\0';
-                printf("\n");
-                return;
-            case '\b':
-                if (cur > 0) {
-                    cur--;
-                    len--;
-                    for (int i = cur; i < len; i++) {
-                        buffer[i] = buffer[i + 1];
-                    }
-                    buffer[len] = '\0';
-                    printf("\033[D\033[P");
-                }
-                break;
-            case '\033':
-                char seq[2];
-                if (syscall_read(STDIN, seq, 2) < 0) return;
-                if (seq[0] == '[') {
-                    if (seq[1] == 'D' && cur > 0) {
-                        cur--;
-                        printf("\033[D");
-                    } else if (seq[1] == 'C' && cur < len) {
-                        cur++;
-                        printf("\033[C");
-                    } else if (seq[1] == 'A') {
-                        // load_history(buffer, &cur, &len, 1);
-                    } else if (seq[1] == 'B') {
-                        // load_history(buffer, &cur, &len, -1);
-                    }
-                }
-                break;
-            default:
-                for (int i = len; i >= cur; i--) {
-                    buffer[i] = buffer[i - 1];
-                }
-                buffer[cur] = c;
-                len++;
-                cur++;
+//         switch (c) {
+//             case '\n':
+//                 buffer[len] = '\0';
+//                 printf("\n");
+//                 return;
+//             case '\b':
+//                 if (cur > 0) {
+//                     cur--;
+//                     len--;
+//                     for (int i = cur; i < len; i++) {
+//                         buffer[i] = buffer[i + 1];
+//                     }
+//                     buffer[len] = '\0';
+//                     printf("\033[D\033[P");
+//                 }
+//                 break;
+//             case '\033':
+//                 char seq[2];
+//                 if (syscall_read(STDIN, seq, 2) < 0) return;
+//                 if (seq[0] == '[') {
+//                     if (seq[1] == 'D' && cur > 0) {
+//                         cur--;
+//                         printf("\033[D");
+//                     } else if (seq[1] == 'C' && cur < len) {
+//                         cur++;
+//                         printf("\033[C");
+//                     } else if (seq[1] == 'A') {
+//                         // load_history(buffer, &cur, &len, 1);
+//                     } else if (seq[1] == 'B') {
+//                         // load_history(buffer, &cur, &len, -1);
+//                     }
+//                 }
+//                 break;
+//             default:
+//                 for (int i = len; i >= cur; i--) {
+//                     buffer[i] = buffer[i - 1];
+//                 }
+//                 buffer[cur] = c;
+//                 len++;
+//                 cur++;
 
-                printf("\033[@"); // Insert space at cursor
-                printf("%c", c);  // Write the new character
-                break;
-        }
+//                 printf("\033[@"); // Insert space at cursor
+//                 printf("%c", c);  // Write the new character
+//                 break;
+//         }
 
-        if (cur > len) cur = len;
-        if (cur < 0) cur = 0;
-        if (len >= MAX_INPUT - 1) break;
-    }
+//         if (cur > len) cur = len;
+//         if (cur < 0) cur = 0;
+//         if (len >= MAX_INPUT - 1) break;
+//     }
 
-    buffer[len] = '\0';
-}
+//     buffer[len] = '\0';
+// }
 
 void main() {
     char buffer[MAX_INPUT];
@@ -395,7 +384,8 @@ void main() {
     while (1) {
         printf("%s$ ", cwd);
         // fgets(buffer, sizeof(buffer), stdin);
-        read_input(buffer);
+        // read_input(buffer);
+        readline(buffer, sizeof(buffer));
 
         // printf("Command: %s\n", buffer);
         parse_input(buffer, args);

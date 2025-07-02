@@ -72,8 +72,9 @@ void handle_csi_command(char command, const char* params) {
             sscanf(params, "%d;%d", &row, &col);
             if (row > 0) terminal_row = row - 1;
             if (col > 0) terminal_column = col - 1;
-            // terminal_row = 0;
-            // terminal_column = 0;
+            break;
+        case 'K':
+            if (params[0] == '2') terminal_clear_line();
             break;
         case 'A': // Move cursor up
             if (terminal_row > 0) terminal_row--;
@@ -210,4 +211,12 @@ void terminal_clear()
     }
 
     set_terminal_cursor(0, 0);
+}
+
+void terminal_clear_line() 
+{
+    for (size_t x = 0; x < VGA_WIDTH; x++) {
+        terminal_putentryat(' ', terminal_color, x, terminal_row);
+    }
+    terminal_column = 0;
 }

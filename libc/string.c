@@ -26,6 +26,32 @@ uint8_t memcmp(void *dest, const void *src, uint32_t count){
     return 0;
 }
 
+// memmove is used to copy memory from one location to another, handling overlapping regions correctly.
+// If the source and destination regions overlap, it copies backwards to avoid overwriting data before it
+// is read. If they do not overlap, it copies forwards as usual.
+void *memmove(void *dest, const void *src, uint32_t count) {
+    if (!dest || !src) return dest;  // Optional safety check
+
+    char *d = (char *)dest;
+    const char *s = (const char *)src;
+
+    if (d == s || count == 0) {
+        return dest;
+    }
+
+    if (d < s) {
+        for (uint32_t i = 0; i < count; i++) {
+            d[i] = s[i];
+        }
+    } else {
+        for (int i = count - 1; i >= 0; i--) {
+            d[i] = s[i];
+        }
+    }
+
+    return dest;
+}
+
 size_t strlen(const char *s) {
     size_t i = 0;
     for(; *s; i++) {
