@@ -13,7 +13,7 @@
     stack -= sizeof(type); \
     *((type *)stack) = value;
 
-size_t pid_counter = 1;
+
 
 extern page_directory_t* kpage_dir;
 extern process_t* process_list;
@@ -23,14 +23,29 @@ extern void switch_context(registers_t* context);
 
 extern vfs_file_t* console_fds[3];
 
-// Bump Allocator
-static size_t allocate_pid() {
+static uint32_t pid_counter = 1;
+static uint32_t tid_counter = 1;
+static uint32_t allocate_pid() {
     return pid_counter++;
 }
 
-static void setup_stack(process_t *proc) {
-    proc->stack = (void *)USER_STACK_BASE - PROCESS_STACK_SIZE;
-    map_memory(proc->root_page_table, proc->stack, 0, PROCESS_STACK_SIZE, 0x7);
+static uint32_t allocate_tid() {
+    return tid_counter++;
+}
+
+static void * alloc_user_stack(thread_t *thread) {
+    process_t *proc = thread->parent;
+    int thread_count = 0;
+    for (thread_t *t = proc->threads; t; t = t->next) {
+        thread_count++;
+    }
+
+    void *stack_top = (void *)USER_STACK_BASE - thread_count * PROCESS_STACK_SIZE;
+    void *stack_bottom = stack_top - PROCESS_STACK_SIZE;
+
+    map_memory(proc->root_page_table, stack_bottom, 0, PROCESS_STACK_SIZE, 0x7);
+    thread->stack = stack_bottom;
+    return stack_top;
 }
 
 void* sbrk(process_t *proc, int increment) {
@@ -58,6 +73,59 @@ void* sbrk(process_t *proc, int increment) {
     return old_brk;
 }
 
+thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thread_name) {
+    thread_t *thread = (thread_t *)kmalloc(sizeof(thread_t));
+    if (!thread) {
+        printf("Error: Failed to allocate memory for thread %s\n", thread_name);
+        return NULL;
+    }
+
+    memset(thread, 0, sizeof(thread_t));
+    thread->tid = allocate_tid();
+    thread->parent = proc;
+    thread->status = READY;
+
+    strncpy(thread->thread_name, thread_name, PROCESS_NAME_MAX_LEN);
+    thread->thread_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
+
+    // Set up thread context
+    memset(&thread->context, 0, sizeof(registers_t));
+    void *stack_top = NULL;
+    if (proc->is_kernel_process) {
+        thread->context.cs = KERNEL_CS;
+        thread->context.ds = KERNEL_DS;
+        thread->context.ss = KERNEL_DS;
+
+        void *kernel_stack = kmalloc(PROCESS_STACK_SIZE);
+        thread->stack = kernel_stack;
+        stack_top = (void *)((uint32_t)kernel_stack + PROCESS_STACK_SIZE);
+    } else {
+        thread->context.cs = USER_CS;
+        thread->context.ds = USER_DS;
+        thread->context.ss = USER_SS;
+
+        stack_top = alloc_user_stack(thread);
+    }
+    
+    thread->context.esp = (uint32_t)stack_top;
+    thread->context.ebp = (uint32_t)stack_top;
+    thread->context.eip = (uint32_t)entry_point;
+    thread->context.eflags = 0x202;
+
+    // Add to process's thread list
+    if (!proc->threads) {
+        proc->threads = thread;
+    } else {
+        thread_t *last_thread = proc->threads;
+        while (last_thread->next) {
+            last_thread = last_thread->next;
+        }
+        last_thread->next = thread;
+    }
+
+    return thread;
+}
+
 process_t* create_process(char *process_name, void (*entry_point)(), uint32_t flags) {
     process_t *proc = (process_t *)kmalloc(sizeof(process_t));
     if (!proc) {
@@ -67,6 +135,7 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
 
     memset(proc, 0, sizeof(process_t));
     proc->pid = allocate_pid();
+    proc->is_kernel_process = (flags & PROCESS_FLAG_KERNEL) != 0;
     strncpy(proc->process_name, process_name, PROCESS_NAME_MAX_LEN);
 
     proc->root_page_table = clone_page_directory(kpage_dir);
@@ -76,7 +145,7 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
         return NULL;
     }
 
-    setup_stack(proc);
+    // setup_stack(proc);
 
     proc->heap_start = USER_HEAP_START;
     proc->brk = proc->heap_start;
@@ -88,21 +157,13 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
     proc->fds[1] = vfs_get_file(1);
     proc->fds[2] = vfs_get_file(2);
 
-    // Initialize process context
-    memset(&proc->context, 0, sizeof(registers_t));
-    proc->context.eip = (uint32_t)entry_point;
-    proc->context.eflags = 0x202;
-    proc->context.esp = (uint32_t)USER_STACK_BASE;
-    proc->context.ebp = proc->context.esp;
-
-    if (flags & PROCESS_FLAG_USER) {
-        proc->context.cs = USER_CS;
-        proc->context.ds = USER_DS;
-        proc->context.ss = USER_SS;
-    } else {
-        proc->context.cs = KERNEL_CS;
-        proc->context.ds = KERNEL_DS;
-        proc->context.ss = KERNEL_DS;
+    thread_t *main_thread = create_thread(proc, entry_point, process_name);
+    proc->threads = main_thread;
+    if (!main_thread) {
+        printf("Error: Failed to create main thread for process %s\n", process_name);
+        free_page_directory(proc->root_page_table);
+        kfree(proc);
+        return NULL;
     }
 
     proc->status = READY;
@@ -110,45 +171,46 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
 }
 
 void kill_process(process_t *process, int status) {
-    if (!process || process->status == TERMINATED) return;
-    process->status = TERMINATED;
+    // if (!process || process->status == TERMINATED) return;
+    // process->status = TERMINATED;
 
-    // wake up parent if waiting
-    if (process->parent && process->parent->status == WAITING) {
-        process->parent->status = READY;
-        process->parent->context.eax = status; // TODO: save child status
-        // TODO: save child status
-        cleanup_process(process);
-    } else {
-        cleanup_process(process);
-    }
+    // // wake up parent if waiting
+    // if (process->parent && process->parent->status == WAITING) {
+    //     process->parent->status = READY;
+    //     thread_t *parent_thread = process->parent->threads;
+    //     process->->context.eax = status; // TODO: save child status
+    //     // TODO: save child status
+    //     cleanup_process(process);
+    // } else {
+    //     cleanup_process(process);
+    // }
 
-    schedule(NULL);
+    // schedule(NULL);
 }
 
 void cleanup_process(process_t *proc) {
-    if (!proc || proc->status != TERMINATED) return;
+    // if (!proc || proc->status != TERMINATED) return;
 
-    // Remove process from process list
-    if (proc == process_list) {
-        process_list = process_list->next;
-    }
+    // // Remove process from process list
+    // if (proc == process_list) {
+    //     process_list = process_list->next;
+    // }
 
-    process_t *temp = process_list;
-    while (temp->next != proc) {
-        temp = temp->next;
-    }
+    // process_t *temp = process_list;
+    // while (temp->next != proc) {
+    //     temp = temp->next;
+    // }
 
-    temp->next = proc->next;
-    if (proc == current_process) {
-        current_process = NULL;
-    }
+    // temp->next = proc->next;
+    // if (proc == current_process) {
+    //     current_process = NULL;
+    // }
 
-    // Free the process stack and process structure
-    // TODO: unmap all pages and heap
-    free_page(get_page((uint32_t)proc->stack, 0, proc->root_page_table));
-    free_page_directory(proc->root_page_table);
-    kfree(proc);
+    // // Free the process stack and process structure
+    // // TODO: unmap all pages and heap
+    // free_page(get_page((uint32_t)proc->stack, 0, proc->root_page_table));
+    // free_page_directory(proc->root_page_table);
+    // kfree(proc);
 }
 
 int fork() {
@@ -168,17 +230,21 @@ int fork() {
     child->heap_start = parent->heap_start;
     child->heap_end = parent->heap_end;
     child->brk = parent->brk;
+    child->is_kernel_process = parent->is_kernel_process;
     strncpy(child->cwd, parent->cwd, sizeof(parent->cwd));
 
     // Copy page directory
-
     child->root_page_table = clone_page_directory(parent->root_page_table);
     switch_page_directory(parent->root_page_table);
-    child->stack = parent->stack;
+    
+    thread_t *child_thread = create_thread(child, parent->threads->context.eip, parent->threads->thread_name);
+    // child->stack = parent->stack;
 
     // Copy process context
-    memcpy(&child->context, &parent->context, sizeof(registers_t));
-    child->context.eax = 0; // Return value for child process
+    // memcpy(&child->context, &parent->context, sizeof(registers_t));
+    // child->context.eax = 0; // Return value for child process
+    child_thread->context.eax = 0; // Return value for child process
+    child->threads = child_thread;
 
     // Copy file descriptors
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
@@ -192,12 +258,12 @@ int fork() {
         }
     }
 
-    uint32_t esp_offset = parent->context.esp - (uint32_t)parent->stack;
-    uint32_t ebp_offset = parent->context.ebp - (uint32_t)parent->stack;
-    child->context.esp = (uint32_t)child->stack + esp_offset;
-    child->context.ebp = (uint32_t)child->stack + ebp_offset;
+    // uint32_t esp_offset = parent->context.esp - (uint32_t)parent->stack;
+    // uint32_t ebp_offset = parent->context.ebp - (uint32_t)parent->stack;
+    // child->context.esp = (uint32_t)child->stack + esp_offset;
+    // child->context.ebp = (uint32_t)child->stack + ebp_offset;
 
-    add_process(child);
+    add_thread(child_thread);
     return child->pid;
 }
 
@@ -258,7 +324,8 @@ int exec(const char *path, char **argv) {
         return -1;
     }
 
-    setup_stack(proc);
+    // setup_stack(proc);
+    alloc_user_stack(proc->threads);
     uint32_t *stack = (uint32_t *)(USER_STACK_BASE);
     stack = (uint32_t *)((uint32_t)stack & ~0xF);
     char *stack_strings = (char *)(stack - total_len);
@@ -289,17 +356,17 @@ int exec(const char *path, char **argv) {
 
     proc->status = READY;
 
-    memset(&proc->context, 0, sizeof(registers_t));
-    proc->context.eip = elf->entry;
-    proc->context.esp = (uint32_t)stack;
-    proc->context.ebp = proc->context.esp;
-    proc->context.cs = USER_CS;
-    proc->context.ds = USER_DS;
-    proc->context.ss = USER_SS;
-    proc->context.eflags = 0x202;
+    // memset(&proc->context, 0, sizeof(registers_t));
+    // proc->context.eip = elf->entry;
+    // proc->context.esp = (uint32_t)stack;
+    // proc->context.ebp = proc->context.esp;
+    // proc->context.cs = USER_CS;
+    // proc->context.ds = USER_DS;
+    // proc->context.ss = USER_SS;
+    // proc->context.eflags = 0x202;
 
     kfree(elf);
-    switch_context(&proc->context);
+    // switch_context(&proc->context);
 
     // Should not return here
     return -1;

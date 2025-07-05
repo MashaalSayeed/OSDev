@@ -146,7 +146,8 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	// find_rsdt();
 
-	exec("/BIN/SHELL", NULL);
+	test_scheduler();
+	// exec("/BIN/SHELL", NULL);
 	// test_string();
 
 	// exec("/BIN/HELLO", NULL);

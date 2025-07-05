@@ -153,7 +153,8 @@ void test_scheduler() {
 	add_process(process1);
 	add_process(process2);
 	add_process(process3);
-	print_process_list();
+	// print_process_list();
+	print_thread_list();
 }
 
 void test_fork() {
