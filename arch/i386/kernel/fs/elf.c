@@ -14,6 +14,7 @@ int is_valid_elf(elf_header_t *header) {
 }
 
 elf_header_t* load_elf(vfs_file_t* file, page_directory_t *page_dir) {
+    printf("Loading ELF file: %x\n", file);
     elf_header_t * header = kmalloc(sizeof(elf_header_t));
 
     if (file->file_ops->read(file, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {

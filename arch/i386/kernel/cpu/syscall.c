@@ -200,7 +200,7 @@ syscall_t syscall_table[] = {
 
 void syscall_handler(registers_t *regs) {
     process_t *proc = get_current_process();
-    memcpy(&proc->current_thread->context, regs, sizeof(registers_t));
+    memcpy(&proc->thread_list->context, regs, sizeof(registers_t));
 
     if (regs->eax < sizeof(syscall_table) / sizeof(syscall_table[0]) &&
         syscall_table[regs->eax] != NULL) {

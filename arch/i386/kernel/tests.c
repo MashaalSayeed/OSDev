@@ -19,20 +19,22 @@ void test_divide_by_zero() {
 
 void test_heap() {
 	print_kheap();
-	uint8_t* ptr1 = (uint8_t *)kmalloc(0x8);
-	uint8_t* ptr2 = (uint8_t *)kmalloc(0x8);
+    void *a = kmalloc(64);
+    void *b = kmalloc(128);
+    void *c = kmalloc(256);
 
-	printf("Allocated memory at %x\n", ptr1);
-	printf("Allocated memory at %x\n", ptr2);
+	printf("Allocated blocks:\n");
+    printf("a: %x\n", a);
+    printf("b: %x\n", b);
+    printf("c: %x\n", c);
 
-	kfree(ptr2);
-	printf("Freed memory at %x\n", ptr2);
+    kfree(b);  // Free middle block
+    kfree(a);  // Free first block → should coalesce with b
+    kfree(c);  // Now all 3 are free → should become one large block
 
-	ptr2 = kmalloc(0x20);
-	printf("Allocated memory at %x\n\n", ptr2);
-
-	kfree(ptr1);
-	kfree(ptr2);
+    void *d = kmalloc(512); // Should fit in the coalesced block
+	printf("Allocated d: %x (should reuse freed memory)\n", d);
+    kfree(d);
 	print_kheap();
 }
 
@@ -129,14 +131,14 @@ void fork_proc() {
     uprintf("[PID %d] Starting test_fork()\n", my_pid);
 
 	int pid;
-	asm volatile ("int $0x80" : "=a" (pid) : "a" (7) : "memory"); // fork
+	asm volatile ("int $0x80" : "=a" (pid) : "a" (SYSCALL_FORK) : "memory"); // fork
 	if (pid == 0) {
 		my_pid = getpid();
         uprintf("[PID %d] Hello from child process!\n", my_pid);
 		sleep(50);
 	} else if (pid > 0) {
         uprintf("[PID %d] Hello from parent process! Child PID: %d\n", my_pid, pid);
-		do_syscall(9, pid, 0, 0);
+		do_syscall(SYSCALL_WAITPID, pid, 0, 0);
 	} else {
         uprintf("[PID %d] Fork failed\n", my_pid);
 	}
