@@ -78,17 +78,28 @@ void kfree(void *ptr) {
     }
 
     // Coalesce adjacent blocks
-    cur_block = free_list;
-    while (cur_block && cur_block->next) {
-        kheap_block_t *next_block = cur_block->next;
+    // cur_block = free_list;
+    // while (cur_block && cur_block->next) {
+    //     kheap_block_t *next_block = cur_block->next;
 
-        if ((uint8_t *)cur_block + cur_block->size + sizeof(kheap_block_t) == (uint8_t *)next_block) {
-            // Combine adjacent blocks
-            cur_block->size += next_block->size + sizeof(kheap_block_t);
-            cur_block->next = next_block->next;
-        } else {
-            cur_block = next_block;
-        }
+    //     if ((uint8_t *)cur_block + cur_block->size + sizeof(kheap_block_t) == (uint8_t *)next_block) {
+    //         // Combine adjacent blocks
+    //         cur_block->size += next_block->size + sizeof(kheap_block_t);
+    //         cur_block->next = next_block->next;
+    //     } else {
+    //         cur_block = next_block;
+    //     }
+    // }
+
+    if (block->next && (uint8_t *)block + block->size + sizeof(kheap_block_t) == (uint8_t *)block->next) {
+        block->size += block->next->size + sizeof(kheap_block_t);
+        block->next = block->next->next;
+    }
+
+    // Coalesce with previous
+    if (prev_block && (uint8_t *)prev_block + prev_block->size + sizeof(kheap_block_t) == (uint8_t *)block) {
+        prev_block->size += block->size + sizeof(kheap_block_t);
+        prev_block->next = block->next;
     }
 }
 
@@ -115,11 +126,11 @@ void print_kheap() {
     kheap_block_t *cur_block = free_list;
     uint32_t total_free = 0;
     while (cur_block) {
-        printf("Free Blocks: %x, Size: %x\n", cur_block, cur_block->size);
+        printf("\nFree Blocks: %x, Size: %x", cur_block, cur_block->size);
         total_free += cur_block->size;
         cur_block = cur_block->next;
     }
-    printf("Total Free: %x\n", total_free);
+    printf("\nTotal Free: %x\n", total_free);
 }
 
 void *calloc(size_t num, size_t size) {

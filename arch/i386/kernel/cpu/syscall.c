@@ -64,15 +64,18 @@ int sys_waitpid(int pid, int *status, int options) {
     process_t *child, *proc;
     child = get_process(pid);
     proc = get_current_process();
+    thread_t *current_thread = get_current_thread();
     if (!child || child->parent != proc) return -1;
 
     if (child->status != TERMINATED) {
         proc->status = WAITING;
+        current_thread->status = WAITING;
         // Save current process state and schedule another process
         schedule(NULL);
     }
 
     // Never reaches here :(
+    printf("HOOWWWWW DID YOU DO THAT!!\n");
     // printf("pid: %d, status: %x, options: %d\n", pid, status, options);
     // proc = get_current_process();
     // child = get_process(pid);
@@ -200,7 +203,7 @@ syscall_t syscall_table[] = {
 
 void syscall_handler(registers_t *regs) {
     process_t *proc = get_current_process();
-    memcpy(&proc->context, regs, sizeof(registers_t));
+    memcpy(&proc->thread_list->context, regs, sizeof(registers_t));
 
     if (regs->eax < sizeof(syscall_table) / sizeof(syscall_table[0]) &&
         syscall_table[regs->eax] != NULL) {

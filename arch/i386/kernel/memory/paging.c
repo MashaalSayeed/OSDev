@@ -165,8 +165,8 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
         }
 
         page->present = 1;
-        page->rw = (flags & 0x2) ? 1 : 0;
-        page->user = (flags & 0x4) ? 1 : 0;
+        page->rw = (flags & PAGE_RW) ? 1 : 0;
+        page->user = (flags & PAGE_USER) ? 1 : 0;
     }
 }
 
@@ -293,11 +293,10 @@ void paging_init() {
 
     // Map the first 4MB of memory to the first 4MB of physical memory
     // 768 - 1024 is reserved for the kernel stack and other kernel data
-    kmap_memory(LOAD_MEMORY_ADDRESS, 0, 4 * 0x100000, 0x7);
+    kmap_memory(LOAD_MEMORY_ADDRESS, 0, 4 * 0x100000, PAGE_PRESENT | PAGE_RW | PAGE_USER);
 
     // Map some memory for the kernel heap
-    kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, 0x7);
-
+    kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, PAGE_PRESENT | PAGE_RW | PAGE_USER);
     // Setup a guard page for the kernel stack
     // free_page(get_page((uint32_t) &stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
@@ -324,7 +323,7 @@ void debug_page_mapping(page_directory_t *dir, uint32_t virtual_address) {
 void dump_page_directory(page_directory_t *dir) {
     printf("=== Page Directory Dump (CR3 = %x) ===\n", dir);
 
-    for (uint32_t i = 0; i < 768; i++) {
+    for (uint32_t i = 0; i < 1024; i++) {
         if (!dir->tables[i].present) continue;  // Skip unmapped entries
 
         printf("PDE[%d]: Frame: %x | Present: %d | RW: %d | User: %d\n",
@@ -333,15 +332,15 @@ void dump_page_directory(page_directory_t *dir) {
 
         page_table_t *table = dir->ref_tables[i];
         if (!table) continue;
-        for (uint32_t j = 0; j < 1024; j++) {
-            if (!table->pages[j].present) continue;
+        // for (uint32_t j = 0; j < 1024; j++) {
+        //     if (!table->pages[j].present) continue;
 
-            uint32_t virt_addr = (i << 22) | (j << 12);
-            uint32_t phys_addr = table->pages[j].frame << 12;
+        //     uint32_t virt_addr = (i << 22) | (j << 12);
+        //     uint32_t phys_addr = table->pages[j].frame << 12;
 
-            printf("  PTE[%d]: Virt: %x -> Phys: %x | RW: %d | User: %d\n",
-                   j, virt_addr, phys_addr, table->pages[j].rw, table->pages[j].user);
-        }
+        //     printf("  PTE[%d]: Virt: %x -> Phys: %x | RW: %d | User: %d\n",
+        //            j, virt_addr, phys_addr, table->pages[j].rw, table->pages[j].user);
+        // }
     }
     printf("=====================================\n");
 }
