@@ -24,14 +24,16 @@ multiboot_header:
     DD MBOOT_HEADER_LENGTH     ; Length of header in bytes
     DD MBOOT_HEADER_CHECKSUM   ; Header checksum
 
-; mb2_tag_framebuffer_start:
-;     DW HEADER_TAG_FRAMEBUFFER
-;     DW 0
-;     DD mb2_tag_framebuffer_end - mb2_tag_framebuffer_start
-;     DD 1024
-;     DD 768
-;     DD 32
-; mb2_tag_framebuffer_end:
+%ifdef ENABLE_GUI
+mb2_tag_framebuffer_start:
+    DW HEADER_TAG_FRAMEBUFFER
+    DW 0
+    DD mb2_tag_framebuffer_end - mb2_tag_framebuffer_start
+    DD 1024
+    DD 768
+    DD 32
+mb2_tag_framebuffer_end:
+%endif
 
     align 8
     dw 6                        ; Tag type 6 (module alignment)

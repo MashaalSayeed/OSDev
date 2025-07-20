@@ -23,6 +23,10 @@ typedef struct {
     bool left, right, middle;
 } mouse_state_t;
 
+typedef struct {
+    
+} mouse_event_t;
+
 void ps2_mouse_wait(uint8_t type);
 void ps2_mouse_write(uint8_t data);
 uint8_t ps2_mouse_read();

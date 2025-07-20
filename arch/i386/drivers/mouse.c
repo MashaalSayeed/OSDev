@@ -35,13 +35,13 @@ mouse_state_t* get_mouse_state() {
     return &mouse_state;
 }
 
-static int mouse_tick_counter = 0;
+// static int mouse_tick_counter = 0;
 void mouse_irq_handler(registers_t *regs) {
-    mouse_tick_counter++;
-    if (mouse_tick_counter % 100 == 0) {
-        printf("Mouse IRQ: %d\n", mouse_tick_counter);
-        mouse_tick_counter = 0; // Reset counter every 100 ticks
-    }
+    // mouse_tick_counter++;
+    // if (mouse_tick_counter % 100 == 0) {
+    //     printf("Mouse IRQ: %d\n", mouse_tick_counter);
+    //     mouse_tick_counter = 0; // Reset counter every 100 ticks
+    // }
 
     // Read mouse data
     packet[mouse_cycle++] = ps2_mouse_read();

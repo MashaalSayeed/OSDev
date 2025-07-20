@@ -23,6 +23,12 @@ CFLAGS = -ffreestanding -O2 -Wall -Wextra -O0 -I$(CURDIR)/include -std=gnu99
 CFLAGS += -g  # Enable debugging
 LDFLAGS = -nostdlib -T $(BOOT_DIR)/linker.ld
 QEMU_FLAGS = -d int,page,cpu_reset,guest_errors -no-reboot -no-shutdown
+ASM_FLAGS = -f elf32
+
+# Check if GUI is enabled
+ifeq ($(GUI), 1)
+	ASM_FLAGS += -D ENABLE_GUI
+endif
 
 # Files
 KERNEL_BIN_ARCH = $(BUILD_DIR)/zineos.bin
@@ -64,7 +70,7 @@ $(FONT_OBJ): $(FONT_PSF) | $(BUILD_DIR)
 
 $(BUILD_DIR)/%.s.o: $(ARCH_DIR)/%.s | $(BUILD_DIR)
 	@echo "Assembling $<..."
-	$(AS) -f elf32 $< -o $@
+	$(AS) $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/kernel/%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 	@echo "Compiling kernel source file $<..."

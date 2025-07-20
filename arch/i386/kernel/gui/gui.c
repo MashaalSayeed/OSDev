@@ -8,6 +8,7 @@
 static window_t *window_list = NULL;
 static uint16_t screen_width = 0;
 static uint16_t screen_height = 0;
+static mouse_state_t *mouse_state;
 static const char *mouse_cursor[16] = {
     "XX              ",
     "X.X             ",
@@ -50,11 +51,14 @@ void gui_init(framebuffer_t *fb) {
 
     window_list = main_window;
     gui_draw();
+
+    // Create a gui refresh thread
+    // create_thread(gui_loop, "GUI Loop", 0, NULL);
 }
 
 void mouse_draw() {
     framebuffer_t *fb = get_framebuffer();
-    mouse_state_t *mouse_state = get_mouse_state();
+
     if (!mouse_state) {
         printf("Error: Mouse state is NULL\n");
         return;
@@ -74,6 +78,7 @@ void mouse_draw() {
     }
 }
 
+
 void gui_draw() {
     fill_screen(0x2E3440); // Set background color
     window_t *current = window_list;
@@ -88,7 +93,11 @@ void gui_draw() {
 
 void gui_loop() {
     while (1) {
+        // Handle mouse input
+        mouse_state = get_mouse_state();
+        if (mouse_state) {
+        }
         gui_draw();
-        sleep(30);
+        // sleep(1);
     }
 }

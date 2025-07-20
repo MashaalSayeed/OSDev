@@ -38,4 +38,15 @@ void draw_window(window_t *win) {
 
     // Draw the title
     draw_string_at((char *)win->title, win->x + 10, win->y + 3, 0x000000, 0xCCCCCC);
+
+    int close_x = win->x + win->width - 20;
+    int close_y = win->y;
+
+    // Draw close button
+    draw_button(close_x, close_y, 20, 20, 0xFFFFFF, 0xFF0000, "X");
+}
+
+void draw_button(int x, int y, int width, int height, uint32_t fg, uint32_t bg, const char *label) {
+    draw_rect(x, y, width, height, bg); // Button background
+    draw_string_at(label, x + 6, y + 2, fg, bg); // Button text
 }

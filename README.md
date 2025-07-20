@@ -29,6 +29,11 @@ chmod +x scripts/build.sh
 make run
 ```
 
+or for GUI
+```bash
+make run GUI=1
+```
+
 Thank me later 😊
 
 ## TODO List Guide
