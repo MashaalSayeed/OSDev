@@ -109,6 +109,7 @@ Thank me later 😊
 4. Test Cases 🟡
 5. Make a [Complete ISO](https://wiki.osdev.org/GRUB#Disk_image_instructions) (GRUB + Kernel + Disk Image)
 6. Build setup on other platforms 
+7. Fix the folder structure
 
 ## Resources
 

@@ -29,7 +29,6 @@ void schedule(registers_t* context) {
 
     // // Save the context of the current processs
     scheduler_started = true;
-    // printf("Scheduling process\n");
     if (current_thread != NULL && context != NULL) {
         current_thread->context = *context;
         if (current_thread->status == RUNNING) current_thread->status = READY;
@@ -53,6 +52,21 @@ void schedule(registers_t* context) {
 
 process_t* get_current_process() {
     return current_thread->owner;
+}
+
+thread_t* get_current_thread() {
+    return current_thread;
+}
+
+thread_t* get_thread(size_t tid) {
+    thread_t *temp = thread_list;
+    if (temp == NULL) return NULL;
+    do {
+        if (temp->tid == tid) return temp;
+        temp = temp->next_global;
+    } while (temp != thread_list);
+
+    return NULL;
 }
 
 process_t* get_process(size_t pid) {
@@ -135,10 +149,10 @@ void print_thread_list() {
     }
 
     printf("--------------------------------------------------\n");
-    printf("| TID | Thread Name          | Status |\n");
+    printf("| TID | Thread Name          | Status | Proc |\n");
     printf("--------------------------------------------------\n");
     do {
-        printf("|%4d | %40s | s: %2d |\n", temp->tid, temp->thread_name, temp->status);
+        printf("|%4d | %40s | s: %2d | %4d |\n", temp->tid, temp->thread_name, temp->status, temp->owner->pid);
         temp = temp->next_global;
     } while (temp != thread_list);
     printf("--------------------------------------------------\n");

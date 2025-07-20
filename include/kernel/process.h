@@ -66,9 +66,12 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
 void add_process(process_t *process);
 void kill_process(process_t *process, int status);
 void cleanup_process(process_t *proc);
+
 process_t* get_current_process();
 process_t* get_process(size_t pid);
 
+thread_t* get_current_thread();
+thread_t* get_thread(size_t tid);
 
 void add_thread(thread_t *thread);
 void kill_thread(thread_t *thread);

@@ -206,8 +206,8 @@ void kill_process(process_t *process, int status) {
 
     // wake up parent if waiting
     if (process->parent && process->parent->status == WAITING) {
-        printf("Waking up parent process %s (PID: %d)\n", process->parent->process_name, process->parent->pid);
         process->parent->status = READY;
+        process->parent->main_thread->status = READY;
     //     thread_t *parent_thread = process->parent->threads;
     //     process->->context.eax = status; // TODO: save child status
     //     // TODO: save child status
@@ -252,6 +252,7 @@ int fork() {
     child->root_page_table = clone_page_directory(parent->root_page_table);
     switch_page_directory(parent->root_page_table);
 
+    // TODO: Unmap the previous stack to avoid map_memory warning
     thread_t *child_thread = create_thread(child, parent->thread_list->context.eip, parent->thread_list->thread_name);
     child->main_thread = child_thread;
     child->thread_list = child_thread;
