@@ -26,7 +26,8 @@ idt_flush:
     global irq%1
     irq%1:
         CLI
-        PUSH LONG 0
+        PUSH esp
+        ; PUSH LONG 0
         PUSH LONG %2
         JMP irq_common_stub
 %endmacro

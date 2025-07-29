@@ -15,8 +15,7 @@ page_directory_t *kpage_dir; // Kernel page directory
 
 extern uint8_t *bitmap;
 extern uint32_t bitmap_size;
-extern uint8_t stack_top;
-extern uint8_t stack_bottom;
+extern uint8_t kernel_stack_bottom;
 
 int page_fault_detected = 0;
 int paging_enabled = 0;
@@ -298,7 +297,7 @@ void paging_init() {
     // Map some memory for the kernel heap
     kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, PAGE_PRESENT | PAGE_RW | PAGE_USER);
     // Setup a guard page for the kernel stack
-    // free_page(get_page((uint32_t) &stack_bottom + BLOCK_SIZE, 0, kpage_dir));
+    // free_page(get_page((uint32_t) &kernel_stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
     // Switch to the new page directory
     switch_page_directory(kpage_dir);
@@ -360,7 +359,7 @@ void page_fault_handler(registers_t *regs) {
     uint32_t faulting_address;
     asm volatile("mov %%cr2, %0" : "=r" (faulting_address));
 
-    if (faulting_address >= &stack_bottom && faulting_address < &stack_bottom + BLOCK_SIZE) {
+    if (faulting_address >= &kernel_stack_bottom && faulting_address < &kernel_stack_bottom + BLOCK_SIZE) {
         printf("Stack overflow at %x\n", faulting_address);
         for (;;) ;
     }

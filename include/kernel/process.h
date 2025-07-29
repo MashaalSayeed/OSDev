@@ -24,13 +24,19 @@ typedef enum {
     TERMINATED
 } process_status_t;
 
+typedef struct {
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by pusha
+    uint32_t eip, cs, eflags, user_esp, ss;          // iret frame
+} __attribute__((packed)) thread_context_t;
+
 typedef struct thread {
     uint32_t tid;
     process_status_t status;
     char thread_name[PROCESS_NAME_MAX_LEN];
 
-    registers_t context;
-    void *stack;
+    uint32_t *kernel_stack; // ESP saved when context switching
+    uint32_t *user_stack;
+    thread_context_t context;
 
     struct process* owner;
     struct thread* next;
@@ -76,11 +82,12 @@ thread_t* get_thread(size_t tid);
 void add_thread(thread_t *thread);
 void kill_thread(thread_t *thread);
 void remove_thread(thread_t *thread);
+void jmp_to_kernel_thread(thread_t *context);
 
 thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thread_name);
 void print_thread_list();
 
 
 void *sbrk(process_t *proc, int incr);
-int fork();
+int fork(registers_t *regs);
 int exec(const char *path, char **args);

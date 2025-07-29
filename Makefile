@@ -92,7 +92,7 @@ $(KERNEL_BIN_ARCH): $(OBJS) $(BOOT_DIR)/linker.ld
 	@echo "Linking kernel..."
 	$(LD) $(LDFLAGS) -o $(KERNEL_BIN_ARCH) $(OBJS)
 
-$(ISO_IMAGE): $(KERNEL_BIN_ARCH) $(DRIVER_OBJ)
+$(ISO_IMAGE): $(KERNEL_BIN_ARCH)
 	rm -f $(ISO_IMAGE)
 	mkdir -p iso/boot/grub
 	cp $(KERNEL_BIN_ARCH) $(KERNEL_BIN)

@@ -305,6 +305,7 @@ void execute_command(char **args) {
     snprintf(path, sizeof(path), "/BIN/%s", args[0]);
     int pid = syscall_fork();
     if (pid == 0) {
+        printf("Executing command: %s\n", path);
         if (syscall_exec(path, args) < 0) {
             printf("Error: Failed to execute command\n");
             syscall_exit(1); // Exit child process

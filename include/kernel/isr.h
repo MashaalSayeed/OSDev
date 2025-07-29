@@ -82,6 +82,7 @@ extern void isr177();
 typedef struct {
    uint32_t ds; /* Data segment selector */
    uint32_t edi, esi, ebp, useless, ebx, edx, ecx, eax; /* Pushed by pusha. */
+//    uint32_t esp_real;
    uint32_t int_no, err_code; /* Interrupt number and error code (if applicable) */
    uint32_t eip, cs, eflags, esp, ss; /* Pushed by the processor automatically */
 } __attribute__((packed)) registers_t;

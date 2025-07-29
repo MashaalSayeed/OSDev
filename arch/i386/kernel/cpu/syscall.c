@@ -8,6 +8,7 @@
 #include "libc/string.h"
 #include "kernel/kheap.h"
 
+static registers_t *interrupt_frame;
 
 int sys_read(int fd, void *buffer, size_t size) {
     if (!buffer) return -1;
@@ -62,16 +63,18 @@ int sys_exit(int status) {
 
 int sys_waitpid(int pid, int *status, int options) {
     process_t *child, *proc;
-    child = get_process(pid);
-    proc = get_current_process();
     thread_t *current_thread = get_current_thread();
+    child = get_process(pid);
+    proc = current_thread->owner;
+    // printf("sys_waitpid: pid: %d, status: %x, options: %d\n", pid, status, options);
     if (!child || child->parent != proc) return -1;
 
     if (child->status != TERMINATED) {
         proc->status = WAITING;
         current_thread->status = WAITING;
+        // printf("[%d] Waiting for child process %d to terminate...\n", proc->pid, pid);
         // Save current process state and schedule another process
-        schedule(NULL);
+        schedule(interrupt_frame);
     }
 
     // Never reaches here :(
@@ -131,8 +134,8 @@ int sys_chdir(const char *path) {
     return 0;
 }
 
-int sys_fork(registers_t *regs) {
-    int ret = fork();
+int sys_fork() {
+    int ret = fork(interrupt_frame);
     return ret;
 }
 
@@ -203,7 +206,8 @@ syscall_t syscall_table[] = {
 
 void syscall_handler(registers_t *regs) {
     process_t *proc = get_current_process();
-    memcpy(&proc->thread_list->context, regs, sizeof(registers_t));
+    interrupt_frame = regs;
+    // memcpy(&proc->thread_list->context, regs, sizeof(registers_t));
 
     if (regs->eax < sizeof(syscall_table) / sizeof(syscall_table[0]) &&
         syscall_table[regs->eax] != NULL) {

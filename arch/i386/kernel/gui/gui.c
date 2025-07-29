@@ -4,6 +4,7 @@
 #include "kernel/window.h"
 #include "drivers/mouse.h"
 #include "drivers/pit.h"
+#include "kernel/process.h"
 
 static window_t *window_list = NULL;
 static uint16_t screen_width = 0;
@@ -50,15 +51,15 @@ void gui_init(framebuffer_t *fb) {
     }
 
     window_list = main_window;
-    gui_draw();
+    // gui_draw();
 
     // Create a gui refresh thread
+    add_process(create_process("GUI Loop", gui_loop, PROCESS_FLAG_KERNEL));
     // create_thread(gui_loop, "GUI Loop", 0, NULL);
 }
 
 void mouse_draw() {
     framebuffer_t *fb = get_framebuffer();
-
     if (!mouse_state) {
         printf("Error: Mouse state is NULL\n");
         return;

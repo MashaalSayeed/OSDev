@@ -65,11 +65,11 @@ initial_page_dir:
 ; Stack Section
 section .bss
 align 16
-global stack_top
-global stack_bottom
-stack_bottom:
+global kernel_stack_top
+global kernel_stack_bottom
+kernel_stack_bottom:
     RESB 16384 * 8  ; Reserve 16KB stack
-stack_top:
+kernel_stack_top:
 
 ; Boot Section (Entry Point)
 section .boot
@@ -96,7 +96,7 @@ _start:
 section .text
 higher_half:
     ; Set up the stack pointer to the top of the stack
-    MOV esp, stack_top
+    MOV esp, kernel_stack_top
 
     ; Pass Multiboot information to the kernel (optional)
     PUSH ebx

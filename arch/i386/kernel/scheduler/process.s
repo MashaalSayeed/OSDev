@@ -1,31 +1,49 @@
+; void switch_context(uint32_t *prev_stack, thread_context_t* context)
 global switch_context
 switch_context:
-    CLI
+    ; save current context in previous stack
+    pusha
+    mov eax, [esp + 36] ; prev_thread addr of stack_ptr
+    mov [eax], esp     ; Save current ESP in prev_thread context
 
-    ; Load the new context
-    MOV ds, [eax]
-    MOV es, [eax]
-    MOV fs, [eax]
-    MOV gs, [eax]
+    ; load next user context
+    MOV eax, [esp+40]
+    
+    MOV cx, 0x23
+    MOV ds, cx
+    MOV es, cx
+    MOV fs, cx
+    MOV gs, cx
 
-    MOV edi, [eax+4]
-    MOV esi, [eax+8]
-    MOV ebp, [eax+12]
-    MOV ebx, [eax+20]
-    MOV edx, [eax+24]
-    MOV ecx, [eax+28]
+    PUSH DWORD [eax+48] ; SS
+    PUSH DWORD [eax+44] ; USER ESP
+    PUSH DWORD [eax+40] ; EFLAGS
+    PUSH DWORD [eax+36] ; CS 
+    PUSH DWORD [eax+32] ; EIP
 
-    PUSH DWORD [eax+60] ; Push SS
-    PUSH DWORD [eax+56] ; Push ESP
-    PUSH DWORD [eax+52] ; Push EFLAGS
-    PUSH DWORD [eax+48] ; Push CS
-    PUSH DWORD [eax+44] ; Push EIP
-
-    MOV eax, [eax+32] ; Restore EAX
-
-    STI
+    MOV edi, [eax+0]
+    MOV esi, [eax+4]
+    MOV ebp, [eax+8]
+    MOV ebx, [eax+16]
+    MOV edx, [eax+20]
+    MOV ecx, [eax+24]
+    MOV eax, [eax+28]
+    
     IRET
 
+
+; void switch_task(uint32_t *prev_stack, uint32_t next_stack);
+global switch_task
+switch_task:
+    pusha
+
+    mov eax, [esp+36] ; prev_thread addr of stack_ptr
+    mov [eax], esp     ; Save current ESP in prev_thread context
+    mov eax, [esp+40] ; next_thread addr of stack_ptr
+    mov esp, eax     ; Restore ESP from next_thread context
+
+    popa
+    ret
 
 global read_eip
 read_eip:

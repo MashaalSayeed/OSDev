@@ -2,11 +2,14 @@
 #include "kernel/isr.h"
 #include "kernel/paging.h"
 #include "kernel/printf.h"
+#include "drivers/pit.h"
+
 #include <stdbool.h>
 
-extern void switch_context(registers_t* context);
+extern void switch_context(uint32_t* prev, thread_context_t* context);
+extern void switch_task(uint32_t* prev, uint32_t* next);
 
-process_t *init_process = NULL;
+// process_t *idle_process = NULL;
 thread_t *thread_list = NULL;
 thread_t *current_thread = NULL;
 
@@ -14,40 +17,86 @@ bool scheduler_started = false;
 
 void idle_process() {
     while (1) {
+        printf("HELLO FROM IDLE\n");
         asm volatile ("hlt");
     }
 }
 
 void scheduler_init() {
-    init_process = create_process("init", idle_process, PROCESS_FLAG_KERNEL);
-    init_process->status = INIT;
-    add_process(init_process);
+    init_timer(100);
+    // init_process = create_process("init", idle_process, PROCESS_FLAG_KERNEL);
+    // init_process->status = INIT;
+    // add_process(init_process);
+    // thread_context_t* ctx = &init_process->main_thread->context;
+    // thread_t* main_thread = init_process->main_thread;
+    // jmp_to_kernel_thread(&main_thread->context);
 }
-
+//0xc0403ffc; 0xc0403fdc; 0xc0403fe4
 void schedule(registers_t* context) {
-    if (!thread_list) return;
+    if (!thread_list || !current_thread) return;
 
-    // // Save the context of the current processs
-    scheduler_started = true;
-    if (current_thread != NULL && context != NULL) {
-        current_thread->context = *context;
-        if (current_thread->status == RUNNING) current_thread->status = READY;
-    }
+    thread_t *prev_thread = current_thread;
+    if (prev_thread->status == RUNNING) prev_thread->status = READY;
 
     thread_t *next_thread = pick_next_thread(current_thread);
+    if (next_thread && next_thread != current_thread) {
+        // printf("Switching from thread: %s (TID: %d) to thread: %s (TID: %d) %x -> %x\n",
+        //        prev_thread->thread_name, prev_thread->tid,
+        //        next_thread->thread_name, next_thread->tid,
+        //        &prev_thread->kernel_stack, &next_thread->kernel_stack);
+        if (context != NULL) {
+            // printf("[TID: %d] Saving context: eip %x; ebp %x; useless %x\n", 
+            //     prev_thread->tid, context->eip, context->ebp, context->err_code);
+            prev_thread->context.eip = context->eip;
+            prev_thread->context.user_esp = context->esp;
+            prev_thread->context.ebp = context->ebp;
+            prev_thread->context.eflags = context->eflags;
 
-    // printf("Current thread (%d) | Next Thread: %d\n", current_thread->tid, next_thread->tid);
-    if (next_thread != current_thread || next_thread->status == READY) {
+            prev_thread->context.edi = context->edi;
+            prev_thread->context.esi = context->esi;
+            prev_thread->context.eax = context->eax;
+            prev_thread->context.ebx = context->ebx;
+            prev_thread->context.ecx = context->ecx;
+            prev_thread->context.edx = context->edx;
+        }
+
         current_thread = next_thread;
         current_thread->status = RUNNING;
 
         // Restore context and switch page directory
-        // printf("Switching to thread %d (%s)\n", current_thread->tid, current_thread->thread_name);
-        switch_page_directory(current_thread->owner->root_page_table);
-        switch_context(&current_thread->context);
+        if (prev_thread->owner->root_page_table != next_thread->owner->root_page_table) {
+            switch_page_directory(next_thread->owner->root_page_table);
+        }
+
+        if (current_thread->owner->is_kernel_process) {
+            switch_task(&prev_thread->kernel_stack, current_thread->kernel_stack);
+        } else {
+            switch_task(&prev_thread->kernel_stack, current_thread->kernel_stack);
+            asm volatile ("mov %%esp, %0" : "=r"(prev_thread->context.esp));
+            switch_context(&prev_thread->kernel_stack, &current_thread->context);
+        }
     } else {
-        current_thread->owner->status = RUNNING;
+        current_thread->status = RUNNING;
     }
+}
+
+__attribute__((naked))
+static void jmp_to_kernel_thread_context(thread_context_t *context) {
+    __asm__ volatile (
+        "mov 4(%esp), %eax\n"
+
+        "mov 12(%eax), %esp\n" // ESP
+        "mov 8(%eax), %ebp\n" // EBP
+        "mov 32(%eax), %ecx\n" // EIP
+        "sti\n"
+
+        "jmp *%ecx"
+    );
+}
+
+void jmp_to_kernel_thread(thread_t *thread) {
+    printf("Switching to kernel thread: %s (TID: %d) %x\n", thread->thread_name, thread->tid, thread->owner);
+    jmp_to_kernel_thread_context(&thread->context);
 }
 
 process_t* get_current_process() {
@@ -94,11 +143,13 @@ void add_thread(thread_t *thread) {
 
     // Circular linked list
     thread->next_global = thread_list;
+    if (current_thread == NULL) current_thread = thread;
 }
 
 void remove_thread(thread_t *thread) {
     if (!thread_list || !thread) return;
 
+    // if (thread == current_thread) current_thread = thread->next_global;
     if (thread_list == thread) {
         if (thread->next_global == thread_list) {
             // Only one thread in the list
@@ -132,7 +183,7 @@ thread_t *pick_next_thread() {
     if (!current_thread) return NULL;
 
     thread_t *next = current_thread->next_global;
-    while (next != current_thread) {
+    while (next && next != current_thread) {
         if (next->status == READY) return next;
         next = next->next_global;
     }

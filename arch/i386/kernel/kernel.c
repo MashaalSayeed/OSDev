@@ -3,7 +3,6 @@
 #include "drivers/tty.h"
 #include "drivers/serial.h"
 #include "drivers/keyboard.h"
-#include "drivers/pit.h"
 #include "kernel/multiboot.h"
 #include "kernel/pmm.h"
 #include "kernel/paging.h"
@@ -88,6 +87,9 @@ void print_time() {
 	kprintf(INFO, "Current Time: %02d:%02d:%02d %02d/%02d/%02d\n", time.hour, time.minute, time.second, time.day, time.month, time.year);
 }
 
+void init_main();
+void process_test();
+
 
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
@@ -131,28 +133,60 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
 	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 
-	init_timer(100);
-
-	if (is_gui_enabled) {
-		gui_init(&fb_data);
-		gui_loop();
-	} else {
-		kprintf(DEBUG, "No GUI\n");
-	}
+	vfs_init();
 
 	scheduler_init();
 
-	vfs_init();
+	process_t *init_process = create_process("init", init_main, PROCESS_FLAG_KERNEL);
+	add_process(init_process);
+	// add_process(create_process("test", process_test, PROCESS_FLAG_KERNEL));
+
+	jmp_to_kernel_thread(init_process->main_thread);
+
+
+	// if (is_gui_enabled) {
+	// 	// gui_init(&fb_data);
+	// 	// gui_loop();
+	// } else {
+	// 	kprintf(DEBUG, "No GUI\n");
+	// }
+
+
 
 	// find_rsdt();
 
-	exec("/BIN/SHELL", NULL);
+	// print_thread_list();
+
+
+	// exec("/BIN/SHELL", NULL);
 	// test_string();
 
 	// exec("/BIN/HELLO", NULL);
 
-
 	for (;;) {
+		asm volatile("hlt");
+	}
+}
+
+void init_main() {
+	exec("/BIN/SHELL", NULL);
+	uint32_t i = 0;
+	for (;;) {
+		asm volatile ("cli");
+		printf("Hello from init process! %d\n", i);
+		asm volatile ("sti");
+		i++;
+		// asm volatile("hlt");
+	}
+}
+
+void process_test() {
+	uint32_t i = 0;
+	asm volatile ("sti");
+	for (;;) {
+		// asm volatile ("cli");
+		// printf("Hello from test process %d!\n", i);
+		// i++;
 		asm volatile("hlt");
 	}
 }

@@ -4,20 +4,27 @@
 #include "kernel/io.h"
 #include "kernel/system.h"
 
+#define SCHEDULER_FREQ 100 // 100 Hz or 10 ms per tick
+
 uint32_t tick = 0;
 uint32_t timer_freq = 100;
 
 void timer_callback(registers_t *regs) {
-    // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second)
+    // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second or 10 ms per tick)
     tick++;
 
-    // Switch to the next process every 10 ticks
-    if (tick % 100 == 0) schedule(regs);
+    // Switch to the next process every 10 ticks (or every 100 ms)
+    if (tick % 1 == 0) schedule(regs);
+    // printf("Tick: %d\n", tick);
+    // schedule(regs);
 }
 
 void sleep(uint32_t ms) {
 	uint32_t start = tick;
-	while ((uint32_t)(tick - start) < ms);
+	while ((uint32_t)(tick - start) < ms / 10) {
+        // Busy wait
+        asm volatile("hlt"); // Halt the CPU to save power
+    }
 }
 
 void init_timer(uint32_t freq) {
