@@ -57,7 +57,7 @@ int kprintf(log_level_t level, const char *format, ...) {
     return ret;
 }
 
-void hexdump(const void *addr, size_t len) {
+void print_hexdump(const void *addr, size_t len) {
     const uint8_t *p = (const uint8_t *)addr;
     for (size_t i = 0; i < len; i += 8) {
         printf("%x: ", (uint32_t)(uintptr_t)(p + i));  // Print address

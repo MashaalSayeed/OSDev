@@ -1,13 +1,14 @@
 #include "kernel/process.h"
 #include "kernel/isr.h"
+#include "kernel/gdt.h"
 #include "kernel/paging.h"
 #include "kernel/printf.h"
 #include "drivers/pit.h"
 
 #include <stdbool.h>
 
-extern void switch_context(uint32_t* prev, thread_context_t* context);
 extern void switch_task(uint32_t* prev, uint32_t* next);
+extern struct tss_entry tss_entry;
 
 // process_t *idle_process = NULL;
 thread_t *thread_list = NULL;
@@ -31,7 +32,7 @@ void scheduler_init() {
     // thread_t* main_thread = init_process->main_thread;
     // jmp_to_kernel_thread(&main_thread->context);
 }
-//0xc0403ffc; 0xc0403fdc; 0xc0403fe4
+
 void schedule(registers_t* context) {
     if (!thread_list || !current_thread) return;
 
@@ -40,26 +41,6 @@ void schedule(registers_t* context) {
 
     thread_t *next_thread = pick_next_thread(current_thread);
     if (next_thread && next_thread != current_thread) {
-        // printf("Switching from thread: %s (TID: %d) to thread: %s (TID: %d) %x -> %x\n",
-        //        prev_thread->thread_name, prev_thread->tid,
-        //        next_thread->thread_name, next_thread->tid,
-        //        &prev_thread->kernel_stack, &next_thread->kernel_stack);
-        if (context != NULL) {
-            // printf("[TID: %d] Saving context: eip %x; ebp %x; useless %x\n", 
-            //     prev_thread->tid, context->eip, context->ebp, context->err_code);
-            prev_thread->context.eip = context->eip;
-            prev_thread->context.user_esp = context->esp;
-            prev_thread->context.ebp = context->ebp;
-            prev_thread->context.eflags = context->eflags;
-
-            prev_thread->context.edi = context->edi;
-            prev_thread->context.esi = context->esi;
-            prev_thread->context.eax = context->eax;
-            prev_thread->context.ebx = context->ebx;
-            prev_thread->context.ecx = context->ecx;
-            prev_thread->context.edx = context->edx;
-        }
-
         current_thread = next_thread;
         current_thread->status = RUNNING;
 
@@ -68,13 +49,9 @@ void schedule(registers_t* context) {
             switch_page_directory(next_thread->owner->root_page_table);
         }
 
-        if (current_thread->owner->is_kernel_process) {
-            switch_task(&prev_thread->kernel_stack, current_thread->kernel_stack);
-        } else {
-            switch_task(&prev_thread->kernel_stack, current_thread->kernel_stack);
-            asm volatile ("mov %%esp, %0" : "=r"(prev_thread->context.esp));
-            switch_context(&prev_thread->kernel_stack, &current_thread->context);
-        }
+        // printf("prev esp: %x, next esp: %x\n", prev_thread->context.esp, current_thread->context.esp);
+        tss_entry.esp0 = (uint32_t)current_thread->kernel_stack + PROCESS_STACK_SIZE;
+        switch_task(&prev_thread->context.esp, current_thread->context.esp);
     } else {
         current_thread->status = RUNNING;
     }

@@ -139,7 +139,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	process_t *init_process = create_process("init", init_main, PROCESS_FLAG_KERNEL);
 	add_process(init_process);
-	// add_process(create_process("test", process_test, PROCESS_FLAG_KERNEL));
+	add_process(create_process("test", process_test, PROCESS_FLAG_KERNEL));
 
 	jmp_to_kernel_thread(init_process->main_thread);
 
@@ -182,11 +182,11 @@ void init_main() {
 
 void process_test() {
 	uint32_t i = 0;
-	asm volatile ("sti");
 	for (;;) {
-		// asm volatile ("cli");
+		asm volatile ("cli");
 		// printf("Hello from test process %d!\n", i);
-		// i++;
-		asm volatile("hlt");
+		asm volatile ("sti");
+		i++;
+		// asm volatile("hlt");
 	}
 }

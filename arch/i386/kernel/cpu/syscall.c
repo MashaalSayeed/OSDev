@@ -72,7 +72,7 @@ int sys_waitpid(int pid, int *status, int options) {
     if (child->status != TERMINATED) {
         proc->status = WAITING;
         current_thread->status = WAITING;
-        // printf("[%d] Waiting for child process %d to terminate...\n", proc->pid, pid);
+        printf("[%d] Waiting for child process %d to terminate...\n", proc->pid, pid);
         // Save current process state and schedule another process
         schedule(interrupt_frame);
     }
