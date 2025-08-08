@@ -261,9 +261,6 @@ void hex_to_ascii(unsigned int num, char* buffer) {
     char *ptr = buffer;
     char *ptr1 = buffer; // Pointer to the start of the string
 
-    *ptr++ = '0';
-    *ptr++ = 'x';
-
     if (num == 0) {
         *ptr++ = '0';
         *ptr = '\0';
@@ -282,7 +279,7 @@ void hex_to_ascii(unsigned int num, char* buffer) {
     }
     *ptr = '\0';
 
-    reverse(ptr1 + 2);
+    reverse(ptr1);
 }
 
 void bin_to_ascii(unsigned int num, char* buffer) {

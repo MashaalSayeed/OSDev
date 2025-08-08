@@ -105,15 +105,17 @@ static uint32_t fat32_get_next_cluster(fat32_superblock_t *sb, uint32_t cluster)
     uint32_t fat_sector = sb->reserved_sectors + (fat_offset / sb->bytes_per_sector);
     uint32_t offset = fat_offset % sb->bytes_per_sector;
 
-    uint8_t buffer[512];
+    uint8_t *buffer = kmalloc(sb->bytes_per_sector);
     if (sb->device->read_block(sb->device, fat_sector, buffer) != 0) {
         printf("Error: Failed to read FAT sector %d\n", fat_sector);
+        kfree(buffer);
         return FAT32_CLUSTER_BAD;  // Indicate bad cluster
     }
 
     uint32_t next_cluster = *(uint32_t *)(buffer + offset) & 0x0FFFFFFF;
-    if (next_cluster >= 0x0FFFFFF8) return FAT32_CLUSTER_LAST;
+    kfree(buffer);
 
+    if (next_cluster >= 0x0FFFFFF8) return FAT32_CLUSTER_LAST;
     return next_cluster; // Mask to 28 bits
 }
 
@@ -315,13 +317,16 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
     fat32_superblock_t *sb = (fat32_superblock_t*)dir->superblock->fs_data;
 
     uint32_t cluster = dir_inode->cluster;
-    uint8_t buffer[CLUSTER_SIZE];
+    uint8_t *buffer = kmalloc(sb->cluster_size);
     char formatted_name[12];
     fat32_format_name(name, formatted_name);
 
     while (cluster < FAT32_CLUSTER_LAST) {
         if (cluster == FAT32_CLUSTER_BAD || cluster == FAT32_CLUSTER_FREE) return NULL;
-        if (fat32_read_cluster(sb, cluster, buffer) != 0) return NULL;
+        if (fat32_read_cluster(sb, cluster, buffer) != 0) {
+            kfree(buffer);
+            return NULL;
+        }
         
         for (int i = 0; i < sb->cluster_size / sizeof(fat32_dir_entry_t); i++) {
             fat32_dir_entry_t *entry = (fat32_dir_entry_t*)(buffer + i * sizeof(fat32_dir_entry_t));
@@ -330,7 +335,11 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
 
             if (strncmp(entry->filename, formatted_name, 8) == 0 && strncmp(entry->ext, formatted_name + 8, 3) == 0) {
                 vfs_inode_t *inode = (vfs_inode_t*) kmalloc(sizeof(vfs_inode_t));
-                if (!inode) return NULL;
+                if (!inode) {
+                    kfree(buffer);
+                    return NULL;
+                }
+
                 inode->mode = entry->attributes;
                 inode->size = entry->size;
                 inode->inode_ops = &fat32_inode_ops;
@@ -339,6 +348,7 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
                 fat32_inode_t *inode_data = (fat32_inode_t*) kmalloc(sizeof(fat32_inode_t));
                 if (!inode_data) {
                     kfree(inode);
+                    kfree(buffer);
                     return NULL;
                 }
 
@@ -348,6 +358,7 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
                 inode_data->dir_cluster = cluster;
 
                 inode->fs_data = inode_data;
+                kfree(buffer);
                 return inode;
             }
         }
@@ -355,6 +366,7 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
         cluster = fat32_get_next_cluster(sb, cluster);
     }
 
+    kfree(buffer);
     return NULL;
 }
 
@@ -519,17 +531,17 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
 
     uint32_t cluster = inode->cluster;
     uint32_t offset = file->offset;
-    uint8_t buffer[sb->cluster_size];
     uint32_t read = 0;
-
+    
     // Check if offset is within file size and adjust count
     if (offset >= file->inode->size) return 0;
     if (offset + count > file->inode->size) {
         count = file->inode->size - offset;
     }
-
+    
     if (fat32_get_cluster_at_offset(sb, &cluster, offset) != 0) return read;
-
+    uint8_t *buffer = kmalloc(sb->cluster_size);
+    
     while (read < count && cluster != FAT32_CLUSTER_LAST) {
         uint32_t cluster_offset = offset % sb->cluster_size;
         uint32_t to_read = sb->cluster_size - cluster_offset;
@@ -537,7 +549,10 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
             to_read = count - read;
         }
 
-        if (fat32_read_cluster(sb, cluster, buffer) != 0) return read;
+        if (fat32_read_cluster(sb, cluster, buffer) != 0) {
+            kfree(buffer);
+            return read;
+        }
         memcpy((uint8_t*)buf + read, buffer + cluster_offset, to_read);
 
         read += to_read;
@@ -549,6 +564,7 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
     }
 
     file->offset += read;
+    kfree(buffer);
     return read;
 }
 

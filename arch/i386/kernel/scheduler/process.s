@@ -9,11 +9,11 @@ switch_context:
     MOV fs, cx
     MOV gs, cx
 
-    PUSH DWORD [eax+48] ; SS
-    PUSH DWORD [eax+44] ; USER ESP
-    PUSH DWORD [eax+40] ; EFLAGS
-    PUSH DWORD [eax+36] ; CS 
-    PUSH DWORD [eax+32] ; EIP
+    PUSH DWORD 0x23     ; SS
+    PUSH DWORD [eax+16] ; USER ESP
+    PUSH DWORD 0x202    ; EFLAGS
+    PUSH DWORD 0x1B     ; CS 
+    PUSH DWORD [eax+4]  ; EIP
     
     IRET
 
@@ -21,14 +21,14 @@ switch_context:
 ; void switch_task(uint32_t *prev_stack, uint32_t next_stack);
 global switch_task
 switch_task:
-    pusha
+    pushad
 
     mov eax, [esp+36] ; prev_thread addr of stack_ptr
     mov [eax], esp    ; Save current ESP in prev_thread context
     mov eax, [esp+40] ; next_thread addr of stack_ptr
     mov esp, eax      ; Restore ESP from next_thread context
 
-    popa
+    popad
     ret
 
 global read_eip

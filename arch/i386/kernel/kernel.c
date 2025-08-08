@@ -134,14 +134,18 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 
 	vfs_init();
-
 	scheduler_init();
 
-	process_t *init_process = create_process("init", init_main, PROCESS_FLAG_KERNEL);
-	add_process(init_process);
-	add_process(create_process("test", process_test, PROCESS_FLAG_KERNEL));
+	printf("kernel page dir: %x\n", kpage_dir);
 
-	jmp_to_kernel_thread(init_process->main_thread);
+	process_t *init_proc = create_process("init", init_main, PROCESS_FLAG_KERNEL);
+	process_t *test_proc = create_process("test", process_test, PROCESS_FLAG_KERNEL);
+
+	add_process(init_proc);
+	add_process(test_proc);
+
+	// jmp_to_kernel_thread(test_proc->main_thread);
+	jmp_to_kernel_thread(init_proc->main_thread);
 
 
 	// if (is_gui_enabled) {
@@ -169,24 +173,28 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 }
 
 void init_main() {
+	printf("Hello from init process!\n");
 	exec("/BIN/SHELL", NULL);
 	uint32_t i = 0;
 	for (;;) {
-		asm volatile ("cli");
-		printf("Hello from init process! %d\n", i);
-		asm volatile ("sti");
+		// asm volatile ("cli");
+		// printf("Hello from init process! %d\n", i);
+		int fd = vfs_open("/home", VFS_FLAG_READ);
+		vfs_close(vfs_get_file(fd));
+		// asm volatile ("sti");
 		i++;
 		// asm volatile("hlt");
 	}
 }
 
 void process_test() {
+	printf("Hello from test process!\n");
 	uint32_t i = 0;
 	for (;;) {
-		asm volatile ("cli");
+		// asm volatile ("cli");
 		// printf("Hello from test process %d!\n", i);
 		asm volatile ("sti");
 		i++;
-		// asm volatile("hlt");
+		asm volatile("hlt");
 	}
 }

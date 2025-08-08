@@ -11,7 +11,7 @@
 #define PATH_NAME_MAX_LEN 256
 #define MAX_OPEN_FILES 100
 
-#define PROCESS_STACK_SIZE 4096
+#define PROCESS_STACK_SIZE 0x1000
 
 #define PROCESS_FLAG_USER 0x1
 #define PROCESS_FLAG_KERNEL 0x2
@@ -24,19 +24,15 @@ typedef enum {
     TERMINATED
 } process_status_t;
 
-typedef struct {
-    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by pusha
-    uint32_t eip, cs, eflags, user_esp, ss;          // iret frame
-} __attribute__((packed)) thread_context_t;
-
 typedef struct thread {
     uint32_t tid;
+    uint32_t eip, esp, ebp;
+    uint32_t user_esp;
+
     process_status_t status;
     char thread_name[PROCESS_NAME_MAX_LEN];
-
     uint32_t *kernel_stack; // ESP saved when context switching
     uint32_t *user_stack;
-    thread_context_t context;
 
     struct process* owner;
     struct thread* next;

@@ -19,7 +19,7 @@
 extern page_directory_t* kpage_dir;
 extern thread_t* current_thread;
 extern void user_exit();
-extern void switch_context(thread_context_t* context);
+extern void switch_context(thread_t* context);
 extern void switch_task(uint32_t* prev, uint32_t* next);
 extern struct tss_entry tss_entry;
 
@@ -103,22 +103,22 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     thread->thread_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
 
     // Set up thread stack for context switch
+    printf("MOO\n");
     uint32_t *stack = (uint32_t *)alloc_kernel_stack(thread);
 
     PUSH(stack, uint32_t, entry_point);
     for (int i = 0; i < 8; i++) *--stack = 0; // Clear registers
 
     // Set up thread context
-    memset(&thread->context, 0, sizeof(thread_context_t));
     if (!proc->is_kernel_process) {
-        thread->context.user_esp = (uint32_t *)alloc_user_stack(thread);
+        printf("MOO\n");
+        thread->user_esp = (uint32_t *)alloc_user_stack(thread);
+        printf("MOO\n");
     }
 
-    thread->context.esp = stack;
-    thread->context.eip = (uint32_t)entry_point;
-    thread->context.cs = proc->is_kernel_process ? KERNEL_CS : USER_CS;
-    thread->context.ss = proc->is_kernel_process ? KERNEL_DS : USER_DS;
-    thread->context.eflags = 0x202;
+    thread->esp = stack;
+    thread->ebp = stack;
+    thread->eip = (uint32_t)entry_point;
 
     // Add to process's thread list
     if (!proc->thread_list) {
@@ -164,7 +164,6 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
     proc->fds[2] = vfs_get_file(2);
 
     thread_t *main_thread = create_thread(proc, entry_point, process_name);
-    proc->thread_list = main_thread;
     proc->main_thread = main_thread;
     if (!main_thread) {
         printf("Error: Failed to create main thread for process %s\n", process_name);
@@ -182,13 +181,11 @@ void kill_thread(thread_t *thread) {
     thread->status = TERMINATED;
 
     remove_thread(thread);
-    // if (thread->stack && !thread->owner->is_kernel_process) {
-    //     if (thread->owner->is_kernel_process) {
-    //         // kfree(thread->stack);
-    //     } else {
-    //         free_page(get_page((uint32_t)thread->stack, 0, thread->owner->root_page_table));
-    //     }
-    // }
+    kfree_aligned(thread->kernel_stack);
+
+    if (thread->user_stack) {
+        free_page(get_page((uint32_t)thread->user_stack, 0, thread->owner->root_page_table));
+    }
 
     kfree(thread);
 }
@@ -232,80 +229,17 @@ void cleanup_process(process_t *proc) {
     // // Free the process stack and process structure
     // // TODO: unmap all pages and heap
     free_page_directory(proc->root_page_table);
+    for (int i = 3; i < MAX_OPEN_FILES; i++) {
+        if (proc->fds[i]) {
+            vfs_close(proc->fds[i]);
+            proc->fds[i] = NULL;
+        }
+    }
     kfree(proc);
 }
 
-// int fork(registers_t *regs) {
-//     asm volatile ("cli");
-//     printf("Creating forked process...\n");
-//     process_t *parent = get_current_process();
-//     process_t *child = (process_t *)kmalloc(sizeof(process_t));
-//     if (!child) {
-//         printf("Error: Failed to allocate memory for child process\n");
-//         return -1;
-//     }
-
-//     // Copy parent process info
-//     child->pid = allocate_pid();
-//     child->parent = parent;
-
-//     strncpy(child->process_name, parent->process_name, PROCESS_NAME_MAX_LEN);
-//     child->status = READY;
-//     child->heap_start = parent->heap_start;
-//     child->heap_end = parent->heap_end;
-//     child->brk = parent->brk;
-//     child->is_kernel_process = parent->is_kernel_process;
-//     strncpy(child->cwd, parent->cwd, sizeof(parent->cwd));
-
-//     // Copy page directory
-//     child->root_page_table = clone_page_directory(parent->root_page_table);
-//     switch_page_directory(parent->root_page_table);
-
-
-//     // Copy file descriptors
-//     for (int i = 0; i < MAX_OPEN_FILES; i++) {
-//         if (parent->fds[i]) {
-//             child->fds[i] = vfs_get_file(parent->fds[i]->fd); // TODO: Check if this is correct
-//             if (child->fds[i]) {
-//                 child->fds[i]->ref_count++;
-//             }
-//         } else {
-//             child->fds[i] = NULL;
-//         }
-//     }
-
-//     thread_t *parent_thread = parent->main_thread;
-//     uint32_t eip, esp, ebp;
-//     eip = read_eip();
-
-//     if (current_thread == parent_thread) {
-//         // TODO: Unmap the previous stack to avoid map_memory warning
-//         asm volatile ("mov %%esp, %0" : "=r" (esp));
-// 		asm volatile ("mov %%ebp, %0" : "=r" (ebp));
-
-//         thread_t *child_thread = create_thread(child, eip, parent->thread_list->thread_name);
-//         child->main_thread = child_thread;
-//         child->thread_list = child_thread;
-
-//         memcpy(child_thread->kernel_stack, parent_thread->kernel_stack, PROCESS_STACK_SIZE);
-        
-//         int32_t offset = (uint32_t)child_thread->kernel_stack - (uint32_t)parent_thread->kernel_stack;
-//         child_thread->context.esp = esp + offset; // Adjust kernel stack pointer
-
-//         add_thread(child_thread);
-//         // print_thread_list();
-//         asm volatile ("sti");
-
-//         return child->pid;
-//     } else {
-//         printf("Forking from non-main thread is not supported yet\n");
-//         return 0;
-//     }
-// }
-
 int fork(registers_t *regs) {
     asm volatile ("cli");
-    printf("Creating forked process...\n");
     process_t *parent = get_current_process();
     process_t *child = (process_t *)kmalloc(sizeof(process_t));
     if (!child) {
@@ -314,6 +248,7 @@ int fork(registers_t *regs) {
     }
 
     // Copy parent process info
+    memset(child, 0, sizeof(process_t));
     child->pid = allocate_pid();
     child->parent = parent;
 
@@ -329,10 +264,9 @@ int fork(registers_t *regs) {
     child->root_page_table = clone_page_directory(parent->root_page_table);
     switch_page_directory(parent->root_page_table);
 
-
     // Copy file descriptors
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
-        if (parent->fds[i]) {
+        if (parent->fds[i] != NULL) {
             child->fds[i] = vfs_get_file(parent->fds[i]->fd); // TODO: Check if this is correct
             if (child->fds[i]) {
                 child->fds[i]->ref_count++;
@@ -342,52 +276,49 @@ int fork(registers_t *regs) {
         }
     }
 
-    thread_t *parent_thread = parent->main_thread;
+
     uint32_t eip, esp, ebp;
+    thread_t *parent_thread = parent->main_thread;
+    uint32_t magic = 0xFEEDBEEF;
     eip = read_eip();
-    // printf("fork\n");
 
     if (current_thread == parent_thread) {
         asm volatile ("mov %%esp, %0" : "=r" (esp));
         asm volatile ("mov %%ebp, %0" : "=r" (ebp));
 
-        thread_t *child_thread = create_thread(child, eip, parent->thread_list->thread_name);
+        thread_t *child_thread = create_thread(child, eip, "");
         child->main_thread = child_thread;
-        child->thread_list = child_thread;
 
         memcpy(child_thread->kernel_stack, parent_thread->kernel_stack, PROCESS_STACK_SIZE);
         
         int32_t offset = (uint32_t)child_thread->kernel_stack - (uint32_t)parent_thread->kernel_stack;
-        child_thread->context.esp = esp + offset; // Adjust kernel stack pointer
+        child_thread->esp = esp + offset; // Adjust kernel stack pointer
 
-        uint32_t *stack = child_thread->context.esp;
+        uint32_t *stack = child_thread->esp;
         PUSH(stack, uint32_t, eip);
         for (int i = 0; i < 8; i++) {
             --stack;
-            if (i == 5) *stack = ebp;
+            if (i == 5) *stack = ebp + offset;
             else *stack = 0; // Clear registers
         }
-        child_thread->context.esp = stack;
+        child_thread->esp = stack;
 
         add_thread(child_thread);
         parent_thread->status = READY;
         current_thread = child_thread;
-        tss_entry.esp0 = (uint32_t)child_thread->kernel_stack + PROCESS_STACK_SIZE;
-        switch_task(&parent_thread->context.esp, child_thread->context.esp);
+        switch_page_directory(child->root_page_table);
 
-        printf("HEL\n");
-    
-        // asm volatile ("sti");
+        tss_entry.esp0 = child_thread->kernel_stack + PROCESS_STACK_SIZE;
+        switch_task(&parent_thread->esp, child_thread->esp);
+
         return child->pid;
     } else {
-        printf("Forking from non-main thread is not supported yet\n");
         return 0;
     }
 }
 
 // TODO: Reuse old thread instead of destroying it and creating a new one
 int exec(const char *path, char **argv) {
-    printf("Executing process: %s\n", path);
 	asm volatile ("cli");
 
     // 1. Open the ELF file
@@ -405,7 +336,7 @@ int exec(const char *path, char **argv) {
         printf("Failed to create new page directory\n");
         return -1;
     }
-
+    
     // 3. Copy arguments into k_argv and k_strings (kernel memory)
     int argc = 0;
     size_t total_len = 0;
@@ -415,13 +346,13 @@ int exec(const char *path, char **argv) {
             argc++;
         }
     }
-
+    
     char **k_argv = NULL;
     char *k_strings = NULL;
     if (argc > 0) {
         k_argv = (char **)kmalloc((argc + 1) * sizeof(char *));
         k_strings = (char *)kmalloc(total_len);
-
+        
         char *str_ptr = k_strings;
         for (int i = 0; i < argc; i++) {
             size_t len = strlen(argv[i]) + 1;
@@ -431,19 +362,19 @@ int exec(const char *path, char **argv) {
         }
         k_argv[argc] = NULL;
     }
-
+    
     strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
     proc->process_name[PROCESS_NAME_MAX_LEN - 1] = '\0'; // Ensure null termination
-
+    
     // 4. Clear existing threads after copying arguments
     kill_process_threads(proc);
-
+    
     // 5. Switch to the new page directory and free the old one
     switch_page_directory(new_page_dir);
     free_page_directory(proc->root_page_table);
     proc->root_page_table = new_page_dir;
     proc->is_kernel_process = false; // Ensure this is a user process
-
+    
     // 6. Load the ELF file into new page directory
     vfs_file_t* file = proc->fds[fd];
     elf_header_t* elf = load_elf(file, new_page_dir);
@@ -456,11 +387,12 @@ int exec(const char *path, char **argv) {
 
     // 7. Create a new main thread for the process
     thread_t *thread = create_thread(proc, (void (*)(void))elf->entry, proc->process_name);
+    printf("MOOO\n");
     proc->main_thread = thread;
     proc->thread_list = thread;
 
     // 8. Set up the user stack and copy arguments to the user stack
-    uint32_t *stack_top = (uint32_t *)USER_STACK_TOP;
+    uint8_t *stack_top = (uint8_t *)USER_STACK_TOP;
     char *stack_strings = (char *)(stack_top - total_len);
     char **stack_argv = (char **)(stack_strings - (sizeof(char *) * (argc + 1)));
 
@@ -475,27 +407,23 @@ int exec(const char *path, char **argv) {
 
     kfree(k_argv);
     kfree(k_strings);
-    stack_top = (uint32_t *)stack_argv;
+    stack_top = (uint8_t *)stack_argv;
     PUSH(stack_top, uint32_t, stack_argv);
     PUSH(stack_top, uint32_t, argc);
     PUSH(stack_top, uint32_t, user_exit);
 
     // 9. Set up the thread context and file descriptors
-    thread->context.user_esp = (uint32_t)stack_top;
-
-    proc->fds[0] = vfs_get_file(0);
-    proc->fds[1] = vfs_get_file(1);
-    proc->fds[2] = vfs_get_file(2);
-
+    thread->user_esp = (uint32_t)stack_top;
     proc->status = READY;
 
     // 10. Clean up the ELF header and switch to the new process
     kfree(elf);
 
     add_thread(thread);
+
     current_thread = thread;
-    print_thread_list();
-    switch_context(&thread->context);
+    tss_entry.esp0 = (uint8_t*)thread->kernel_stack + PROCESS_STACK_SIZE;
+    switch_context(thread);
 
     // Should not return here
     return -1;

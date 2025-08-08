@@ -127,5 +127,4 @@ Thank me later 😊
 
 ## Known Issues
 
-1. `waitpid()` systemcall doesnt return the exit code - No way to reschedule the syscall and get the exit status
-2. Fix memory leaks all over the codebaseå
+1. Random page faults when using fork()/exec() method to spawn a process

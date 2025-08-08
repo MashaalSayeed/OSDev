@@ -14,15 +14,16 @@ int cursor_x = 0, cursor_y = 0;
 int scroll_offset = 0;
 
 int term_rows, term_cols;
+char status_msg[MAX_COLS];
 
 void redraw_screen() {
     term_clear_screen();
-    for (int i = 0; i < line_count; i++) {
+    for (int i = 0; i < line_count+1; i++) {
         printf("%s\n", text[i]);
     }
 
     term_move_cursor(term_rows - 1, 0);
-    printf("[Ctrl-X to exit] [Ctrl-S to save] [Line %d, Col %d]", cursor_y + 1, cursor_x + 1);
+    printf("[Ctrl-X=Exit] [Ctrl-S=Save] [Line %d;Col %d] | %s", cursor_y + 1, cursor_x + 1, status_msg);
     term_move_cursor(cursor_y, cursor_x);
 }
 
@@ -43,7 +44,10 @@ void editor_save_file(const char *filename) {
     }
 
     syscall_close(fd);
-    printf("\nFile saved successfully.\n");
+
+    strncpy(status_msg, "File saved successfully!", sizeof(status_msg) - 1);
+    status_msg[sizeof(status_msg) - 1] = '\0'; // Ensure null termination
+    printf("\nFile saved successfully!\n");
 }
 
 void handle_input(char c) {
@@ -86,6 +90,7 @@ void handle_input(char c) {
             cursor_x = 0;
         }
     } else if (c == '\b' || c == 127) { // Handle backspace
+        status_msg[0] = '\0';
         if (cursor_x > 0) {
             cursor_x--;
             memmove(&text[cursor_y][cursor_x], &text[cursor_y][cursor_x + 1], strlen(&text[cursor_y][cursor_x + 1]) + 1);
@@ -99,6 +104,7 @@ void handle_input(char c) {
             text[line_count][0] = '\0'; // Null-terminate the last line
         }
     } else if (c >= ' ' && c <= '~') { // Printable characters
+        status_msg[0] = '\0';
         if (cursor_x < MAX_COLS - 1) {
             for (int i = strlen(text[cursor_y]); i >= cursor_x; i--) {
                 text[cursor_y][i + 1] = text[cursor_y][i]; // Shift characters to the right
@@ -150,8 +156,8 @@ int main(int argc, char **argv) {
         redraw_screen();
     }
 
-    // Move cursor to the end of the last line
-    term_move_cursor(line_count + 1, 0);
+    // Cleanup and exit
+    term_clear_screen();
     printf("\nEditor exited.\n");
 
     return 0;

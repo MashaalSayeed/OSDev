@@ -391,5 +391,5 @@ void page_fault_handler(registers_t *regs) {
 
     print_stack_trace(regs);
 
-    for (;;) ;
+    // for (;;) ;
 }

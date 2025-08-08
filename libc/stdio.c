@@ -70,6 +70,17 @@ int vsnprintf(char *buffer, size_t size, const char *format, va_list args) {
                 }
                 case 'x': {
                     hex_to_ascii(va_arg(args, unsigned int), num_buffer);
+                    int len = strlen(num_buffer);
+                    while (len < width) {
+                        if (i < size - 1) {
+                            buffer[i] = zero_pad ? '0' : ' ';
+                            i++;
+                            len++;
+                        } else {
+                            break;
+                        }
+                    }
+                    
                     str_append(buffer, size, &i, num_buffer);
                     break;
                 }

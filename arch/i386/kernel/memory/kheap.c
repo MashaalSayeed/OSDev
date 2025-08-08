@@ -104,13 +104,12 @@ void kfree(void *ptr) {
 }
 
 void *kmalloc_aligned(size_t size, size_t align) {
-    uintptr_t raw_mem = (uintptr_t)kmalloc(size + align - 1 + sizeof(void*));
+    uintptr_t raw_mem = (uintptr_t)kmalloc(size + align + sizeof(void*));
     if (!raw_mem) return NULL;
 
     // Store the original pointer just before the aligned pointer
-    uintptr_t aligned = ALIGN_UP(raw_mem + sizeof(void*), align);
+    uintptr_t aligned = (raw_mem + sizeof(void*) + align - 1) & ~(align - 1);
     ((void**)aligned)[-1] = (void*)raw_mem;
-
     return (void*)aligned;
 }
 

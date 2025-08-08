@@ -7,7 +7,10 @@
 #include <kernel/process.h>
 #include "libc/string.h"
 #include "kernel/kheap.h"
+#include "kernel/gdt.h"
 
+extern struct tss_entry tss_entry;
+extern thread_t *current_thread;
 static registers_t *interrupt_frame;
 
 int sys_read(int fd, void *buffer, size_t size) {
@@ -63,7 +66,6 @@ int sys_exit(int status) {
 
 int sys_waitpid(int pid, int *status, int options) {
     process_t *child, *proc;
-    thread_t *current_thread = get_current_thread();
     child = get_process(pid);
     proc = current_thread->owner;
     // printf("sys_waitpid: pid: %d, status: %x, options: %d\n", pid, status, options);
@@ -77,8 +79,6 @@ int sys_waitpid(int pid, int *status, int options) {
         schedule(interrupt_frame);
     }
 
-    // Never reaches here :(
-    printf("HOOWWWWW DID YOU DO THAT!!\n");
     // printf("pid: %d, status: %x, options: %d\n", pid, status, options);
     // proc = get_current_process();
     // child = get_process(pid);
@@ -94,6 +94,8 @@ int sys_waitpid(int pid, int *status, int options) {
 
 int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
     int ret = vfs_getdents(fd, dirp, count);
+    // printf("tss: %x, esp0: %x, dir: %x\n", tss_entry.esp0, current_thread->kernel_stack + PROCESS_STACK_SIZE, current_thread->owner->root_page_table);
+    // print_hexdump(tss_entry.esp0 - 0x128, 0x128);
     return ret;
 }
 
@@ -205,9 +207,7 @@ syscall_t syscall_table[] = {
 
 
 void syscall_handler(registers_t *regs) {
-    process_t *proc = get_current_process();
     interrupt_frame = regs;
-    // memcpy(&proc->thread_list->context, regs, sizeof(registers_t));
 
     if (regs->eax < sizeof(syscall_table) / sizeof(syscall_table[0]) &&
         syscall_table[regs->eax] != NULL) {

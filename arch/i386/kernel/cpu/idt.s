@@ -26,8 +26,7 @@ idt_flush:
     global irq%1
     irq%1:
         CLI
-        PUSH esp
-        ; PUSH LONG 0
+        PUSH LONG 0
         PUSH LONG %2
         JMP irq_common_stub
 %endmacro
@@ -137,4 +136,4 @@ irq_common_stub:
     POPA
     ADD esp, 8
     STI
-    IRET
+    IRET ; pop EIP, CS, EFLAGS, ESP, SS

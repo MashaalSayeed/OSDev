@@ -10,7 +10,6 @@
 extern void switch_task(uint32_t* prev, uint32_t* next);
 extern struct tss_entry tss_entry;
 
-// process_t *idle_process = NULL;
 thread_t *thread_list = NULL;
 thread_t *current_thread = NULL;
 
@@ -49,22 +48,21 @@ void schedule(registers_t* context) {
             switch_page_directory(next_thread->owner->root_page_table);
         }
 
-        // printf("prev esp: %x, next esp: %x\n", prev_thread->context.esp, current_thread->context.esp);
-        tss_entry.esp0 = (uint32_t)current_thread->kernel_stack + PROCESS_STACK_SIZE;
-        switch_task(&prev_thread->context.esp, current_thread->context.esp);
+        tss_entry.esp0 = (uint8_t*)current_thread->kernel_stack + PROCESS_STACK_SIZE;
+        switch_task(&prev_thread->esp, current_thread->esp);
     } else {
         current_thread->status = RUNNING;
     }
 }
 
 __attribute__((naked))
-static void jmp_to_kernel_thread_context(thread_context_t *context) {
+static void jmp_to_kernel_thread_context(thread_t *thread) {
     __asm__ volatile (
         "mov 4(%esp), %eax\n"
 
-        "mov 12(%eax), %esp\n" // ESP
-        "mov 8(%eax), %ebp\n" // EBP
-        "mov 32(%eax), %ecx\n" // EIP
+        "mov 8(%eax), %esp\n" // ESP
+        "mov 12(%eax), %ebp\n" // EBP
+        "mov 4(%eax), %ecx\n" // EIP
         "sti\n"
 
         "jmp *%ecx"
@@ -73,7 +71,8 @@ static void jmp_to_kernel_thread_context(thread_context_t *context) {
 
 void jmp_to_kernel_thread(thread_t *thread) {
     printf("Switching to kernel thread: %s (TID: %d) %x\n", thread->thread_name, thread->tid, thread->owner);
-    jmp_to_kernel_thread_context(&thread->context);
+    tss_entry.esp0 = (uint8_t*)thread->kernel_stack + PROCESS_STACK_SIZE;
+    jmp_to_kernel_thread_context(thread);
 }
 
 process_t* get_current_process() {
@@ -126,7 +125,6 @@ void add_thread(thread_t *thread) {
 void remove_thread(thread_t *thread) {
     if (!thread_list || !thread) return;
 
-    // if (thread == current_thread) current_thread = thread->next_global;
     if (thread_list == thread) {
         if (thread->next_global == thread_list) {
             // Only one thread in the list

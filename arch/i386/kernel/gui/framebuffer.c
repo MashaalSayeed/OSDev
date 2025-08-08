@@ -61,8 +61,6 @@ void update_framebuffer() {
 }
 
 void put_pixel(uint32_t x, uint32_t y, uint32_t color) {
-    // uint32_t *pixel = (uint32_t*)(fb->addr + (y * fb->pitch) + (x * (fb->bpp / 8)));
-    // *pixel = color;
     if (x >= fb->width || y >= fb->height) return;
     backbuffer[y * fb->width + x] = color;
 }
