@@ -8,6 +8,7 @@
 
 uint32_t tick = 0;
 uint32_t timer_freq = 100;
+bool scheduler_enabled = true;
 
 void timer_callback(registers_t *regs) {
     // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second or 10 ms per tick)
@@ -20,6 +21,8 @@ void timer_callback(registers_t *regs) {
 }
 
 void sleep(uint32_t ms) {
+    if (!scheduler_enabled) return;
+
 	uint32_t start = tick;
 	while ((uint32_t)(tick - start) < ms / 10) {
         // Busy wait
@@ -37,4 +40,5 @@ void init_timer(uint32_t freq) {
     outb(0x43, 0x36); // Command port
     outb(0x40, divisor & 0xFF); // Low byte
     outb(0x40, (divisor >> 8) & 0xFF); // High byte
+    scheduler_enabled = true;
 }

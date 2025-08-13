@@ -134,7 +134,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 
 	vfs_init();
-	scheduler_init();
+	// scheduler_init();
 
 	printf("kernel page dir: %x\n", kpage_dir);
 
@@ -145,15 +145,15 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	add_process(test_proc);
 
 	// jmp_to_kernel_thread(test_proc->main_thread);
-	jmp_to_kernel_thread(init_proc->main_thread);
+	// jmp_to_kernel_thread(init_proc->main_thread);
 
 
-	// if (is_gui_enabled) {
-	// 	// gui_init(&fb_data);
-	// 	// gui_loop();
-	// } else {
-	// 	kprintf(DEBUG, "No GUI\n");
-	// }
+	if (is_gui_enabled) {
+		gui_init(&fb_data);
+		// gui_loop();
+	} else {
+		kprintf(DEBUG, "No GUI\n");
+	}
 
 
 

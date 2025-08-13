@@ -29,7 +29,6 @@ int sys_write(int fd, const char *buffer, size_t size) {
     process_t *proc = get_current_process();
     vfs_file_t* file = proc->fds[fd];
     if (!file) return -1;
-    if (fd != file->fd) printf("fd: %d, fd?: %d, buf: %s\n", fd, file->fd, buffer); // Debug Redirected FD
 
     return file->file_ops->write(file, buffer, size);
 }
@@ -74,7 +73,7 @@ int sys_waitpid(int pid, int *status, int options) {
     if (child->status != TERMINATED) {
         proc->status = WAITING;
         current_thread->status = WAITING;
-        printf("[%d] Waiting for child process %d to terminate...\n", proc->pid, pid);
+        kprintf(DEBUG, "[%d] Waiting for child process %d to terminate...\n", proc->pid, pid);
         // Save current process state and schedule another process
         schedule(interrupt_frame);
     }
@@ -113,7 +112,6 @@ int sys_dup2(int oldfd, int newfd) {
 
     proc->fds[newfd] = proc->fds[oldfd];
     proc->fds[newfd]->ref_count++;
-    // printf("dup2: %d -> %d\n", oldfd, newfd);
     return newfd;
 }
 
@@ -213,7 +211,7 @@ void syscall_handler(registers_t *regs) {
         syscall_table[regs->eax] != NULL) {
         regs->eax = syscall_table[regs->eax](regs->ebx, regs->ecx, regs->edx);
     } else {
-        printf("Unknown syscall: %d\n", regs->eax);
+        kprintf(WARNING, "Unknown syscall: %d\n", regs->eax);
         regs->eax = -1;
     }
 }
