@@ -41,3 +41,8 @@ void cursor_draw();
 
 void gui_init(framebuffer_t *fb_data);
 void gui_loop();
+
+void dirty_list_add(rect_t rect);
+void dirty_flush();
+
+uint32_t *load_bitmap_file(const char* path, int *width, int *height);

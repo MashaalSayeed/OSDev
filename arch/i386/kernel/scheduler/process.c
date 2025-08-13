@@ -323,8 +323,8 @@ int exec(const char *path, char **argv) {
 
     // 1. Open the ELF file
     process_t *proc = get_current_process();
-    int fd = vfs_open(path, VFS_FLAG_READ);
-    if (fd < 0) {
+    vfs_file_t* file = vfs_open(path, VFS_FLAG_READ);
+    if (!file) {
         printf("Failed to load ELF file\n");
         return -1;
     }
@@ -376,7 +376,6 @@ int exec(const char *path, char **argv) {
     proc->is_kernel_process = false; // Ensure this is a user process
     
     // 6. Load the ELF file into new page directory
-    vfs_file_t* file = proc->fds[fd];
     elf_header_t* elf = load_elf(file, new_page_dir);
     if (!elf) {
         printf("Failed to load ELF file\n");

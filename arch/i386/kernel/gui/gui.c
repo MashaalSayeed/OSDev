@@ -12,10 +12,12 @@
 #define CURSOR_HEIGHT 16
 #define CURSOR_WIDTH 16
 
-static window_t *window_list = NULL;
-static window_t *window_list_tail = NULL;
+extern uint32_t *backbuffer;
 
-static uint16_t screen_width, screen_height = 0;
+surface_t fb_surf, bb_surf, desktop_surf;
+
+static window_t *window_list_top = NULL;
+static window_t *window_list_bottom = NULL;
 
 static bool mouse_moved = false;
 static bool mouse_dragging = false;
@@ -62,30 +64,30 @@ void dirty_list_add(rect_t rect) {
     }
 }
 
-bool any_window_dirty() {
-    window_t *current = window_list;
-    while (current) {
-        if (current->dirty) return true;
-        current = current->next;
-    }
-    return false;
-}
-
 void dirty_flush() {
     for (unsigned int i = 0; i < dirty_list_count; i++) {
         rect_t rect = dirty_list[i];
-        update_framebuffer_region(rect);
+        surf_blit(&fb_surf, rect.x, rect.y, &bb_surf, rect.x, rect.y, rect.w, rect.h);
     }
     dirty_list_count = 0;
 }
 
+void draw_desktop(surface_t *surf, rect_t rect) {
+    surf_blit(surf, rect.x, rect.y, &desktop_surf, rect.x, rect.y, desktop_surf.width, desktop_surf.height);
+}
+
 void repaint_rect(rect_t rect) {
-    fill_fb_area(rect, 0x000000);
+    draw_desktop(&bb_surf, rect);
+
+    for (window_t *win=window_list_bottom; win; win=win->next) {
+        // window_composite(win, &bb_surf, rect);
+    }
+
     dirty_list_add(rect);
 }
 
 window_t * find_window_at(int x, int y) {
-    window_t *current = window_list;
+    window_t *current = window_list_top;
     while (current) {
         if (x >= current->rect.x && x < current->rect.x + current->rect.w &&
             y >= current->rect.y && y < current->rect.y + current->rect.h) {
@@ -93,53 +95,45 @@ window_t * find_window_at(int x, int y) {
         }
         current = current->next;
     }
-    return NULL; // No window found at (x, y)
+    return NULL;
 }
 
-void create_main_window() {
-    window_t *main_window = create_window(100, 100, 800, 600, "Main Window");
-    if (!main_window) {
-        printf("Error: Failed to create main window\n");
-        return;
-    }
+void compositor_add_window(window_t *win) {
+    if (!win) return;
 
-    fill_window(main_window, 0xFFFFFF);
-    draw_titlebar(main_window, current_font);
-    draw_window_border(main_window, 0x000000);
+    // Add to the front of the list
+    win->prev = window_list_top;
+    win->next = NULL;
+    if (window_list_top) window_list_top->next = win;
+    else window_list_bottom = win; // First window added
 
-    window_list = main_window;
-    window_list_tail = main_window;
+    window_list_top = win;
 }
 
-static int child_x = 100, child_y = 50;
-static int child_count = 0;
-void create_child_window() {
-    char *window_title = kmalloc(64);
-    snprintf(window_title, 64, "Child Window %d", child_count++);
-    window_t *child_window = create_window(child_x, child_y, 200, 200, window_title);
-    if (!child_window) {
-        printf("Error: Failed to create child window\n");
-        return;
-    }
+void compositor_remove_window(window_t *win) {
+    if (!win) return;
 
+    if (win->prev) win->prev->next = win->next;
+    else window_list_top = win->next; // Removing the top window
 
-    fill_window(child_window, 0xFFFFFF);
-    draw_titlebar(child_window, current_font);
-    draw_window_border(child_window, 0x000000);
+    if (win->next) win->next->prev = win->prev;
+    else window_list_bottom = win->prev; // Removing the bottom window
 
-    // Add the new window to the front of the list
-    window_list->prev = child_window;
-    child_window->next = window_list;
-    window_list = child_window;
-
-    child_x += 20; // Increment position for next child window
-    child_y += 20;
+    win->next = NULL;
+    win->prev = NULL;
 }
 
 void gui_init(framebuffer_t *fb) {
     init_framebuffer(fb);
-    screen_width = fb->width;
-    screen_height = fb->height;
+    fb_surf = (surface_t){
+        .width = fb->width, .height = fb->height,
+        .pitch = fb->width, .pixels = (uint32_t *)fb->addr
+    };
+    
+    bb_surf = (surface_t){
+        .width = fb->width, .height = fb->height,
+        .pitch = fb->width, .pixels = backbuffer
+    };
 
     ps2_mouse_init();
     current_font = load_psf_font();
@@ -148,7 +142,18 @@ void gui_init(framebuffer_t *fb) {
         return;
     }
 
-    create_main_window();
+    window_t *main_window = create_window(100, 100, 800, 600, "Main Window");
+    main_window->widgets = create_label(2, 30, "Hello, World!");
+
+    window_draw_decorations(main_window);
+    window_draw_widgets(main_window);
+    compositor_add_window(main_window);
+
+    desktop_surf.pixels = load_bitmap_file("/RES/DESKTOP.BMP", &desktop_surf.width, &desktop_surf.height);
+    desktop_surf.pitch = desktop_surf.width;
+
+    draw_desktop(&bb_surf, (rect_t){0, 0, bb_surf.width, bb_surf.height});
+    dirty_list_add((rect_t){0, 0, fb->width, fb->height}); // Initial full redraw
 
     // Create a gui refresh thread
     // add_process(create_process("GUI Loop", gui_loop, PROCESS_FLAG_KERNEL));
@@ -170,7 +175,8 @@ void handle_mouse_event(mouse_event_t *evt) {
                 grabbed_window->rect.y = evt->y - drag_offset_y;
                 grabbed_window->dirty = true;
 
-                repaint_rect(rect_union(old_rect, grabbed_window->rect));
+                // repaint_rect(rect_subtract(old_rect, grabbed_window->rect));
+                repaint_rect(old_rect);
             }
 
             break;
@@ -181,10 +187,23 @@ void handle_mouse_event(mouse_event_t *evt) {
                     win->focused = true;
                     win->dirty = true;
 
-                    grabbed_window = win;
-                    mouse_dragging = true;
-                    drag_offset_x = evt->x - win->rect.x;
-                    drag_offset_y = evt->y - win->rect.y;
+                    if (in_titlebar(win, evt->x, evt->y)) {
+                        if (point_in_rect(evt->x, evt->y, close_btn_rect(win))) {
+                            printf("Close button clicked on window: %s\n", win->title);
+                            compositor_remove_window(win);
+                            destroy_window(win);
+                            repaint_rect(win->rect);
+                            return;
+                        } 
+                    
+                        grabbed_window = win;
+                        mouse_dragging = true;
+                        drag_offset_x = evt->x - win->rect.x;
+                        drag_offset_y = evt->y - win->rect.y;
+                    } else {
+                        input_event_t input_evt = { .type = INPUT_TYPE_MOUSE, .mouse = *evt };
+                        win->event_handler(win, &input_evt);
+                    }
                 }
             }
             break;
@@ -208,7 +227,7 @@ void cursor_save_bg(unsigned int x, unsigned int y) {
     // Save the background color under the cursor
     for (int i = 0; i < CURSOR_HEIGHT; i++) {
         for (int j = 0; j < CURSOR_WIDTH; j++) {
-            cursor_backup[i * CURSOR_WIDTH + j] = fb_get_pixel(x + j, y + i);
+            cursor_backup[i * CURSOR_WIDTH + j] = surf_get(&bb_surf, x + j, y + i);
         }
     }
 
@@ -220,7 +239,7 @@ void cursor_restore_bg() {
     if (cursor_saved_x != -1 && cursor_saved_y != -1) {
         for (int i = 0; i < CURSOR_HEIGHT; i++) {
             for (int j = 0; j < CURSOR_WIDTH; j++) {
-                fb_put_pixel(cursor_saved_x + j, cursor_saved_y + i, cursor_backup[i * CURSOR_WIDTH + j]);
+                surf_put(&bb_surf, cursor_saved_x + j, cursor_saved_y + i, cursor_backup[i * CURSOR_WIDTH + j]);
             }
         }
 
@@ -233,15 +252,15 @@ void cursor_restore_bg() {
 
 void cursor_draw() {
     // Ensure mouse coordinates are within screen bounds
-    if (cur_cursor.x < 0 || cur_cursor.x >= screen_width || cur_cursor.y < 0 || cur_cursor.y >= screen_height) {
+    if (cur_cursor.x < 0 || cur_cursor.x >= fb_surf.width - cur_cursor.w || cur_cursor.y < 0 || cur_cursor.y >= fb_surf.height - cur_cursor.h) {
         return;
     }
 
     cursor_save_bg(cur_cursor.x, cur_cursor.y);
     for (int i = 0; i < CURSOR_HEIGHT; i++) {
         for (int j = 0; j < CURSOR_WIDTH; j++) {
-            if (mouse_cursor[i][j] == 'X') fb_put_pixel(cur_cursor.x + j, cur_cursor.y + i, 0xFFFFFF); // Border color for the cursor
-            else if (mouse_cursor[i][j] == '.') fb_put_pixel(cur_cursor.x + j, cur_cursor.y + i, 0x000000); // Background color
+            if (mouse_cursor[i][j] == 'X') surf_put(&bb_surf, cur_cursor.x + j, cur_cursor.y + i, 0xFFFFFFFF); // Foreground color
+            else if (mouse_cursor[i][j] == '.') surf_put(&bb_surf, cur_cursor.x + j, cur_cursor.y + i, 0x00000000); // Background color
         }
     }
 }
@@ -249,32 +268,29 @@ void cursor_draw() {
 void gui_loop() {
     asm volatile ("sti");
     input_event_t evt;
+    bool any_window_dirty = false;
 
     while (1) {
+        cursor_restore_bg();
+
         while (input_pop_event(&evt)) {
             if (evt.type == INPUT_TYPE_MOUSE) {
                 handle_mouse_event(&evt.mouse);
             }
         }
 
-        if (need_redraw) fill_fb(0x000000); // Clear framebuffer if redraw is needed
-
-        if (need_redraw || mouse_moved || any_window_dirty()) {
-            need_redraw = true;
-            cursor_restore_bg();
-        }
-
-        window_t *current = window_list_tail;
+        window_t *current = window_list_bottom;
         while (current) {
             if (current->dirty) {
-                draw_window_to_fb(current);
+                any_window_dirty = true;
+                window_composite(current, &bb_surf, current->rect);
                 dirty_list_add(current->rect);
                 current->dirty = false;
             }
             current = current->prev;
         }
 
-        if (need_redraw) {
+        if (need_redraw || mouse_moved || any_window_dirty) {
             cursor_draw();
             dirty_list_add(cur_cursor);
             dirty_list_add(old_cursor);

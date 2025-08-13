@@ -262,7 +262,7 @@ vfs_inode_t *vfs_traverse(const char *path) {
     return resolve_path(path, &mount);
 }
 
-int vfs_open(const char *path, int flags) {
+vfs_file_t *vfs_open(const char *path, int flags) {
     process_t *proc = get_current_process();
     vfs_mount_t *mount;
     vfs_inode_t *inode = resolve_path(path, &mount);
@@ -309,7 +309,7 @@ int vfs_open(const char *path, int flags) {
     file->file_ops = &vfs_default_file_ops;
 
     proc->fds[fd] = file;
-    return fd;
+    return file;
 }
 
 int vfs_close(vfs_file_t *file) {
@@ -497,11 +497,11 @@ void test_vfs(vfs_superblock_t *root_sb) {
     // for (int i = 0; i < bytes_read / sizeof(linux_dirent_t); i++) {
     //     printf("Inode: %d, Name: %s, Type: %d\n", entries[i].d_ino, entries[i].d_name, entries[i].d_type);
     // }
-    int fd = vfs_open("/", VFS_FLAG_READ);
+    vfs_file_t *file = vfs_open("/", VFS_FLAG_READ);
 
     vfs_dir_entry_t entries[16];
-    int file_count = vfs_readdir(fd, &entries, sizeof(entries) / sizeof(vfs_dir_entry_t));
-    vfs_close(fd);
+    int file_count = vfs_readdir(file->fd, &entries, sizeof(entries) / sizeof(vfs_dir_entry_t));
+    vfs_close(file);
     printf("Files in root (%d):\n", file_count);
     for (int i = 0; i < file_count; i++) {
         if (entries[i].type == VFS_MODE_DIR) {

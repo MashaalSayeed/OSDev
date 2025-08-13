@@ -103,7 +103,7 @@ int vfs_mount(const char *path, vfs_superblock_t *sb);
 int vfs_unmount(const char *path);
 int vfs_create(const char *path, uint32_t mode);
 int vfs_unlink(const char *path);
-int vfs_open(const char *path, int flags);
+vfs_file_t *vfs_open(const char *path, int flags);
 int vfs_close(vfs_file_t *file);
 
 uint32_t vfs_write(vfs_file_t *file, const void *buf, size_t count);

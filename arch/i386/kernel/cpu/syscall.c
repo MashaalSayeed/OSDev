@@ -39,7 +39,9 @@ int sys_open(const char *path, int flags) {
     process_t *proc = get_current_process();
     char resolved_path[256];
     if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
-    return vfs_open(resolved_path, flags);
+    
+    vfs_file_t* file = vfs_open(resolved_path, flags);
+    return file->fd; // Return the file descriptor
 }
 
 int sys_close(int fd) {

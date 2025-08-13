@@ -150,7 +150,6 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 	if (is_gui_enabled) {
 		gui_init(&fb_data);
-		// gui_loop();
 	} else {
 		kprintf(DEBUG, "No GUI\n");
 	}
@@ -179,8 +178,8 @@ void init_main() {
 	for (;;) {
 		// asm volatile ("cli");
 		// printf("Hello from init process! %d\n", i);
-		int fd = vfs_open("/home", VFS_FLAG_READ);
-		vfs_close(vfs_get_file(fd));
+		vfs_file_t *file = vfs_open("/home", VFS_FLAG_READ);
+		vfs_close(file);
 		// asm volatile ("sti");
 		i++;
 		// asm volatile("hlt");
