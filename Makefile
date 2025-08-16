@@ -40,7 +40,7 @@ LOG_FILE = serial_output.log
 # Source files
 KERNEL_SRC = $(shell find $(KERNEL_DIR) -name "*.c")
 DRIVER_SRC = $(shell find $(DRIVER_DIR) -name "*.c")
-ASM_SRC = $(shell find $(ARCH_DIR) -name "*.s")
+ASM_SRC = $(shell find $(KERNEL_DIR) $(BOOT_DIR) -name "*.s")
 FONT_PSF = resources/fonts/font.psf
 
 # Object files
@@ -68,7 +68,11 @@ $(FONT_OBJ): $(FONT_PSF) | $(BUILD_DIR)
 	@echo "Building font object..."
 	i686-elf-objcopy -O elf32-i386 -B i386 -I binary $< $@
 
-$(BUILD_DIR)/%.s.o: $(ARCH_DIR)/%.s | $(BUILD_DIR)
+$(BUILD_DIR)/boot/%.s.o: $(BOOT_DIR)/%.s | $(BUILD_DIR)
+	@echo "Assembling $<..."
+	$(AS) $(ASM_FLAGS) $< -o $@
+
+$(BUILD_DIR)/kernel/%.s.o: $(KERNEL_DIR)/%.s | $(BUILD_DIR)
 	@echo "Assembling $<..."
 	$(AS) $(ASM_FLAGS) $< -o $@
 

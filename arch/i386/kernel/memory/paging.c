@@ -54,26 +54,6 @@ void * virtual2physical(page_directory_t * dir, void * virtual) {
     return (void *)((pt_entry.frame << 12) | page_frame_offset);
 }
 
-void *physical2virtual(page_directory_t *dir, void *physical) {
-    if (!paging_enabled) {
-        return (void *)((uint32_t)physical + LOAD_MEMORY_ADDRESS);
-    }
-
-    uint32_t phys_addr = (uint32_t)physical;
-    uint32_t pd_index = phys_addr >> 22;  // Page directory index
-    uint32_t pt_index = (phys_addr >> 12) & 0x03FF;  // Page table index
-    uint32_t page_frame_offset = phys_addr & 0xFFF;  // Offset within page
-
-    page_table_t *table = dir->ref_tables[pd_index];
-    if (!table || !table->pages[pt_index].present) {
-        printf("physical2virtual: page table entry does not exist\n");
-        return NULL;
-    }
-
-    uint32_t virt_addr = (table->pages[pt_index].frame << 12) + page_frame_offset;
-    return (void *)virt_addr;
-}
-
 // Get a page table entry for a given virtual address
 // If 'make' is true, create the page table if it doesn't exist
 // Returns NULL if the page table entry cannot be created
@@ -186,7 +166,7 @@ void switch_page_directory(page_directory_t *dir) {
 
 uint32_t copy_from_page(page_directory_t* src, uint32_t virt) {
     switch_page_directory(src);
-    uint32_t *tmp_virt = 0xFFF00000;
+    uint32_t tmp_virt = 0xFFF00000;
     page_table_entry_t *temp_page = get_page(tmp_virt, 1, src);
     alloc_page(temp_page, 0x7);
     memcpy((void *)tmp_virt, (void *)virt, PAGE_SIZE);
@@ -292,10 +272,10 @@ void paging_init() {
 
     // Map the first 4MB of memory to the first 4MB of physical memory
     // 768 - 1024 is reserved for the kernel stack and other kernel data
-    kmap_memory(LOAD_MEMORY_ADDRESS, 0, 4 * 0x100000, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+    kmap_memory(LOAD_MEMORY_ADDRESS, 0, 4 * 0x100000, PAGE_PRESENT | PAGE_RW);
 
     // Map some memory for the kernel heap
-    kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+    kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, PAGE_PRESENT | PAGE_RW);
     // Setup a guard page for the kernel stack
     // free_page(get_page((uint32_t) &kernel_stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
@@ -357,7 +337,7 @@ void page_fault_handler(registers_t *regs) {
 
 
     uint32_t faulting_address;
-    asm volatile("mov %%cr2, %0" : "=r" (faulting_address));
+    asm volatile("mov %%cr2, %0" : "=r" (faulting_address) :: "memory");
 
     if (faulting_address >= &kernel_stack_bottom && faulting_address < &kernel_stack_bottom + BLOCK_SIZE) {
         printf("Stack overflow at %x\n", faulting_address);
@@ -384,7 +364,7 @@ void page_fault_handler(registers_t *regs) {
     printf("Possible causes: [ ");
     if(!present) printf("Page not present ");
     if(rw) printf("Page is read only ");
-    if(user) printf("Page is read only ");
+    if(user) printf("User-mode access ");
     if(reserved) printf("Overwrote reserved bits ");
     if(inst_fetch) printf("Instruction fetch ");
     printf("]\n");

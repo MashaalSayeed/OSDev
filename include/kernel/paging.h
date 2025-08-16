@@ -62,7 +62,6 @@ page_table_entry_t * get_page(uint32_t virtual, int make, page_directory_t *dir)
 void alloc_page(page_table_entry_t *page, uint32_t flags);
 void free_page(page_table_entry_t *page);
 
-void * physical2virtual(page_directory_t *dir, void *physical);
 void * virtual2physical(page_directory_t *dir, void *virtual);
 void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags);
 void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags);

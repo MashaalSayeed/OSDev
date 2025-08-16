@@ -31,8 +31,8 @@ typedef struct thread {
 
     process_status_t status;
     char thread_name[PROCESS_NAME_MAX_LEN];
-    uint32_t *kernel_stack; // ESP saved when context switching
-    uint32_t *user_stack;
+    uintptr_t kernel_stack; // ESP saved when context switching
+    uintptr_t user_stack;
 
     struct process* owner;
     struct thread* next;

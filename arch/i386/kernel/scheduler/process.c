@@ -18,7 +18,6 @@
 
 extern page_directory_t* kpage_dir;
 extern thread_t* current_thread;
-extern void user_exit();
 extern void switch_context(thread_t* context);
 extern void switch_task(uint32_t* prev, uint32_t* next);
 extern struct tss_entry tss_entry;
@@ -53,7 +52,7 @@ static void * alloc_user_stack(thread_t *thread) {
 }
 
 static void * alloc_kernel_stack(thread_t *thread) {
-    void *kernel_stack = kmalloc_aligned(PROCESS_STACK_SIZE, PAGE_SIZE);
+    uint8_t *kernel_stack = kmalloc_aligned(PROCESS_STACK_SIZE, PAGE_SIZE);
     if (!kernel_stack) {
         printf("Error: Failed to allocate kernel stack for thread %s\n", thread->thread_name);
         return NULL;
@@ -181,10 +180,16 @@ void kill_thread(thread_t *thread) {
     thread->status = TERMINATED;
 
     remove_thread(thread);
-    kfree_aligned(thread->kernel_stack);
+    if (thread->kernel_stack) {
+        kfree_aligned(thread->kernel_stack);
+    }
 
     if (thread->user_stack) {
-        free_page(get_page((uint32_t)thread->user_stack, 0, thread->owner->root_page_table));
+        uint32_t stack_bottom = (uint32_t)thread->user_stack;
+        uint32_t stack_top = stack_bottom + PROCESS_STACK_SIZE;
+        for (uint32_t addr = stack_bottom; addr < stack_top; addr += PAGE_SIZE) {
+            free_page(get_page(addr, 0, thread->owner->root_page_table));
+        }
     }
 
     kfree(thread);
@@ -407,12 +412,13 @@ int exec(const char *path, char **argv) {
     kfree(k_argv);
     kfree(k_strings);
     stack_top = (uint8_t *)stack_argv;
+
+    PUSH(stack_top, uint32_t, NULL); // envp = NULL for now
     PUSH(stack_top, uint32_t, stack_argv);
     PUSH(stack_top, uint32_t, argc);
-    PUSH(stack_top, uint32_t, user_exit);
 
     // 9. Set up the thread context and file descriptors
-    thread->user_esp = (uint32_t)stack_top;
+    thread->user_esp = (uintptr_t)stack_top;
     proc->status = READY;
 
     // 10. Clean up the ELF header and switch to the new process

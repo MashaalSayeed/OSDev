@@ -17,6 +17,7 @@ window_t * create_window(int x, int y, int width, int height, const char *title)
     win->focused = false;
     win->dirty = true;
     win->zindex = 0;
+    win->widgets = NULL;
     win->event_handler = default_window_event_handler;
 
     win->surface.width = width;
@@ -55,7 +56,14 @@ void default_window_event_handler(window_t *win, input_event_t *evt) {
 void destroy_window(window_t *win) {
     if (!win) return;
 
-    // Free the window structure
+    widget_t *current = win->widgets;
+    while (current) {
+        widget_t *next = current->next;
+        if (current->data) kfree(current->data);
+        kfree(current);
+        current = next;
+    }
+
     kfree(win->surface.pixels);
     kfree(win);
 }
@@ -151,7 +159,7 @@ void window_composite(window_t *win, surface_t *target, rect_t area) {
 }
 
 void label_draw(widget_t *self, surface_t *surf) {
-    draw_text(surf, self->text, self->rect.x, self->rect.y, 0x000000, current_font);
+    draw_text(surf, ((label_data_t *)self->data)->text, self->rect.x, self->rect.y, ((label_data_t *)self->data)->color, current_font);
 }
 
 widget_t *create_widget(rect_t rect) {
@@ -166,8 +174,29 @@ widget_t *create_widget(rect_t rect) {
 widget_t *create_label(int x, int y, const char *text) {
     widget_t *label = create_widget((rect_t){ x, y, 0, 0 });
     if (!label) return NULL;
-    label->text = text;
+
+    label->type = WIDGET_LABEL;
     label->draw = label_draw;
-    printf("Drawing label at %s\n", text);
+
+    label_data_t *data = (label_data_t *)kmalloc(sizeof(label_data_t));
+    data->text = text;
+    data->color = 0x000000; // Default color
+    label->data = data;
     return label;
+}
+
+widget_t *create_button(int x, int y, const char *text, void (*on_click)(widget_t *)) {
+    widget_t *button = create_widget((rect_t){ x, y, 100, 30 });
+    if (!button) return NULL;
+
+    button->type = WIDGET_BUTTON;
+    button->draw = label_draw; // Use label draw for simplicity
+
+    button_data_t *data = (button_data_t *)kmalloc(sizeof(button_data_t));
+    data->text = text;
+    data->color = 0x000000; // Default color
+    
+    button->data = data;
+    button->on_click = on_click;
+    return button;
 }

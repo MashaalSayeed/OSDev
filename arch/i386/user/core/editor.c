@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
     filename = argv[1];
     int fd = syscall_open(filename, O_RDONLY);
     if (fd < 0) {
-        printf("Error: Failed to open file\n");
+        printf("Error: Failed to open file %s\n", filename);
         return 1;
     }
 

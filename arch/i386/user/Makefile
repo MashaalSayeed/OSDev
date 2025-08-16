@@ -5,7 +5,7 @@ LD=i686-elf-ld
 AS=nasm
 
 CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I../../../include -std=gnu99 -g
-LDFLAGS=-nostdlib -ffreestanding -O2 -lgcc -Tlinker.ld
+LDFLAGS=-nostdlib -nostartfiles -ffreestanding -O2 -lgcc -Tlinker.ld
 
 BUILD_DIR=../../../build/$(ARCH)
 USER_BUILD_DIR=$(BUILD_DIR)/user
@@ -32,13 +32,16 @@ $(CORE_BUILD_DIR)/%.o: core/%.c | $(USER_BUILD_DIR)
 # @echo "Compiling $< to $@"
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(USER_BUILD_DIR)/crt0.o: ./crt0.s | $(USER_BUILD_DIR)
+	$(AS) -f elf32 -o $@ $<
+
 $(LIB_BUILD_DIR)/%.o: lib/%.c | $(USER_BUILD_DIR)
 # @echo "Compiling $< to $@"
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BIN_DIR)/%: $(CORE_BUILD_DIR)/%.o $(LIB_OBJS) | $(USER_BUILD_DIR)
+$(BIN_DIR)/%: $(CORE_BUILD_DIR)/%.o $(USER_BUILD_DIR)/crt0.o $(LIB_OBJS) | $(USER_BUILD_DIR)
 # @echo "Linking $< $(LIB_OBJS)"
-	$(CC) $(LDFLAGS) $< $(LIB_OBJS) -o $@
+	$(CC) $(LDFLAGS) $< $(USER_BUILD_DIR)/crt0.o $(LIB_OBJS) -o $@
 
 clean:
 	rm -rf $(USER_BUILD_DIR)

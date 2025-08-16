@@ -16,18 +16,43 @@ typedef struct {
     uint32_t *pixels;
 } surface_t;
 
+typedef enum {
+    WIDGET_LABEL,
+    WIDGET_BUTTON,
+    WIDGET_IMAGE
+} widget_type_t;
+
+typedef struct {
+    const char *text;
+    uint32_t color;
+} label_data_t;
+
+typedef struct {
+    const char *text;
+    uint32_t color;
+} button_data_t;
+
+typedef struct {
+    const char *image_path;
+} image_data_t;
+
 typedef struct widget {
+    widget_type_t type;
     rect_t rect;
     bool visible;
-
-    const char *text; // For label widgets
     void *data; // For custom data, e.g. button state
 
     void (*draw)(struct widget *self, surface_t *win);
-    void (*on_click)(struct widget *self, int x, int y);
+    void (*on_click)(struct widget *self, int x, int y); // Click handler for buttons
 
     struct widget *next; // Pointer to the next widget in the linked list
 } widget_t;
+
+typedef enum {
+    WINDOW_TYPE_NORMAL,
+    WINDOW_TYPE_DIALOG,
+    WINDOW_TYPE_POPUP
+} window_type_t;
 
 typedef struct window {
     rect_t rect;
@@ -44,6 +69,10 @@ typedef struct window {
 
     struct window *next, *prev; // Doubly linked list pointers
 } window_t;
+
+static inline int clamp(int value, int min, int max) {
+    return value < min ? min : (value > max ? max : value);
+}
 
 static inline rect_t rect_union(rect_t a, rect_t b) {
     int x1 = MIN(a.x, b.x);
