@@ -4,10 +4,10 @@ CC=i686-elf-gcc
 LD=i686-elf-ld
 AS=nasm
 
-CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I../../../include -std=gnu99 -g
+CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I../include -std=gnu99 -g
 LDFLAGS=-nostdlib -nostartfiles -ffreestanding -O2 -lgcc -Tlinker.ld
 
-BUILD_DIR=../../../build/$(ARCH)
+BUILD_DIR=../build/$(ARCH)
 USER_BUILD_DIR=$(BUILD_DIR)/user
 CORE_BUILD_DIR=$(USER_BUILD_DIR)/core
 LIB_BUILD_DIR=$(USER_BUILD_DIR)/lib

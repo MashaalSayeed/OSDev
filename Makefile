@@ -11,8 +11,8 @@ PWD := $(shell pwd | sed 's/ /\\ /g')
 # Directories
 ARCH_DIR = arch/$(ARCH)
 BUILD_DIR = build/$(ARCH)
-KERNEL_DIR = $(ARCH_DIR)/kernel
-USER_DIR = $(ARCH_DIR)/user
+KERNEL_DIR = kernel
+USER_DIR = user
 DRIVER_DIR = $(ARCH_DIR)/drivers
 BOOT_DIR = $(ARCH_DIR)/boot
 LIBC_DIR = libc
@@ -39,17 +39,19 @@ LOG_FILE = serial_output.log
 
 # Source files
 KERNEL_SRC = $(shell find $(KERNEL_DIR) -name "*.c")
+ARCH_KERNEL_SRC = $(shell find $(ARCH_DIR)/kernel -name "*.c")
 DRIVER_SRC = $(shell find $(DRIVER_DIR) -name "*.c")
-ASM_SRC = $(shell find $(KERNEL_DIR) $(BOOT_DIR) -name "*.s")
+ASM_SRC = $(shell find $(ARCH_DIR)/kernel $(BOOT_DIR) -name "*.s")
 FONT_PSF = resources/fonts/font.psf
 
 # Object files
-KERNEL_OBJ = $(KERNEL_SRC:$(KERNEL_DIR)/%.c=$(BUILD_DIR)/kernel/%.o)
+KERNEL_OBJ = $(KERNEL_SRC:%.c=$(BUILD_DIR)/%.o)
+ARCH_KERNEL_OBJ = $(ARCH_KERNEL_SRC:$(ARCH_DIR)/kernel/%.c=$(BUILD_DIR)/kernel/%.o)
 DRIVER_OBJ = $(DRIVER_SRC:$(DRIVER_DIR)/%.c=$(BUILD_DIR)/drivers/%.o)
 ASM_OBJ = $(ASM_SRC:$(ARCH_DIR)/%.s=$(BUILD_DIR)/%.s.o)
 FONT_OBJ = $(BUILD_DIR)/font.o
 LIBC_OBJ = $(BUILD_DIR)/libc/libc.a
-OBJS = $(KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ) $(FONT_OBJ)
+OBJS = $(KERNEL_OBJ) $(ARCH_KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ) $(FONT_OBJ)
 
 USER_BIN=$(wildcard $(BUILD_DIR)/user/bin/*)
 
@@ -72,11 +74,15 @@ $(BUILD_DIR)/boot/%.s.o: $(BOOT_DIR)/%.s | $(BUILD_DIR)
 	@echo "Assembling $<..."
 	$(AS) $(ASM_FLAGS) $< -o $@
 
-$(BUILD_DIR)/kernel/%.s.o: $(KERNEL_DIR)/%.s | $(BUILD_DIR)
+$(BUILD_DIR)/kernel/%.s.o: $(ARCH_DIR)/kernel/%.s | $(BUILD_DIR)
 	@echo "Assembling $<..."
 	$(AS) $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/kernel/%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
+	@echo "Compiling kernel source file $<..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/kernel/%.o: $(ARCH_DIR)/kernel/%.c | $(BUILD_DIR)
 	@echo "Compiling kernel source file $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
