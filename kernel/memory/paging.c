@@ -108,7 +108,7 @@ void free_page(page_table_entry_t *page) {
         return;
     }
 
-    pmm_free_block((void *)(page->frame));
+    pmm_free_block(page->frame);
     memset(page, 0, sizeof(page_table_entry_t));
 }
 
@@ -155,7 +155,7 @@ void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size,
 
 void switch_page_directory(page_directory_t *dir) {
     // Set the CR3 register to the physical address of the page directory
-    uint32_t phys = (page_directory_t*) virtual2physical(kpage_dir, dir);
+    uint32_t phys = (uint32_t)virtual2physical(kpage_dir, dir);
     if (!phys) {
         printf("Failed to switch page directory\n");
         return;
@@ -206,12 +206,10 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
             if (!src_table->pages[j].present) continue;
 
             uint32_t virt_addr = i << 22 | j << 12;
-            uint32_t phys_addr = src_table->pages[j].frame;
             new_table->pages[j].frame = copy_from_page(src, virt_addr);
             new_table->pages[j].present = 1;
             new_table->pages[j].rw = 1; // 0 for COW
             new_table->pages[j].user = 1; // src_table->pages[j].user;
-            // printf("Copied page %x (%x -> %x)\n", virt_addr, phys_addr, new_table->pages[j].frame);
         }
 
         uint32_t t = (uint32_t) virtual2physical(src, new_table);

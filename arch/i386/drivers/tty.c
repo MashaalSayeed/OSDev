@@ -21,7 +21,16 @@ typedef enum {
 
 ansi_state_t ansi_state = STATE_NORMAL;
 
-void set_terminal_cursor(size_t row, size_t col) {
+static void update_cursor(size_t row, size_t col) 
+{
+    uint16_t pos = row * VGA_WIDTH + col;
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t) (pos & 0xFF));
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
+}
+
+void terminal_set_cursor(size_t row, size_t col) {
     if (row < VGA_HEIGHT && col < VGA_WIDTH) {
         terminal_row = row;
         terminal_column = col;
@@ -35,15 +44,6 @@ void terminal_initialize(void)
     
 	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 	terminal_clear();
-}
-
-void update_cursor(size_t row, size_t col) 
-{
-    uint16_t pos = row * VGA_WIDTH + col;
-    outb(0x3D4, 0x0F);
-    outb(0x3D5, (uint8_t) (pos & 0xFF));
-    outb(0x3D4, 0x0E);
-    outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
 }
 
 void terminal_setcolor(enum vga_color fg, enum vga_color bg) 
@@ -62,7 +62,7 @@ void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
     terminal_buffer[index] = vga_entry(c, color);
 }
 
-void handle_csi_command(char command, const char* params) {
+static void handle_csi_command(char command, const char* params) {
     switch (command) {
         case 'J':
             if (params[0] == '2') terminal_clear();
@@ -103,7 +103,7 @@ void handle_csi_command(char command, const char* params) {
         default:
             // Handle other CSI commands or ignore
             serial_write("Unknown CSI command: ");
-            serial_write(command);
+            serial_write(&command);
             serial_write("\n");
             break;
     }
@@ -120,7 +120,7 @@ void terminal_putchar(char c) {
                 ansi_len = 0;
             } else {
                 // Handle regular characters
-                serial_write(c);
+                serial_write_char(c);
                 if (c == '\n') {
                     terminal_column = 0;
                     if (++terminal_row == VGA_HEIGHT) {
@@ -210,7 +210,7 @@ void terminal_clear()
         }
     }
 
-    set_terminal_cursor(0, 0);
+    terminal_set_cursor(0, 0);
 }
 
 void terminal_clear_line() 

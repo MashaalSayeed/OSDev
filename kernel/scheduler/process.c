@@ -19,10 +19,10 @@
 extern page_directory_t* kpage_dir;
 extern thread_t* current_thread;
 extern void switch_context(thread_t* context);
-extern void switch_task(uint32_t* prev, uint32_t* next);
+extern void switch_task(uintptr_t* prev, uintptr_t next);
 extern struct tss_entry tss_entry;
 
-extern uint32_t read_eip();
+extern uintptr_t read_eip();
 
 extern vfs_file_t* console_fds[3];
 
@@ -44,18 +44,18 @@ static void * alloc_user_stack(thread_t *thread) {
     }
 
     void *stack_top = (void *)USER_STACK_TOP - thread_count * PROCESS_STACK_SIZE;
-    void *stack_bottom = stack_top - PROCESS_STACK_SIZE;
+    void *stack_bottom = (void *)(stack_top - PROCESS_STACK_SIZE);
 
-    map_memory(proc->root_page_table, stack_bottom, 0, PROCESS_STACK_SIZE, 0x7);
+    map_memory(proc->root_page_table, (uint32_t)stack_bottom, 0, PROCESS_STACK_SIZE, 0x7);
     thread->user_stack = stack_bottom;
     return stack_top;
 }
 
 static void * alloc_kernel_stack(thread_t *thread) {
-    uint8_t *kernel_stack = kmalloc_aligned(PROCESS_STACK_SIZE, PAGE_SIZE);
+    void *kernel_stack = kmalloc_aligned(PROCESS_STACK_SIZE, PAGE_SIZE);
     if (!kernel_stack) {
         printf("Error: Failed to allocate kernel stack for thread %s\n", thread->thread_name);
-        return NULL;
+        return 0;
     }
     thread->kernel_stack = kernel_stack;
     return kernel_stack + PROCESS_STACK_SIZE; // Return top of the stack
@@ -70,14 +70,14 @@ void* sbrk(process_t *proc, int increment) {
     if (increment > 0) {
         // Expand heap by allocating pages
         while (proc->brk < new_brk) {
-            alloc_page(get_page(proc->brk, 1, proc->root_page_table), 0x7);
+            alloc_page(get_page((uintptr_t)proc->brk, 1, proc->root_page_table), 0x7);
             proc->brk += PAGE_SIZE;
         }
     } 
     else if (increment < 0) {
         // Shrink heap (optional)
         while (proc->brk > new_brk) {
-            free_page(get_page(proc->brk - PAGE_SIZE, 0, proc->root_page_table));
+            free_page(get_page((uintptr_t)proc->brk - PAGE_SIZE, 0, proc->root_page_table));
             proc->brk -= PAGE_SIZE;
         }
     }
@@ -103,21 +103,23 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
 
     // Set up thread stack for context switch
     printf("MOO\n");
-    uint32_t *stack = (uint32_t *)alloc_kernel_stack(thread);
+    void *stack = alloc_kernel_stack(thread);
 
-    PUSH(stack, uint32_t, entry_point);
-    for (int i = 0; i < 8; i++) *--stack = 0; // Clear registers
+    PUSH(stack, uint32_t, (uintptr_t)entry_point);
+    for (int i = 0; i < 8; i++) {
+        PUSH(stack, uint32_t, 0); // Clear registers
+    }
 
     // Set up thread context
     if (!proc->is_kernel_process) {
         printf("MOO\n");
-        thread->user_esp = (uint32_t *)alloc_user_stack(thread);
+        thread->user_esp = (uintptr_t)alloc_user_stack(thread);
         printf("MOO\n");
     }
 
-    thread->esp = stack;
-    thread->ebp = stack;
-    thread->eip = (uint32_t)entry_point;
+    thread->esp = (uintptr_t)stack;
+    thread->ebp = (uintptr_t)stack;
+    thread->eip = (uintptr_t)entry_point;
 
     // Add to process's thread list
     if (!proc->thread_list) {
@@ -152,7 +154,7 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
         return NULL;
     }
 
-    proc->heap_start = USER_HEAP_START;
+    proc->heap_start = (void *)USER_HEAP_START;
     proc->brk = proc->heap_start;
     proc->heap_end = proc->heap_start;
 
@@ -181,7 +183,7 @@ void kill_thread(thread_t *thread) {
 
     remove_thread(thread);
     if (thread->kernel_stack) {
-        kfree_aligned(thread->kernel_stack);
+        kfree_aligned((void *)thread->kernel_stack);
     }
 
     if (thread->user_stack) {
@@ -291,7 +293,7 @@ int fork(registers_t *regs) {
         asm volatile ("mov %%esp, %0" : "=r" (esp));
         asm volatile ("mov %%ebp, %0" : "=r" (ebp));
 
-        thread_t *child_thread = create_thread(child, eip, "");
+        thread_t *child_thread = create_thread(child, (void (*)(void))eip, "");
         child->main_thread = child_thread;
 
         memcpy(child_thread->kernel_stack, parent_thread->kernel_stack, PROCESS_STACK_SIZE);
@@ -299,12 +301,14 @@ int fork(registers_t *regs) {
         int32_t offset = (uint32_t)child_thread->kernel_stack - (uint32_t)parent_thread->kernel_stack;
         child_thread->esp = esp + offset; // Adjust kernel stack pointer
 
-        uint32_t *stack = child_thread->esp;
+        uintptr_t stack = child_thread->esp;
         PUSH(stack, uint32_t, eip);
         for (int i = 0; i < 8; i++) {
-            --stack;
-            if (i == 5) *stack = ebp + offset;
-            else *stack = 0; // Clear registers
+            if (i == 5) {
+                PUSH(stack, uint32_t, ebp + offset);
+            } else {
+                PUSH(stack, uint32_t, 0); // Clear registers
+            }
         }
         child_thread->esp = stack;
 
@@ -313,7 +317,7 @@ int fork(registers_t *regs) {
         current_thread = child_thread;
         switch_page_directory(child->root_page_table);
 
-        tss_entry.esp0 = child_thread->kernel_stack + PROCESS_STACK_SIZE;
+        tss_entry.esp0 = (uint32_t)child_thread->kernel_stack + PROCESS_STACK_SIZE;
         switch_task(&parent_thread->esp, child_thread->esp);
 
         return child->pid;
@@ -396,7 +400,7 @@ int exec(const char *path, char **argv) {
     proc->thread_list = thread;
 
     // 8. Set up the user stack and copy arguments to the user stack
-    uint8_t *stack_top = (uint8_t *)USER_STACK_TOP;
+    void *stack_top = (void *)USER_STACK_TOP;
     char *stack_strings = (char *)(stack_top - total_len);
     char **stack_argv = (char **)(stack_strings - (sizeof(char *) * (argc + 1)));
 
@@ -411,10 +415,10 @@ int exec(const char *path, char **argv) {
 
     kfree(k_argv);
     kfree(k_strings);
-    stack_top = (uint8_t *)stack_argv;
+    stack_top = (void *)stack_argv;
 
-    PUSH(stack_top, uint32_t, NULL); // envp = NULL for now
-    PUSH(stack_top, uint32_t, stack_argv);
+    PUSH(stack_top, uint32_t, (uint32_t)NULL); // envp = NULL for now
+    PUSH(stack_top, uint32_t, (uint32_t)stack_argv);
     PUSH(stack_top, uint32_t, argc);
 
     // 9. Set up the thread context and file descriptors
@@ -427,7 +431,7 @@ int exec(const char *path, char **argv) {
     add_thread(thread);
 
     current_thread = thread;
-    tss_entry.esp0 = (uint8_t*)thread->kernel_stack + PROCESS_STACK_SIZE;
+    tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
     switch_context(thread);
 
     // Should not return here

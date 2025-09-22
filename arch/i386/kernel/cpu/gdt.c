@@ -46,7 +46,7 @@ void gdt_install() {
     gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);  // User Code segment   0x1B
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);  // User Data segment   0x23
     // TSS segment         0x28
-    load_tss(5, 0x10, &kernel_stack_top); 
+    load_tss(5, 0x10, (uint32_t)&kernel_stack_top); 
 
     gdt_flush(&gp);
     tss_flush();

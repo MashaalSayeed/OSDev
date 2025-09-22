@@ -2,6 +2,7 @@
 #include "kernel/kheap.h"
 #include "kernel/printf.h"
 #include "kernel/framebuffer.h"
+#include "libc/string.h"
 
 extern psf_font_t *current_font;
 
@@ -185,7 +186,7 @@ widget_t *create_label(int x, int y, const char *text) {
     return label;
 }
 
-widget_t *create_button(int x, int y, const char *text, void (*on_click)(widget_t *)) {
+widget_t *create_button(int x, int y, const char *text, void (*on_click)(widget_t *, int x, int y)) {
     widget_t *button = create_widget((rect_t){ x, y, 100, 30 });
     if (!button) return NULL;
 

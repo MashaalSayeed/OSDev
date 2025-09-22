@@ -117,18 +117,18 @@ int ata_write_sector(uint16_t io_base, uint8_t drive, uint32_t lba, void *buffer
 }
 
 int ata_read_block(block_device_t *dev, uint32_t block, void *buf) {
-    return ata_read_sector(dev->device_data, ATA_MASTER, block, buf);
+    return ata_read_sector((uint16_t)dev->device_data, ATA_MASTER, block, buf);
 }
 
 int ata_write_block(block_device_t *dev, uint32_t block, const void *buf) {
-    return ata_write_sector(dev->device_data, ATA_MASTER, block, buf);
+    return ata_write_sector((uint16_t)dev->device_data, ATA_MASTER, block, buf);
 }
 
 block_device_t ata = {
     .name = "/dev/sda1",
     .read_block = ata_read_block,
     .write_block = ata_write_block,
-    .device_data = ATA_PRIMARY_BASE_PORT
+    .device_data = (void *)ATA_PRIMARY_BASE_PORT
 };
 
 void ata_init() {

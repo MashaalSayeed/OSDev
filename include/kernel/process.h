@@ -25,14 +25,16 @@ typedef enum {
 } process_status_t;
 
 typedef struct thread {
-    uint32_t tid;
-    uint32_t eip, esp, ebp;
-    uint32_t user_esp;
+    size_t tid;
+    uintptr_t eip;
+    uintptr_t esp;
+    uintptr_t ebp;
+    uintptr_t user_esp;
 
     process_status_t status;
     char thread_name[PROCESS_NAME_MAX_LEN];
-    uintptr_t kernel_stack; // ESP saved when context switching
-    uintptr_t user_stack;
+    void *kernel_stack; // ESP saved when context switching
+    void *user_stack;
 
     struct process* owner;
     struct thread* next;
@@ -40,10 +42,10 @@ typedef struct thread {
 } thread_t;
 
 typedef struct process {
-    uint32_t pid;
+    size_t pid;
     process_status_t status;
     char process_name[PROCESS_NAME_MAX_LEN];
-    char cwd[256];
+    char cwd[PATH_NAME_MAX_LEN];
     
     page_directory_t *root_page_table;
     vfs_file_t* fds[MAX_OPEN_FILES];

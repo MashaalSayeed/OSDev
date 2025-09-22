@@ -44,7 +44,7 @@ void init_framebuffer(framebuffer_t *fb_data) {
     backbuffer = (uint32_t *)kmalloc(fb_data->width * fb_data->height * (fb_data->bpp / 8));
     if (!backbuffer) {
         printf("Error: Failed to allocate backbuffer memory\n");
-        return NULL;
+        return;
     }
 
     memset(backbuffer, 0, fb_data->width * fb_data->height * (fb_data->bpp / 8));

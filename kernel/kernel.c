@@ -31,7 +31,6 @@ extern page_directory_t* kpage_dir;
 static void multiboot2_init(struct multiboot_tag* mbd) {
 	struct multiboot_tag* tag = mbd;
 	struct multiboot_tag_framebuffer* fb;
-	struct multiboot_tag_string* boot_loader_name;
 	struct multiboot_tag_mmap* mmap_tag;
 
 	mbd->size = sizeof(struct multiboot_tag); // idk why this is needed
@@ -98,7 +97,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	asm volatile("sti");
 
 	init_serial();
-	log_to_serial("Initialized Serial\n");
+	serial_write("Initialized Serial\n");
 
 	terminal_initialize();
 	kprintf(DEBUG, "Initialized Terminal\n\n");
@@ -130,8 +129,8 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 
 	// TODO: Load kernel ELF file at higher virtual address
-	kmap_memory(kernel_elf.symtab, kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
-	kmap_memory(kernel_elf.strtab, kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
+	kmap_memory((uint32_t)kernel_elf.symtab, (uint32_t)kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
+	kmap_memory((uint32_t)kernel_elf.strtab, (uint32_t)kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 
 	vfs_init();
 	scheduler_init();
@@ -145,13 +144,13 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	add_process(test_proc);
 
 	// jmp_to_kernel_thread(test_proc->main_thread);
-	jmp_to_kernel_thread(init_proc->main_thread);
 
 
 	if (is_gui_enabled) {
 		gui_init(&fb_data);
 	} else {
 		kprintf(DEBUG, "No GUI\n");
+		jmp_to_kernel_thread(init_proc->main_thread);
 	}
 
 

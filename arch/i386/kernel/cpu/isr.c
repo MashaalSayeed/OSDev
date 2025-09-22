@@ -150,7 +150,7 @@ void isr_handler(registers_t *r) {
 
     if (r->int_no < 32) {
         // Handle exception
-        log_to_serial("Exception: \n");
+        serial_write("Exception: \n");
         printf("System Exception: %s\n", exception_messages[r->int_no]);
 
         for (;;) {} // Halt

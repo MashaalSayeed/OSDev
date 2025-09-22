@@ -91,9 +91,9 @@ static uint32_t ramfs_read(vfs_file_t *file, void *buf, size_t count) {
     return count;
 }
 
-static int ramfs_close(vfs_file_t *file) {
-    kfree(file->inode);
-    kfree(file);
+static int ramfs_close(vfs_inode_t *inode) {
+    kfree(inode->fs_data);
+    kfree(inode);
     return 0;
 }
 
@@ -127,7 +127,7 @@ static int ramfs_mkdir(vfs_inode_t *dir, const char *name, uint32_t mode) {
 }
 
 
-vfs_superblock_t *ramfs_mount(const char *path, block_device_t *device) {
+vfs_superblock_t *ramfs_mount(const char *device) {
     ramfs_root = (ramfs_node_t *)kmalloc(sizeof(ramfs_node_t));
     if (!ramfs_root) {
         return NULL;

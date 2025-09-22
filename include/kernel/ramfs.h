@@ -18,10 +18,10 @@ static vfs_inode_t* ramfs_lookup(vfs_inode_t* dir, const char* name);
 static int ramfs_create(vfs_inode_t* dir, const char* name, uint32_t mode);
 static uint32_t ramfs_write(vfs_file_t* file, const void* buf, size_t count);
 static uint32_t ramfs_read(vfs_file_t* file, void* buf, size_t count);
-static int ramfs_close(vfs_file_t* file);
+static int ramfs_close(vfs_inode_t* inode);
 
 static int ramfs_mkdir(vfs_inode_t* dir, const char* name, uint32_t mode);
 static int ramfs_rmdir(vfs_inode_t* dir, const char* name);
 static vfs_inode_t* ramfs_readdir(vfs_inode_t* dir, uint32_t index);
 
-vfs_superblock_t* ramfs_mount(const char* path, block_device_t *device);
+vfs_superblock_t* ramfs_mount(const char* device);

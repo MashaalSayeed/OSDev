@@ -5,8 +5,8 @@
 #include "libc/string.h"
 
 static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name);
-static uint32_t fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode);
-static uint32_t fat32_unlink(vfs_inode_t *dir, const char *name);
+static int fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode);
+static int fat32_unlink(vfs_inode_t *dir, const char *name);
 static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count);
 static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count);
 static int fat32_close(vfs_inode_t *inode);
@@ -267,6 +267,26 @@ static int fat32_is_directory_empty(fat32_superblock_t *sb, uint32_t cluster) {
     return 1; // Directory is empty
 }
 
+// Convert a filename to FAT32 format
+void fat32_format_name(const char *name, char *out_name) {
+    memset(out_name, ' ', 11);
+    int i = 0;
+    while (name[i] != '.' && name[i] != '\0' && i < 8) {
+        out_name[i] = name[i];
+        i++;
+    }
+
+    if (name[i] == '.') {
+        i++;
+        int j = 0;
+        while (name[i] != '\0' && j < 3) {
+            out_name[8 + j] = name[i];
+            i++;
+            j++;
+        }
+    }
+}
+
 static int fat32_find_entry(fat32_superblock_t *sb, uint32_t cluster, const char *name, fat32_dir_entry_t **entry, uint8_t *buffer) {
     while (cluster < FAT32_CLUSTER_LAST) {
         if (cluster == FAT32_CLUSTER_BAD) return -1;
@@ -290,26 +310,6 @@ static int fat32_find_entry(fat32_superblock_t *sb, uint32_t cluster, const char
     }
 
     return -1;
-}
-
-// Convert a filename to FAT32 format
-void fat32_format_name(const char *name, char *out_name) {
-    memset(out_name, ' ', 11);
-    int i = 0;
-    while (name[i] != '.' && name[i] != '\0' && i < 8) {
-        out_name[i] = name[i];
-        i++;
-    }
-
-    if (name[i] == '.') {
-        i++;
-        int j = 0;
-        while (name[i] != '\0' && j < 3) {
-            out_name[8 + j] = name[i];
-            i++;
-            j++;
-        }
-    }
 }
 
 static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
@@ -370,7 +370,7 @@ static vfs_inode_t *fat32_lookup(vfs_inode_t *dir, const char *name) {
     return NULL;
 }
 
-static uint32_t fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode) {
+static int fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode) {
     fat32_dir_entry_t entry;
     fat32_prepare_entry(name, &entry, mode);
 
@@ -430,7 +430,7 @@ static uint32_t fat32_create(vfs_inode_t *dir, const char *name, uint32_t mode) 
     return 0;
 }
 
-static uint32_t fat32_unlink(vfs_inode_t *dir, const char* name) {
+static int fat32_unlink(vfs_inode_t *dir, const char* name) {
     if (!dir || !name || name[0] == '\0') return -1;
 
     fat32_inode_t *dir_inode = (fat32_inode_t*)dir->fs_data;

@@ -169,7 +169,7 @@ int kgets(char *buffer, size_t size) {
         char c = kgetch();
         if (c == '\n') {
             buffer[i] = '\0';
-            return buffer;
+            return i + 1;
         } else if (c == '\b' && i > 0) {
             i--;
         } else if (c != '\b') {

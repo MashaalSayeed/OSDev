@@ -179,3 +179,7 @@ void window_draw_widgets(window_t *win);
 
 widget_t* find_widget_at(window_t *win, int x, int y);
 void window_composite(window_t *win, surface_t *target, rect_t area);
+
+widget_t *create_widget(rect_t rect);
+widget_t *create_label(int x, int y, const char *text);
+widget_t *create_button(int x, int y, const char *text, void (*on_click)(widget_t *, int x, int y));

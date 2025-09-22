@@ -1,6 +1,7 @@
 #include "kernel/hashtable.h"
 #include "kernel/kheap.h"
 #include "kernel/string.h"
+#include "kernel/printf.h"
 #include "libc/string.h"
 
 static uint32_t hash_function(const char *str) {

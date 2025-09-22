@@ -9,3 +9,4 @@ int printf(const char *format, ...);
 void puts(const char* str);
 void putchar(char c);
 void print_hexdump(const void *addr, size_t len);
+int kprintf(log_level_t level, const char *format, ...);

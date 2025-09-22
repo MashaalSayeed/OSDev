@@ -63,10 +63,10 @@ struct vfs_inode_operations {
 };
 
 struct vfs_file_operations {
-    uint32_t (*read)(vfs_file_t* file, void* buf, size_t count);
-    uint32_t (*write)(vfs_file_t* file, const void* buf, size_t count);
+    int (*read)(vfs_file_t* file, void* buf, size_t count);
+    int (*write)(vfs_file_t* file, const void* buf, size_t count);
     int (*close)(vfs_file_t* file);
-    uint32_t (*seek)(vfs_file_t* file, uint32_t offset, int whence);
+    int (*seek)(vfs_file_t* file, uint32_t offset, int whence);
 };
 
 typedef struct block_device {
@@ -82,7 +82,7 @@ typedef struct vfs_superblock {
     void *fs_data;          // The filesystem-specific data
 } vfs_superblock_t;
 
-typedef struct {
+typedef struct vfs_mount{
     const char * path;       // The path where the filesystem is mounted
     vfs_superblock_t *sb;    // The superblock of the filesystem
     struct vfs_mount *next;       // The next mount in the list
@@ -96,6 +96,8 @@ typedef struct {
 
 vfs_file_t *vfs_get_file(int fd);
 block_device_t *get_block_device(const char *path);
+int register_block_device(block_device_t *dev);
+
 
 int vfs_relative_path(const char *cwd, const char *path, char *resolved_path);
 
@@ -106,8 +108,8 @@ int vfs_unlink(const char *path);
 vfs_file_t *vfs_open(const char *path, int flags);
 int vfs_close(vfs_file_t *file);
 
-uint32_t vfs_write(vfs_file_t *file, const void *buf, size_t count);
-uint32_t vfs_read(vfs_file_t *file, void *buf, size_t count);
+int vfs_write(vfs_file_t *file, const void *buf, size_t count);
+int vfs_read(vfs_file_t *file, void *buf, size_t count);
 
 int vfs_seek(vfs_file_t *file, uint32_t offset, int whence);
 int vfs_rmdir(const char *path);

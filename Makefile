@@ -1,9 +1,9 @@
 ARCH ?= i386
 SCAMARCH ?= i386
-TARGET = i386-elf
+TARGET = i686-elf
 CC = $(TARGET)-gcc
 LD = $(TARGET)-ld
-GDB = $(TARGET)-gdb
+GDB = i386-elf-gdb
 AS = nasm
 
 PWD := $(shell pwd | sed 's/ /\\ /g')

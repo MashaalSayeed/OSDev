@@ -7,7 +7,7 @@
 
 #include <stdbool.h>
 
-extern void switch_task(uint32_t* prev, uint32_t* next);
+extern void switch_task(uintptr_t* prev, uintptr_t next);
 extern struct tss_entry tss_entry;
 
 thread_t *thread_list = NULL;
@@ -48,7 +48,7 @@ void schedule(registers_t* context) {
             switch_page_directory(next_thread->owner->root_page_table);
         }
 
-        tss_entry.esp0 = (uint8_t*)current_thread->kernel_stack + PROCESS_STACK_SIZE;
+        tss_entry.esp0 = (uint32_t)current_thread->kernel_stack + PROCESS_STACK_SIZE;
         switch_task(&prev_thread->esp, current_thread->esp);
     } else {
         current_thread->status = RUNNING;
@@ -71,7 +71,7 @@ static void jmp_to_kernel_thread_context(thread_t *thread) {
 
 void jmp_to_kernel_thread(thread_t *thread) {
     printf("Switching to kernel thread: %s (TID: %d) %x\n", thread->thread_name, thread->tid, thread->owner);
-    tss_entry.esp0 = (uint8_t*)thread->kernel_stack + PROCESS_STACK_SIZE;
+    tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
     jmp_to_kernel_thread_context(thread);
 }
 

@@ -43,7 +43,7 @@ int console_read(vfs_file_t* file, void* buf, size_t count) {
     return read_keyboard_buffer(buf, count);
 }
 
-int console_write(vfs_file_t* file, void* buf, size_t count) {
+int console_write(vfs_file_t* file, const void* buf, size_t count) {
     // printf("%d", count);
     terminal_write(buf, count);
     return count;
@@ -272,17 +272,17 @@ vfs_file_t *vfs_open(const char *path, int flags) {
             int ret = vfs_create(path, VFS_MODE_FILE);
             if (ret < 0) {
                 printf("Error: Failed to create file: %s\n", path);
-                return -1;
+                return NULL;
             }
 
             inode = resolve_path(path, &mount);
             if (!inode) {
                 printf("Error: Failed to resolve newly created file: %s\n", path);
-                return -1;
+                return NULL;
             }
         } else {
             printf("Error: Failed to resolve path: %s\n", path);
-            return -1;
+            return NULL;
         }
     }
 
@@ -294,11 +294,11 @@ vfs_file_t *vfs_open(const char *path, int flags) {
 
     if (fd == MAX_OPEN_FILES) {
         printf("Error: No available file descriptors\n");
-        return -1;
+        return NULL;
     }
 
     vfs_file_t* file = (vfs_file_t *)kmalloc(sizeof(vfs_file_t));
-    if (!file) return -1;
+    if (!file) return NULL;
 
     file->fd = fd;
     file->inode = inode;
@@ -369,7 +369,7 @@ int vfs_unlink(const char *path) {
     return result;
 }
 
-uint32_t vfs_write(vfs_file_t *file, const void* buf, size_t count) {
+int vfs_write(vfs_file_t *file, const void* buf, size_t count) {
     if (!file || file->inode->mode != VFS_MODE_FILE) {
         printf("Error: Not a file\n");
         return -1;
@@ -378,7 +378,7 @@ uint32_t vfs_write(vfs_file_t *file, const void* buf, size_t count) {
     return file->inode->inode_ops->write(file, buf, count);
 }
 
-uint32_t vfs_read(vfs_file_t *file, void* buf, size_t count) {
+int vfs_read(vfs_file_t *file, void* buf, size_t count) {
     if (!file || file->inode->mode != VFS_MODE_FILE) {
         printf("Error: Not a file\n");
         return -1;
@@ -499,8 +499,8 @@ void test_vfs(vfs_superblock_t *root_sb) {
     // }
     vfs_file_t *file = vfs_open("/", VFS_FLAG_READ);
 
-    vfs_dir_entry_t entries[16];
-    int file_count = vfs_readdir(file->fd, &entries, sizeof(entries) / sizeof(vfs_dir_entry_t));
+    vfs_dir_entry_t *entries = kmalloc(sizeof(vfs_dir_entry_t) * 16);
+    int file_count = vfs_readdir(file->fd, entries, 16);
     vfs_close(file);
     printf("Files in root (%d):\n", file_count);
     for (int i = 0; i < file_count; i++) {

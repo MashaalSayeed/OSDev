@@ -178,7 +178,7 @@ void *sys_sbrk(int incr) {
 //////////////// MY SYSCALLS //////////////////////
 #include "drivers/tty.h"
 void sys_set_cursor(int x, int y) {
-    set_terminal_cursor(x, y);
+    terminal_set_cursor(x, y);
 }
 
 

@@ -25,7 +25,7 @@ int init_serial() {
    return 0;
 }
 
-void serial_write(char c) {
+void serial_write_char(char c) {
     while ((inb(PORT + 5) & 0x20) == 0); // Wait for the transmit buffer to be empty
     outb(PORT, c); // Send the character
 }
@@ -35,8 +35,8 @@ char serial_read() {
     return inb(PORT); // Read the character
 }
 
-void log_to_serial(const char* data) {
+void serial_write(const char* data) {
     for(size_t i = 0; data[i] != '\0'; i++) {
-        serial_write(data[i]);
+        serial_write_char(data[i]);
     }
 }
