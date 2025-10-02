@@ -142,7 +142,7 @@ void write_command(char ** args) {
     syscall_close(fd);
 }
 
-void test_command() {
+void test_heap_command() {
     void *ptr = malloc(1024); // Allocate 1KB
     if (ptr == (void *)-1) {
         printf("Error: Failed to allocate memory\n");
@@ -153,6 +153,30 @@ void test_command() {
         free(ptr); // Free the allocated memory
         printf("Freed allocated memory\n");
     }
+}
+
+void test_pipe_command() {
+    int fds[2];
+    if (syscall_pipe(fds) < 0) {
+        printf("Error: Failed to create pipe\n");
+        return;
+    }
+
+    const char *message = "Hello through the pipe!";
+    syscall_write(fds[1], message, strlen(message));
+
+    char buffer[256];
+    int bytes_read = syscall_read(fds[0], buffer, sizeof(buffer) - 1);
+    if (bytes_read < 0) {
+        printf("Error: Failed to read from pipe\n");
+        return;
+    }
+    buffer[bytes_read] = '\0'; // Null-terminate the string
+
+    printf("Read from pipe: %s\n", buffer);
+
+    syscall_close(fds[0]);
+    syscall_close(fds[1]);
 }
 
 void help_command() {
@@ -189,7 +213,8 @@ command_t commands[] = {
     {"write", write_command},
     {"history", history_command},
     {"help", help_command},
-    {"test", test_command},
+    {"test-heap", test_heap_command},
+    {"test-pipe", test_pipe_command},
     {NULL, NULL}
 };
 

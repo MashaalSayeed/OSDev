@@ -1,11 +1,11 @@
 #include "drivers/ata.h"
 #include "drivers/pci.h"
 #include "kernel/isr.h"
-#include "kernel/vfs.h"
 #include "kernel/kheap.h"
 #include "kernel/printf.h"
 #include "libc/string.h"
 #include "kernel/io.h"
+#include "kernel/devfs.h"
 
 #define ATA_TIMEOUT 1000000
 
@@ -116,27 +116,36 @@ int ata_write_sector(uint16_t io_base, uint8_t drive, uint32_t lba, void *buffer
     return ATA_SUCCESS;
 }
 
-int ata_read_block(block_device_t *dev, uint32_t block, void *buf) {
+int ata_read_block(vfs_device_t *dev, uint32_t block, void *buf) {
     return ata_read_sector((uint16_t)dev->device_data, ATA_MASTER, block, buf);
 }
 
-int ata_write_block(block_device_t *dev, uint32_t block, const void *buf) {
+int ata_write_block(vfs_device_t *dev, uint32_t block, const void *buf) {
     return ata_write_sector((uint16_t)dev->device_data, ATA_MASTER, block, buf);
 }
 
-block_device_t ata = {
-    .name = "/dev/sda1",
-    .read_block = ata_read_block,
-    .write_block = ata_write_block,
-    .device_data = (void *)ATA_PRIMARY_BASE_PORT
-};
+// block_device_t ata = {
+//     .name = "/dev/sda1",
+//     .read_block = ata_read_block,
+//     .write_block = ata_write_block,
+//     .device_data = (void *)ATA_PRIMARY_BASE_PORT
+// };
 
 void ata_init() {
     // Initialize the ATA devices
     if (ata_identify(ATA_PRIMARY_BASE_PORT, ATA_MASTER) != ATA_SUCCESS) {
         printf("No primary master ATA device found\n");
     } else {
-        register_block_device(&ata);
+        // register_block_device(&ata);
+        devfs_register_device(&(vfs_device_t){
+            .name = "sda1",
+            .type = DEVICE_TYPE_BLOCK,
+            .device_data = (void *)ATA_PRIMARY_BASE_PORT,
+            .block_dev = {
+                .read_block = ata_read_block,
+                .write_block = ata_write_block
+            }
+        });
     }
 
     // if (ata_identify(ATA_PRIMARY_BASE_PORT, ATA_SLAVE) != ATA_SUCCESS) {

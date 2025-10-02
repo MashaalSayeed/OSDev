@@ -83,3 +83,7 @@ int syscall_rmdir(const char *path) {
 int syscall_unlink(const char *path) {
     return syscall(SYSCALL_UNLINK, (int)path, 0, 0);
 }
+
+int syscall_pipe(int fds[2]) {
+    return syscall(SYSCALL_PIPE, (int)fds, 0, 0);
+}

@@ -1,6 +1,7 @@
 #include "kernel/ramfs.h"
 #include "kernel/kheap.h"
 #include "libc/string.h"
+#include "kernel/printf.h"
 
 ramfs_node_t *ramfs_root;
 
@@ -11,6 +12,7 @@ static struct vfs_inode_operations ramfs_inode_ops = {
     .read = ramfs_read,
     .close = ramfs_close,
     .mkdir = ramfs_mkdir,
+    .readdir = ramfs_readdir
 };
 
 static ramfs_node_t* ramfs_find_child(ramfs_node_t* parent, const char* name) {
@@ -35,6 +37,26 @@ static vfs_inode_t* ramfs_lookup(vfs_inode_t *dir, const char *name) {
     inode->fs_data = child;
     inode->inode_ops = &ramfs_inode_ops;
     return inode;
+}
+
+static int ramfs_readdir(vfs_inode_t *dir, uint32_t offset, vfs_dir_entry_t *entry) {
+    if (!dir || !entry) return -1;
+
+    ramfs_node_t *node = (ramfs_node_t *)dir->fs_data;
+    ramfs_node_t *child = node->children;
+
+    for (uint32_t i = 0; i < offset; i++) {
+        if (!child) return 0; // No more entries
+        child = child->next;
+    }
+
+    if (!child) return 0; // No entry at this index
+
+    strncpy(entry->name, child->name, sizeof(entry->name));
+    entry->type = (child->mode & VFS_MODE_DIR) ? 1 : 0; // 1 for dir, 0 for file
+    entry->inode_number = offset + 1; // Simple inode number
+
+    return offset + 1; // Return next index
 }
 
 static int ramfs_create(vfs_inode_t *dir, const char *name, uint32_t mode) {
@@ -127,7 +149,7 @@ static int ramfs_mkdir(vfs_inode_t *dir, const char *name, uint32_t mode) {
 }
 
 
-vfs_superblock_t *ramfs_mount(const char *device) {
+vfs_superblock_t *ramfs_mount(vfs_device_t *device) {
     ramfs_root = (ramfs_node_t *)kmalloc(sizeof(ramfs_node_t));
     if (!ramfs_root) {
         return NULL;
@@ -135,7 +157,7 @@ vfs_superblock_t *ramfs_mount(const char *device) {
 
     memset(ramfs_root, 0, sizeof(ramfs_node_t));
     strcpy(ramfs_root->name, "/");
-    ramfs_root->mode = 0x755;
+    ramfs_root->mode = VFS_MODE_DIR; // rwxrwxrwx
 
     vfs_superblock_t *sb = (vfs_superblock_t *)kmalloc(sizeof(vfs_superblock_t));
     if (!sb) {
@@ -144,7 +166,7 @@ vfs_superblock_t *ramfs_mount(const char *device) {
     }
 
     sb->root = kmalloc(sizeof(vfs_inode_t));
-    sb->root->mode = VFS_MODE_DIR | ramfs_root->mode;
+    sb->root->mode = VFS_MODE_DIR;
     sb->root->size = 0;
     sb->root->fs_data = ramfs_root;
     sb->root->inode_ops = &ramfs_inode_ops;

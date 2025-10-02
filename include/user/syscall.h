@@ -28,3 +28,4 @@ void *syscall_sbrk(int increment);
 int syscall_mkdir(const char *path, int mode);
 int syscall_rmdir(const char *path);
 int syscall_unlink(const char *path);
+int syscall_pipe(int fds[2]);

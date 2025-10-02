@@ -143,6 +143,10 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	add_process(init_proc);
 	add_process(test_proc);
 
+	vfs_file_t * tty = vfs_open("/dev/tty0", VFS_FLAG_READ | VFS_FLAG_WRITE);
+	vfs_write(tty, "Wow, This actually works\n", 25);
+	vfs_close(tty);
+
 	// jmp_to_kernel_thread(test_proc->main_thread);
 
 

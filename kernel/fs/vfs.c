@@ -11,15 +11,12 @@
 #include "kernel/string.h"
 #include <drivers/keyboard.h>
 #include <drivers/tty.h>
+#include "kernel/devfs.h"
 
 
 #define MAX_BLOCK_DEVICES 16
 
-static block_device_t* block_device_table[MAX_BLOCK_DEVICES] = {0};
-
-// vfs_file_t* vfs_fd_table[MAX_OPEN_FILES] = {0};
 vfs_mount_t* vfs_mount_list = NULL;
-vfs_mount_t* root_mount = NULL;
 hash_table_t vfs_table = {0};
 
 struct vfs_file_operations vfs_default_file_ops = {
@@ -74,25 +71,6 @@ void console_init() {
     console_fds[2]->file_ops = &vfs_console_ops;
     console_fds[2]->flags = O_WRONLY;
     console_fds[2]->ref_count = 1;
-}
-
-int register_block_device(block_device_t *device) {
-    for (int i = 0; i < MAX_BLOCK_DEVICES; i++) {
-        if (!block_device_table[i]) {
-            block_device_table[i] = device;
-            return 0;
-        }
-    }
-    return -1; // No space left to register the device
-}
-
-block_device_t *get_block_device(const char *device) {
-    for (int i = 0; i < MAX_BLOCK_DEVICES; i++) {
-        if (block_device_table[i] && strcmp(device, block_device_table[i]->name) == 0) {
-            return block_device_table[i];
-        }
-    }
-    return NULL;
 }
 
 void simplify_path(char *path) {
@@ -164,36 +142,38 @@ int split_path(const char* path, char** dirname, char** filename) {
     return 0;
 }
 
-// currently just supports single mount "/"
-static vfs_mount_t * find_mount(const char *path) {
-    vfs_mount_t * mount = vfs_mount_list;
-    while (mount) {
-        size_t mount_path_len = strlen(mount->path);
-        if (strncmp(path, mount->path, mount_path_len) == 0) return mount;
-        mount = mount->next;
+// Smallest prefix match for mount point
+static vfs_mount_t *find_mount(const char *path) {
+    vfs_mount_t *best = NULL;
+    size_t best_len = 0;
+
+    for (vfs_mount_t *m = vfs_mount_list; m; m = m->next) {
+        size_t mlen = strlen(m->path);
+        if (strncmp(path, m->path, mlen) == 0) {
+            if (mlen > best_len) {
+                best = m;
+                best_len = mlen;
+            }
+        }
     }
 
-    return NULL;
+    return best;
 }
 
 int vfs_mount(const char *path, vfs_superblock_t *sb) {
     // Check if the mount path already exists
-    if (find_mount(path)) {
+    vfs_mount_t *mount = find_mount(path);
+    if (mount && strncmp(mount->path, path, strlen(path)) == 0) {
         printf("Error: FS already mounted: %s\n", path);
         return -1;
     }
 
-    vfs_mount_t *mount = (vfs_mount_t*) kmalloc(sizeof(vfs_mount_t));
-    if (!mount) {
-        return -1;
-    }
+    mount = (vfs_mount_t*) kmalloc(sizeof(vfs_mount_t));
+    if (!mount) return -1;
 
     mount->path = path;
     mount->sb = sb;
     mount->next = vfs_mount_list;
-
-    if (!vfs_mount_list) root_mount = mount;
-
     vfs_mount_list = mount;
     return 0;
 }
@@ -238,12 +218,13 @@ static vfs_inode_t * resolve_path(const char *path, vfs_mount_t **mount_out) {
     if (*relative_path == '/') relative_path++; // Skip the leading slash
 
     vfs_inode_t *current_inode = mount->sb->root;
+    if (!*relative_path || strcmp(relative_path, "/") == 0) return current_inode; // Root directory
 
-    char *path_copy = strdup(path);
+    char *path_copy = strdup(relative_path);
     char *token = strtok(path_copy, "/");
     while (token) {
         vfs_inode_t *next_inode = current_inode->inode_ops->lookup(current_inode, token);
-        if (!current_inode) {
+        if (!next_inode) {
             kfree(path_copy);
             return NULL;
         }
@@ -263,7 +244,6 @@ vfs_inode_t *vfs_traverse(const char *path) {
 }
 
 vfs_file_t *vfs_open(const char *path, int flags) {
-    process_t *proc = get_current_process();
     vfs_mount_t *mount;
     vfs_inode_t *inode = resolve_path(path, &mount);
 
@@ -285,37 +265,21 @@ vfs_file_t *vfs_open(const char *path, int flags) {
             return NULL;
         }
     }
-
-    // Find an available file descriptor
-    int fd;
-    for (fd = 3; fd < MAX_OPEN_FILES; fd++) {
-        if (!proc->fds[fd]) break;
-    }
-
-    if (fd == MAX_OPEN_FILES) {
-        printf("Error: No available file descriptors\n");
-        return NULL;
-    }
-
+    
     vfs_file_t* file = (vfs_file_t *)kmalloc(sizeof(vfs_file_t));
     if (!file) return NULL;
 
-    file->fd = fd;
     file->inode = inode;
     file->offset = 0;
     file->flags = flags;
     file->ref_count = 1;
 
     file->file_ops = &vfs_default_file_ops;
-
-    proc->fds[fd] = file;
     return file;
 }
 
 int vfs_close(vfs_file_t *file) {
     if (!file) return -1;
-    process_t *proc = get_current_process();
-    proc->fds[file->fd] = NULL;
 
     if (--file->ref_count > 0) return 0;
 
@@ -434,23 +398,11 @@ int vfs_rmdir(const char *path) {
     return result;
 }
 
-int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries) {
-    vfs_file_t *file = vfs_get_file(fd);
-    if (fd < 0 || fd >= MAX_OPEN_FILES || !file || !entries) return -1;
-
-    if (file->inode->mode != VFS_MODE_DIR) {
-        printf("Error: Not a directory\n");
-        return -1;
-    }
-
-    return file->inode->inode_ops->readdir(file->inode, entries, max_entries);
-}
-
 int vfs_getdents(int fd, void* buf, int size) {
     vfs_file_t *file = vfs_get_file(fd);
     if (fd < 0 || fd >= MAX_OPEN_FILES || !file || !buf) return -1;
 
-    if (file->inode->mode != VFS_MODE_DIR) {
+    if (file->inode->mode != VFS_MODE_DIR || file->inode->inode_ops->readdir == NULL) {
         printf("Error: Not a directory %d\n", file->inode->mode);
         return -1;
     }
@@ -460,7 +412,7 @@ int vfs_getdents(int fd, void* buf, int size) {
     vfs_dir_entry_t entry;
 
     while (bytes_written + sizeof(linux_dirent_t) <= size) {
-        if ((offset = file->inode->inode_ops->readdir_2(file->inode, offset, &entry)) <= 0) break;
+        if ((offset = file->inode->inode_ops->readdir(file->inode, offset, &entry)) <= 0) break;
 
         linux_dirent_t *dirp = (linux_dirent_t*)((uint8_t*)buf + bytes_written);
         dirp->d_ino = entry.inode_number;
@@ -490,108 +442,37 @@ vfs_fs_type_t *vfs_get_fs_type(const char *name) {
     return (vfs_fs_type_t*)hash_get(&vfs_table, name);
 }
 
-void test_vfs(vfs_superblock_t *root_sb) {
-    // linux_dirent_t entries[16];
-    // int bytes_read = vfs_getdents(fd, entries, sizeof(entries));
-    // printf("Read %d bytes\n", bytes_read);
-    // for (int i = 0; i < bytes_read / sizeof(linux_dirent_t); i++) {
-    //     printf("Inode: %d, Name: %s, Type: %d\n", entries[i].d_ino, entries[i].d_name, entries[i].d_type);
-    // }
-    vfs_file_t *file = vfs_open("/", VFS_FLAG_READ);
-
-    vfs_dir_entry_t *entries = kmalloc(sizeof(vfs_dir_entry_t) * 16);
-    int file_count = vfs_readdir(file->fd, entries, 16);
-    vfs_close(file);
-    printf("Files in root (%d):\n", file_count);
-    for (int i = 0; i < file_count; i++) {
-        if (entries[i].type == VFS_MODE_DIR) {
-            printf(">  %s\n", entries[i].name);
-        } else {
-            printf("   %s\n", entries[i].name);
-        }
-    }
-
-    // int fd = vfs_open("/sofa.txt", VFS_FLAG_READ);
-    // int fd = vfs_open("/k", VFS_FLAG_READ);
-
-    // char buffer[256];
-    // int bytes_read = vfs_read(fd, buffer, sizeof(buffer));
-    // printf("Read %d bytes: %s\n", bytes_read, buffer);
-    // vfs_close(fd);
-}
-
-void ramfs_init() {
-    vfs_fs_type_t ramfs = {
-        .name = "ramfs",
-        .mount = ramfs_mount
-    };
-
-    if (vfs_register_fs_type(&ramfs) != 0) {
-        printf("Failed to register filesystem: ramfs\n");
+void init_fs(vfs_fs_type_t *fs_type, vfs_device_t *device, const char *mount_path) {
+    if (vfs_register_fs_type(fs_type) != 0) {
+        printf("Failed to register filesystem: %s\n", fs_type->name);
         return;
     }
 
-    vfs_superblock_t *sb = ramfs.mount(NULL);
+    vfs_superblock_t *sb = fs_type->mount(device);
     if (!sb) {
-        printf("Failed to mount root fs: ramfs\n");
+        printf("Failed to mount root fs: %s\n", fs_type->name);
         return;
     }
 
-    if (vfs_mount("/ram", sb) != 0) {
-        printf("Failed to mount at /ram\n");
+    if (vfs_mount(mount_path, sb) != 0) {
+        printf("Failed to mount at %s\n", mount_path);
         return;
     }
 }
 
-void fat32_init() {
-    block_device_t *ata = get_block_device("/dev/sda1");
-    if (!ata) {
-        printf("ATA block device not found\n");
-        return;
-    }
-
-    vfs_fs_type_t fat32 = {
-        .name = "fat32",
-        .mount = fat32_mount
-    };
-    if (vfs_register_fs_type(&fat32) != 0) {
-        printf("Failed to register filesystem: fat32\n");
-        return;
-    }
-
-    vfs_superblock_t *sb = fat32.mount("/dev/sda1");
-    if (!sb) {
-        printf("Failed to mount root fs: fat32\n");
-        return;
-    }
-
-    if (vfs_mount("/", sb) != 0) {
-        printf("Failed to mount at /\n");
-        return;
-    }
-
-    int fd;
-    if (vfs_create("/home", VFS_MODE_DIR) != 0) {
-        printf("Failed to create directory: /home\n");
-        // return;
-    }
-
-    // printf("fd: %d, file: %x\n", fd, vfs_get_file(fd));
-    // if (vfs_create("/tmp", VFS_MODE_DIR) != 0) {
-    //     printf("Failed to create directory: /tmp\n");
-    //     return;
-    // }
-    // test_vfs(sb);
-}
+static vfs_fs_type_t ramfs = { .name = "ramfs", .mount = ramfs_mount };
+static vfs_fs_type_t fat32 = { .name = "fat32", .mount = fat32_mount };
+static vfs_fs_type_t devfs = { .name = "devfs", .mount = devfs_mount };
 
 void vfs_init() {
-    block_device_t *ata = get_block_device("/dev/sda1");
-    if (!ata) {
-        printf("ATA block device not found\n");
+    console_init();
+
+    init_fs(&devfs, NULL, "/dev");
+    init_fs(&fat32, devfs_get_device("sda1"), "/");
+    init_fs(&ramfs, NULL, "/ram");
+
+    if (vfs_create("/home", VFS_MODE_DIR) != 0) {
+        printf("Failed to create directory: /home\n");
         return;
     }
-
-    console_init();
-    fat32_init();
-    // ramfs_init();
 }

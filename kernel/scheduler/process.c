@@ -61,6 +61,27 @@ static void * alloc_kernel_stack(thread_t *thread) {
     return kernel_stack + PROCESS_STACK_SIZE; // Return top of the stack
 }
 
+int proc_alloc_fd(process_t *proc, vfs_file_t *file) {
+    for (int fd = 3; fd < MAX_OPEN_FILES; fd++) {
+        if (proc->fds[fd] == NULL) {
+            proc->fds[fd] = file;
+            file->ref_count++;
+            file->fd = fd;
+            return fd;
+        }
+    }
+    return -1; // No available file descriptor
+}
+
+int proc_close_fd(process_t *proc, int fd) {
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
+
+    vfs_file_t *file = proc->fds[fd];
+
+    proc->fds[fd] = NULL;
+    return vfs_close(file);
+}
+
 void* sbrk(process_t *proc, int increment) {
     if (increment == 0) return proc->brk;
 
@@ -173,6 +194,8 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
         return NULL;
     }
 
+    signal_init(proc);
+
     proc->status = READY;
     return proc;
 }
@@ -238,8 +261,9 @@ void cleanup_process(process_t *proc) {
     free_page_directory(proc->root_page_table);
     for (int i = 3; i < MAX_OPEN_FILES; i++) {
         if (proc->fds[i]) {
-            vfs_close(proc->fds[i]);
-            proc->fds[i] = NULL;
+            // vfs_close(proc->fds[i]);
+            // proc->fds[i] = NULL;
+            proc_close_fd(proc, i);
         }
     }
     kfree(proc);
@@ -436,4 +460,35 @@ int exec(const char *path, char **argv) {
 
     // Should not return here
     return -1;
+}
+
+void signal_init(process_t *proc) {
+    proc->signals.pending = 0;
+    for (int i = 0; i < MAX_SIGNALS; i++) {
+        proc->signals.handlers[i] = NULL;
+    }
+}
+
+int signal_set_handler(process_t *proc, int signum, signal_handler_t handler) {
+    if (signum < 0 || signum >= MAX_SIGNALS) return -1;
+    proc->signals.handlers[signum] = handler;
+    return 0;
+}
+
+int signal_send(process_t *proc, int signum) {
+    if (!proc || signum < 0 || signum >= MAX_SIGNALS) return -1;
+    proc->signals.pending |= (1 << signum);
+    return 0;
+}
+
+void signal_deliver(process_t *proc) {
+    if (!proc) return;
+    for (int i = 0; i < MAX_SIGNALS; i++) {
+        if (proc->signals.pending & (1 << i)) {
+            proc->signals.pending &= ~(1 << i);
+            if (proc->signals.handlers[i]) {
+                proc->signals.handlers[i](i);
+            }
+        }
+    }
 }

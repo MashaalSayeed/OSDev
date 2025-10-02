@@ -35,6 +35,9 @@ void scheduler_init() {
 void schedule(registers_t* context) {
     if (!thread_list || !current_thread) return;
 
+    // Deliver pending signals before switching
+    signal_deliver(current_thread->owner);
+
     thread_t *prev_thread = current_thread;
     if (prev_thread->status == RUNNING) prev_thread->status = READY;
 

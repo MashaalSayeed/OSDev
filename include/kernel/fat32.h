@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "kernel/vfs.h"
+#include "kernel/devfs.h"
 
 #define CLUSTER_SIZE 4096
 
@@ -39,7 +40,7 @@ typedef struct {
     uint32_t data_clusters;
     uint32_t cluster_size;
     uint16_t bytes_per_sector;
-    block_device_t *device;
+    vfs_device_t *device;
 } fat32_superblock_t;
 
 typedef struct {
@@ -110,4 +111,4 @@ typedef struct fat32_inode {
 } fat32_inode_t;
 
 
-vfs_superblock_t* fat32_mount(const char *device);
+vfs_superblock_t* fat32_mount(vfs_device_t *device);
