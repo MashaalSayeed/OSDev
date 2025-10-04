@@ -3,52 +3,48 @@
 #include <kernel/isr.h>
 #include <drivers/keyboard.h>
 #include <kernel/vfs.h>
-#include <user/dirent.h>
 #include <kernel/process.h>
 #include "libc/string.h"
-#include "kernel/kheap.h"
-#include "kernel/gdt.h"
+#include "user/dirent.h"
+#include "drivers/tty.h"
+#include <kernel/pipe.h>
 
 extern struct tss_entry tss_entry;
 extern thread_t *current_thread;
 static registers_t *interrupt_frame;
 
+// --- File operations ---
 int sys_read(int fd, void *buffer, size_t size) {
     if (!buffer) return -1;
-
+    // printf("sys_read: fd=%d, size=%d\n", fd, size);
     process_t *proc = get_current_process();
     vfs_file_t* file = proc->fds[fd];
-    if (!file) return -1;
-    
+    if (!file || !file->file_ops) return -1;
     return file->file_ops->read(file, buffer, size);
 }
 
 int sys_write(int fd, const char *buffer, size_t size) {
     if (!buffer) return -1;
-
     process_t *proc = get_current_process();
     vfs_file_t* file = proc->fds[fd];
     if (!file) return -1;
-
     return file->file_ops->write(file, buffer, size);
 }
 
 int sys_open(const char *path, int flags) {
     if (!path) return -1;
-
     process_t *proc = get_current_process();
     char resolved_path[256];
     if (!vfs_relative_path(proc->cwd, path, resolved_path)) return -1;
     
     vfs_file_t* file = vfs_open(resolved_path, flags);
-    return file->fd; // Return the file descriptor
+    if (!file) return -1;
+    return proc_alloc_fd(proc, file);
 }
 
 int sys_close(int fd) {
     process_t *proc = get_current_process();
-    vfs_file_t* file = proc->fds[fd];
-    if (!file) return -1;
-    return file->file_ops->close(file);
+    return proc_close_fd(proc, fd);
 }
 
 int sys_lseek(int fd, uint32_t offset, int whence) {
@@ -59,49 +55,41 @@ int sys_lseek(int fd, uint32_t offset, int whence) {
     return file->file_ops->seek(file, offset, whence);
 }
 
+// --- Process management ---
 int sys_exit(int status) {
     kill_process(get_current_process(), status);
     return 0; // Should never return
 }
 
+int sys_getpid() {
+    return get_current_process()->pid;
+}
 
 int sys_waitpid(int pid, int *status, int options) {
-    process_t *child, *proc;
-    child = get_process(pid);
-    proc = current_thread->owner;
-    // printf("sys_waitpid: pid: %d, status: %x, options: %d\n", pid, status, options);
+    process_t *child = get_process(pid);
+    process_t *proc = current_thread->owner;
     if (!child || child->parent != proc) return -1;
 
     if (child->status != TERMINATED) {
         proc->status = WAITING;
         current_thread->status = WAITING;
         kprintf(DEBUG, "[%d] Waiting for child process %d to terminate...\n", proc->pid, pid);
-        // Save current process state and schedule another process
         schedule(interrupt_frame);
     }
-
-    // printf("pid: %d, status: %x, options: %d\n", pid, status, options);
-    // proc = get_current_process();
-    // child = get_process(pid);
-    // if (child && child->status == TERMINATED) {
-    //     printf("Child Cleanup\n");
-    //     if (status) *status = 0;
-    //     cleanup_process(child);
-    //     return pid;
-    // }
-
     return -1;
 }
 
-int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
-    int ret = vfs_getdents(fd, dirp, count);
-    // printf("tss: %x, esp0: %x, dir: %x\n", tss_entry.esp0, current_thread->kernel_stack + PROCESS_STACK_SIZE, current_thread->owner->root_page_table);
-    // print_hexdump(tss_entry.esp0 - 0x128, 0x128);
-    return ret;
+int sys_fork() {
+    return fork(interrupt_frame);
 }
 
-int sys_getpid() {
-    return get_current_process()->pid;
+int sys_exec(const char *path, char **args) {
+    return exec(path, args);
+}
+
+// --- Directory and file system ---
+int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
+    return vfs_getdents(fd, dirp, count);
 }
 
 int sys_dup2(int oldfd, int newfd) {
@@ -136,15 +124,6 @@ int sys_chdir(const char *path) {
     return 0;
 }
 
-int sys_fork() {
-    int ret = fork(interrupt_frame);
-    return ret;
-}
-
-int sys_exec(const char *path, char **args) {
-    return exec(path, args);
-}
-
 int sys_mkdir(const char *path, int mode) {
     if (!path) return -1;
     process_t *proc = get_current_process();
@@ -169,14 +148,23 @@ int sys_unlink(const char *path) {
     return vfs_unlink(resolved_path);
 }
 
+// --- Memory management ---
 void *sys_sbrk(int incr) {
     process_t *proc = get_current_process();
     return sbrk(proc, incr);
 }
 
+int sys_pipe(int fds[2]) {
+    vfs_file_t *rf, *wf;
+    process_t *proc = get_current_process();
+    if (pipe_create(&rf, &wf, 4096) != 0) return -1;
+
+    fds[0] = proc_alloc_fd(proc, rf);
+    fds[1] = proc_alloc_fd(proc, wf);
+    return 0;
+}
 
 //////////////// MY SYSCALLS //////////////////////
-#include "drivers/tty.h"
 void sys_set_cursor(int x, int y) {
     terminal_set_cursor(x, y);
 }
@@ -202,7 +190,7 @@ syscall_t syscall_table[] = {
     [SYSCALL_UNLINK]   = (syscall_t)sys_unlink,
     [SYSCALL_LSEEK]    = (syscall_t)sys_lseek,
     [SYSCALL_SBRK]     = (syscall_t)sys_sbrk,
-    // [SYSCALL_YIELD]    = (syscall_t)schedule,
+    [SYSCALL_PIPE]     = (syscall_t)sys_pipe,
 };
 
 

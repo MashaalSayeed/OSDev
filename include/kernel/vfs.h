@@ -8,6 +8,7 @@
 
 #define VFS_MODE_DIR 0x10
 #define VFS_MODE_FILE 0x20
+#define VFS_MODE_PIPE 0x40
 
 #define VFS_FLAG_READ 0x0
 #define VFS_FLAG_WRITE 0x2
@@ -23,6 +24,8 @@
 #define O_WRONLY 1
 #define O_RDWR 2
 #define O_CREAT 64
+
+#define DEVFS_NAME_LEN 32
 
 typedef struct {
     uint32_t mode;          // The permissions of the file
@@ -58,8 +61,7 @@ struct vfs_inode_operations {
     
     int (*mkdir)(vfs_inode_t* dir, const char* name, uint32_t mode);
     int (*rmdir)(vfs_inode_t* dir, const char* name);
-    int (*readdir)(vfs_inode_t* dir, vfs_dir_entry_t *entries, size_t max_entries); // Read a directory entry
-    int (*readdir_2)(vfs_inode_t* dir, uint32_t offset, vfs_dir_entry_t *entry); // Read a directory entry
+    int (*readdir)(vfs_inode_t* dir, uint32_t offset, vfs_dir_entry_t *entry); // Read a directory entry)
 };
 
 struct vfs_file_operations {
@@ -68,6 +70,34 @@ struct vfs_file_operations {
     int (*close)(vfs_file_t* file);
     int (*seek)(vfs_file_t* file, uint32_t offset, int whence);
 };
+
+typedef enum {
+    DEVICE_TYPE_CHAR,
+    DEVICE_TYPE_BLOCK,
+    DEVICE_TYPE_OTHER
+} device_type_t;
+
+typedef struct vfs_device {
+    char name[DEVFS_NAME_LEN];
+    device_type_t type;
+
+    void *device_data; // Pointer to device-specific data
+    union {
+        // Use block_dev for devices of type DEVICE_TYPE_BLOCK
+        struct {
+            uint32_t minor;
+            uint32_t major;
+            int (*read_block)(struct vfs_device *dev, uint32_t block, void *buf);
+            int (*write_block)(struct vfs_device *dev, uint32_t block, const void *buf);
+        } block_dev;
+
+        // Use char_dev for devices of type DEVICE_TYPE_CHAR
+        struct {
+            int (*read_char)(struct vfs_device *dev, char *buf, size_t count);
+            int (*write_char)(struct vfs_device *dev, const char *buf, size_t count);
+        } char_dev;
+    };
+} vfs_device_t;
 
 typedef struct block_device {
     char name[32];      // The name of the block device
@@ -113,7 +143,6 @@ int vfs_read(vfs_file_t *file, void *buf, size_t count);
 
 int vfs_seek(vfs_file_t *file, uint32_t offset, int whence);
 int vfs_rmdir(const char *path);
-int vfs_readdir(int fd, vfs_dir_entry_t *entries, size_t max_entries);
 int vfs_getdents(int fd, void *buf, int size);
 
 int vfs_register_fs_type(vfs_fs_type_t *fs_type);

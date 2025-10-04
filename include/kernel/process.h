@@ -66,6 +66,9 @@ void scheduler_init();
 void schedule(registers_t* context);
 thread_t* pick_next_thread();
 
+int proc_alloc_fd(process_t *proc, vfs_file_t *file);
+int proc_close_fd(process_t *proc, int fd);
+
 process_t* create_process(char *process_name, void (*entry_point)(), uint32_t flags);
 void add_process(process_t *process);
 void kill_process(process_t *process, int status);
@@ -84,7 +87,6 @@ void jmp_to_kernel_thread(thread_t *context);
 
 thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thread_name);
 void print_thread_list();
-
 
 void *sbrk(process_t *proc, int incr);
 int fork(registers_t *regs);

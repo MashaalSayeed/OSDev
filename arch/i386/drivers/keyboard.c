@@ -76,6 +76,16 @@ char keyboard_buffer[BUFFER_SIZE];
 
 size_t buffer_start, buffer_end;
 
+static void buffer_push(char c) {
+    size_t next = (buffer_end + 1) % BUFFER_SIZE;
+
+    // drop character if buffer is full
+    if (next != buffer_start) {
+        keyboard_buffer[buffer_end] = c;
+        buffer_end = next;
+    }
+}
+
 void keyboard_callback(registers_t *regs) {
     unsigned char scancode = inb(KEYBOARD_DATA_PORT);
     
@@ -104,32 +114,25 @@ void keyboard_callback(registers_t *regs) {
 
     switch (scancode) {
         case 0x48: // Up arrow
-            keyboard_buffer[buffer_end] = '\033';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = '[';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = 'A'; // Up
+            buffer_push('\033');
+            buffer_push('[');
+            buffer_push('A'); // Up
             break;
         case 0x50: // Down arrow
-            keyboard_buffer[buffer_end] = '\033';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = '[';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = 'B'; // Up
+            buffer_push('\033');
+            buffer_push('[');
+            buffer_push('B'); // Down
+            break;
             break;
         case 0x4B: // Left arrow
-            keyboard_buffer[buffer_end] = '\033';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = '[';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = 'D'; // Left
+            buffer_push('\033');
+            buffer_push('[');
+            buffer_push('D'); // Left
             break;
         case 0x4D: // Right arrow
-            keyboard_buffer[buffer_end] = '\033';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = '[';
-            buffer_end = (buffer_end + 1) % BUFFER_SIZE;
-            keyboard_buffer[buffer_end] = 'C'; // Right
+            buffer_push('\033');
+            buffer_push('[');
+            buffer_push('C'); // Right
             break;
         default:
             // if (scancode >= 128) return;
@@ -139,16 +142,13 @@ void keyboard_callback(registers_t *regs) {
                     c = c & 0x1F; // Convert to control character
                 }
 
-                keyboard_buffer[buffer_end] = c;
-                if (buffer_end >= BUFFER_SIZE) {
-                    buffer_end = 0;
-                }
+                buffer_push(c);
             }
             break;
     }
 
     // terminal_putchar(c);
-    buffer_end = (buffer_end + 1) % BUFFER_SIZE;
+    // buffer_end = (buffer_end + 1) % BUFFER_SIZE;
     UNUSED(regs);
 }
 
@@ -181,7 +181,7 @@ int kgets(char *buffer, size_t size) {
     return i + 1;
 }
 
-size_t read_keyboard_buffer(uint8_t *buf, size_t size) {
+size_t read_keyboard_buffer(char *buf, size_t size) {
     size_t count = 0;
     while (count < size) {
         buf[count] = kgetch();

@@ -61,6 +61,27 @@ static void * alloc_kernel_stack(thread_t *thread) {
     return kernel_stack + PROCESS_STACK_SIZE; // Return top of the stack
 }
 
+int proc_alloc_fd(process_t *proc, vfs_file_t *file) {
+    for (int fd = 3; fd < MAX_OPEN_FILES; fd++) {
+        if (proc->fds[fd] == NULL) {
+            proc->fds[fd] = file;
+            file->ref_count++;
+            file->fd = fd;
+            return fd;
+        }
+    }
+    return -1; // No available file descriptor
+}
+
+int proc_close_fd(process_t *proc, int fd) {
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
+
+    vfs_file_t *file = proc->fds[fd];
+
+    proc->fds[fd] = NULL;
+    return vfs_close(file);
+}
+
 void* sbrk(process_t *proc, int increment) {
     if (increment == 0) return proc->brk;
 
@@ -238,8 +259,7 @@ void cleanup_process(process_t *proc) {
     free_page_directory(proc->root_page_table);
     for (int i = 3; i < MAX_OPEN_FILES; i++) {
         if (proc->fds[i]) {
-            vfs_close(proc->fds[i]);
-            proc->fds[i] = NULL;
+            proc_close_fd(proc, i);
         }
     }
     kfree(proc);

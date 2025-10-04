@@ -4,14 +4,15 @@
 #include "libc/stdio.h"
 #include "kernel/io.h"
 
-static const size_t VGA_WIDTH = 80;
-static const size_t VGA_HEIGHT = 25;
+#define VGA_WIDTH 80
+#define VGA_HEIGHT 25
+
 static const uint16_t* VGA_MEMORY = (uint16_t*) 0xC00B8000;
 
-size_t terminal_row;
-size_t terminal_column;
-uint8_t terminal_color;
-uint16_t* terminal_buffer;
+static size_t terminal_row;
+static size_t terminal_column;
+static uint8_t terminal_color;
+static uint16_t* terminal_buffer;
 
 typedef enum {
     STATE_NORMAL,
@@ -21,13 +22,21 @@ typedef enum {
 
 ansi_state_t ansi_state = STATE_NORMAL;
 
-static void update_cursor(size_t row, size_t col) 
-{
+static void update_cursor(size_t row, size_t col) {
     uint16_t pos = row * VGA_WIDTH + col;
     outb(0x3D4, 0x0F);
     outb(0x3D5, (uint8_t) (pos & 0xFF));
     outb(0x3D4, 0x0E);
     outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
+}
+
+static uint16_t vga_entry(unsigned char uc, uint8_t color) {
+    return (uint16_t) uc | (uint16_t) color << 8;
+}
+
+static void terminal_putentryat(char c, uint8_t color, size_t x, size_t y) {
+    const size_t index = y * VGA_WIDTH + x;
+    terminal_buffer[index] = vga_entry(c, color);
 }
 
 void terminal_set_cursor(size_t row, size_t col) {
@@ -38,28 +47,8 @@ void terminal_set_cursor(size_t row, size_t col) {
     }
 }
 
-void terminal_initialize(void) 
-{
-	terminal_buffer = VGA_MEMORY;
-    
-	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-	terminal_clear();
-}
-
-void terminal_setcolor(enum vga_color fg, enum vga_color bg) 
-{
+void terminal_setcolor(enum vga_color fg, enum vga_color bg) {
     terminal_color = fg | bg << 4;
-}
-
-uint16_t vga_entry(unsigned char uc, uint8_t color) 
-{
-    return (uint16_t) uc | (uint16_t) color << 8;
-}
-
-void terminal_putentryat(char c, uint8_t color, size_t x, size_t y) 
-{
-    const size_t index = y * VGA_WIDTH + x;
-    terminal_buffer[index] = vga_entry(c, color);
 }
 
 static void handle_csi_command(char command, const char* params) {
@@ -231,4 +220,12 @@ void terminal_clear_line(int start, int end)
         terminal_putentryat(' ', terminal_color, x, terminal_row);
     }
     terminal_column = start;
+}
+
+void terminal_initialize(void) 
+{
+	terminal_buffer = VGA_MEMORY;
+    
+	terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+	terminal_clear();
 }
