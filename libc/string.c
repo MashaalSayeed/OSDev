@@ -72,9 +72,12 @@ char *strcpy(char *dest, const char *src) {
 }
 
 void strncpy(char *dest, const char *src, uint32_t count) {
-    for (uint32_t i = 0; i < count; i++) {
+    uint32_t i = 0;
+    for (; i < count && src[i] != '\0'; i++) {
         dest[i] = src[i];
     }
+    
+    for (; i < count; i++) dest[i] = '\0';
 }
 
 int strcmp(const char *s1, const char *s2) {

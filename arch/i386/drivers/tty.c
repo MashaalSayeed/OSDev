@@ -74,7 +74,12 @@ static void handle_csi_command(char command, const char* params) {
             if (col > 0) terminal_column = col - 1;
             break;
         case 'K':
-            if (params[0] == '2') terminal_clear_line();
+            if (params[0] == '0') {
+                serial_write("Clearing line from cursor to end\n");
+                terminal_clear_line(terminal_column, VGA_WIDTH);
+            }
+            else if (params[0] == '1') terminal_clear_line(0, terminal_column);
+            else if (params[0] == '2') terminal_clear_line(0, VGA_WIDTH);
             break;
         case 'A': // Move cursor up
             if (terminal_row > 0) terminal_row--;
@@ -85,8 +90,15 @@ static void handle_csi_command(char command, const char* params) {
         case 'C': // Move cursor right
             if (terminal_column < VGA_WIDTH - 1) terminal_column++;
             break;
-        case 'D': // Move cursor left 
-            if (terminal_column > 0) terminal_column--;
+        case 'D': // Move cursor left
+            int len;
+            
+            if (params[0] == '\0') len = 1;
+            else sscanf(params, "%d", &len);
+
+            for (int i = 0; i < len; i++) {
+                if (terminal_column > 0) terminal_column--;
+            }
             break;
         case '@': // Insert character
             for (size_t i = VGA_WIDTH - 1; i > terminal_column; i--) {
@@ -213,10 +225,10 @@ void terminal_clear()
     terminal_set_cursor(0, 0);
 }
 
-void terminal_clear_line() 
+void terminal_clear_line(int start, int end)
 {
-    for (size_t x = 0; x < VGA_WIDTH; x++) {
+    for (size_t x = start; x < end; x++) {
         terminal_putentryat(' ', terminal_color, x, terminal_row);
     }
-    terminal_column = 0;
+    terminal_column = start;
 }

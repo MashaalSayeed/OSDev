@@ -13,9 +13,6 @@
 #define MAX_HISTORY 10
 
 char cwd[256];
-char history_buffer[MAX_HISTORY][MAX_INPUT];
-int history_pos = 0;
-int history_count = 0;
 
 void echo_command(char **args) {
     if (args[1]) {
@@ -29,9 +26,7 @@ void exit_command() {
 }
 
 void history_command() {
-    for (int i = 0; i < history_count; i++) {
-        printf("%d: %s\n", i, history_buffer[i]);
-    }
+    history_print();
 }
 
 void ls_command(char **args) {
@@ -193,35 +188,6 @@ command_t commands[] = {
     {NULL, NULL}
 };
 
-char *history_callback(int direction) {
-    if (direction == -1) { // Up
-        if (history_count == 0 || history_pos + 1 >= history_count) return NULL;
-        history_pos++;
-        return history_buffer[history_count - 1 - history_pos];
-    } else if (direction == +1) { // Down
-        if (history_pos <= 0) {
-            history_pos = -1;
-            return "";
-        }
-        history_pos--;
-        return history_buffer[history_count - 1 - history_pos];
-    }
-    return NULL;
-}
-
-void add_to_history(char *buffer) {
-    if (history_count < MAX_HISTORY) {
-        strcpy(history_buffer[history_count++], buffer);
-    } else {
-        for (int i = 0; i < MAX_HISTORY - 1; i++) {
-            strcpy(history_buffer[i], history_buffer[i + 1]);
-        }
-        strcpy(history_buffer[MAX_HISTORY - 1], buffer);
-    }
-
-    history_pos = history_count;
-}
-
 void parse_input(char *input, char **args) {
     int i = 0;
     args[i] = strtok(input, " \n"); // Tokenize input by spaces
@@ -316,66 +282,6 @@ void execute_command(char **args) {
     }
 }
 
-// void read_input(char *buffer) {
-//     int cur = 0, len = 0;
-//     char c;
-//     while (1) {
-//         if (syscall_read(STDIN, &c, 1) < 0) return;
-
-//         switch (c) {
-//             case '\n':
-//                 buffer[len] = '\0';
-//                 printf("\n");
-//                 return;
-//             case '\b':
-//                 if (cur > 0) {
-//                     cur--;
-//                     len--;
-//                     for (int i = cur; i < len; i++) {
-//                         buffer[i] = buffer[i + 1];
-//                     }
-//                     buffer[len] = '\0';
-//                     printf("\033[D\033[P");
-//                 }
-//                 break;
-//             case '\033':
-//                 char seq[2];
-//                 if (syscall_read(STDIN, seq, 2) < 0) return;
-//                 if (seq[0] == '[') {
-//                     if (seq[1] == 'D' && cur > 0) {
-//                         cur--;
-//                         printf("\033[D");
-//                     } else if (seq[1] == 'C' && cur < len) {
-//                         cur++;
-//                         printf("\033[C");
-//                     } else if (seq[1] == 'A') {
-//                         // load_history(buffer, &cur, &len, 1);
-//                     } else if (seq[1] == 'B') {
-//                         // load_history(buffer, &cur, &len, -1);
-//                     }
-//                 }
-//                 break;
-//             default:
-//                 for (int i = len; i >= cur; i--) {
-//                     buffer[i] = buffer[i - 1];
-//                 }
-//                 buffer[cur] = c;
-//                 len++;
-//                 cur++;
-
-//                 printf("\033[@"); // Insert space at cursor
-//                 printf("%c", c);  // Write the new character
-//                 break;
-//         }
-
-//         if (cur > len) cur = len;
-//         if (cur < 0) cur = 0;
-//         if (len >= MAX_INPUT - 1) break;
-//     }
-
-//     buffer[len] = '\0';
-// }
-
 void main() {
     char buffer[MAX_INPUT];
     char *args[MAX_ARGS];
@@ -391,7 +297,6 @@ void main() {
         // printf("Command: %s\n", buffer);
         parse_input(buffer, args);
         execute_command(args);
-        add_to_history(buffer);
     }
 
     syscall_exit(0);

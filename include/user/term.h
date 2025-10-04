@@ -6,4 +6,5 @@ void term_set_text_color(int color);
 void term_reset_text_color();
 void term_get_size(int *rows, int *cols);
 
+int history_print();
 int readline(char *buffer, int size);
