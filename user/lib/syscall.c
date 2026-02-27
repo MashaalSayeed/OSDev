@@ -1,5 +1,4 @@
 #include "user/syscall.h"
-#include "user/syscall.h"
 
 static inline int syscall(int number, int arg1, int arg2, int arg3) {
     int result;

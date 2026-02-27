@@ -1,5 +1,5 @@
 #include "user/stdio.h"
-#include "user/shell.h"
+#include "shell.h"
 #include "user/syscall.h"
 #include "user/dirent.h"
 #include "user/stdlib.h"
@@ -20,12 +20,12 @@ void echo_command(char **args) {
     }
 }
 
-void exit_command() {
+void exit_command(char **args) {
     puts("Exiting shell\n");
     syscall_exit(0);
 }
 
-void history_command() {
+void history_command(char **args) {
     history_print();
 }
 
@@ -104,7 +104,7 @@ void rmdir_command(char **args) {
     }
 }
 
-void pwd_command() {
+void pwd_command(char **args) {
     syscall_getcwd(cwd, sizeof(cwd));
     printf("%s\n", cwd);
 }
@@ -118,7 +118,7 @@ void cd_command(char **args) {
     }
 }
 
-void clear_command() {
+void clear_command(char **args) {
     term_clear_screen();
 }
 
@@ -137,7 +137,7 @@ void write_command(char ** args) {
     syscall_close(fd);
 }
 
-void test_heap_command() {
+void test_heap_command(char **args) {
     void *ptr = malloc(1024); // Allocate 1KB
     if (ptr == (void *)-1) {
         printf("Error: Failed to allocate memory\n");
@@ -150,7 +150,7 @@ void test_heap_command() {
     }
 }
 
-void test_pipe_command() {
+void test_pipe_command(char **args) {
     int fds[2];
     if (syscall_pipe(fds) < 0) {
         printf("Error: Failed to create pipe\n");
@@ -174,7 +174,7 @@ void test_pipe_command() {
     syscall_close(fds[1]);
 }
 
-void test_shm_command() {
+void test_shm_command(char **args) {
     int shm_id = syscall_shm_create(4096); // Create a shared memory segment of 4KB
     if (shm_id < 0) {
         printf("Error: Failed to create shared memory\n");
@@ -196,7 +196,7 @@ void test_shm_command() {
     printf("Unmapped and destroyed shared memory\n");
 }
 
-void help_command() {
+void help_command(char **args) {
     printf("Commands:\n");
     printf("    echo <text> - Print text\n");
     printf("    ls [path] - List directory contents\n");

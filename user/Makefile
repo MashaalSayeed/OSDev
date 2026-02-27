@@ -1,53 +1,25 @@
-ARCH=i386
+include ./Makefile.conf
 
-CC=i686-elf-gcc
-LD=i686-elf-ld
-AS=nasm
+# Find all directories in core/ that contain a Makefile
+APP_DIRS := $(wildcard core/*/Makefile)
+# Strip the "/Makefile" part to get the directory paths
+APPS := $(patsubst %/Makefile,%,$(APP_DIRS))
 
-CFLAGS=-ffreestanding -O2 -Wall -Wextra -O0 -I../include -std=gnu99 -g
-LDFLAGS=-nostdlib -nostartfiles -ffreestanding -O2 -lgcc -Tlinker.ld
-
-BUILD_DIR=../build/$(ARCH)
-USER_BUILD_DIR=$(BUILD_DIR)/user
-CORE_BUILD_DIR=$(USER_BUILD_DIR)/core
-LIB_BUILD_DIR=$(USER_BUILD_DIR)/lib
-BIN_DIR=$(USER_BUILD_DIR)/bin
-
-CORE_SRC=$(wildcard core/*.c)
-
-# Recursively discover all C sources under user/lib/
-# Map lib/*.c -> $(USER_BUILD_DIR)/lib/*.o
-# Archive produced from library objects and linked into user programs
 LIB_C_SRCS := $(shell find lib -name '*.c' 2>/dev/null)
 LIB_OBJS := $(patsubst lib/%.c,$(LIB_BUILD_DIR)/%.o,$(LIB_C_SRCS))
-LIB_ARCHIVE := $(USER_BUILD_DIR)/libuser.a
 
-# System libc archive (prebuilt into build tree)
-LIBSYS := $(BUILD_DIR)/libc/libc.a
+.PHONY: all clean $(APPS)
 
-PROGS = shell hello editor desktop notepad
-PROG_OBJS = $(patsubst %, $(CORE_BUILD_DIR)/%.o, $(PROGS))
-PROG_BINS = $(patsubst %, $(BIN_DIR)/%, $(PROGS))
+all: $(APPS)
 
-.PHONY: all clean
-
-all: $(PROG_BINS)
-
-$(USER_BUILD_DIR):
-	mkdir -p $(USER_BUILD_DIR) $(CORE_BUILD_DIR) $(LIB_BUILD_DIR) $(BIN_DIR)
-
-$(CORE_BUILD_DIR)/%.o: core/%.c | $(USER_BUILD_DIR)
-# @echo "Compiling $< to $@"
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(USER_BUILD_DIR)/crt0.o: ./crt0.s | $(USER_BUILD_DIR)
+$(CRT0): ./crt0.s | $(USER_BUILD_DIR)
+	@mkdir -p $(dir $@)
 	$(AS) -f elf32 -o $@ $<
 
 $(LIB_BUILD_DIR)/%.o: lib/%.c | $(USER_BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Produce an archive from all library objects (if any)
 $(LIB_ARCHIVE): $(LIB_OBJS)
 	@mkdir -p $(dir $@)
 	@if [ -n "$(LIB_OBJS)" ]; then \
@@ -56,8 +28,13 @@ $(LIB_ARCHIVE): $(LIB_OBJS)
 		touch $@; \
 	fi
 
-$(BIN_DIR)/%: $(CORE_BUILD_DIR)/%.o $(USER_BUILD_DIR)/crt0.o $(LIB_ARCHIVE) $(LIBSYS) | $(USER_BUILD_DIR)
-	$(CC) $(LDFLAGS) $< $(USER_BUILD_DIR)/crt0.o $(LIB_ARCHIVE) $(LIBSYS) -o $@
+# This rule runs 'make' inside each app directory
+$(APPS): | $(CRT0) $(LIB_ARCHIVE) $(LIBSYS)
+	@echo "--- Building $@ ---"
+	@mkdir -p $(BIN_DIR)
+	@$(MAKE) -C $@
 
 clean:
-	rm -rf $(USER_BUILD_DIR)
+	@for dir in $(APPS); do \
+		$(MAKE) -C $$dir clean; \
+	done

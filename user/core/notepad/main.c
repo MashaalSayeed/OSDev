@@ -22,7 +22,7 @@
 
 #include "user/stdio.h"
 #include "user/syscall.h"
-#include "user/stdlib.h"
+#include <stddef.h>
 #include "user/wm.h"
 #include "user/ui.h"
 #include "libc/string.h"
