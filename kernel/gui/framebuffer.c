@@ -51,22 +51,6 @@ void init_framebuffer(framebuffer_t *fb_data) {
     printf("Framebuffer initialized: %dx%d, pitch: %d, bpp: %d\n", fb->width, fb->height, fb->pitch, fb->bpp);
 }
 
-
-// void scroll(uint32_t background_color) {
-//     uint32_t *dest = (uint32_t *)fb->addr;
-//     uint32_t *src = (uint32_t *)(fb->addr + (fb->pitch * current_font->height));
-
-//     // Move all lines up by one font height
-//     for (uint32_t y = 0; y < fb->height - current_font->height; y++) {
-//         for (uint32_t x = 0; x < fb->width; x++) {
-//             dest[x] = src[x];
-//         }
-//         dest += fb->width;
-//         src += fb->width;
-//     }
-
-//     // Clear the last line (new blank line at the bottom)
-//     for (uint32_t x = 0; x < fb->width; x++) {
-//         put_pixel(x, fb->height - current_font->height, background_color);
-//     }
-// }
+framebuffer_t *get_framebuffer(void) {
+    return fb;
+}

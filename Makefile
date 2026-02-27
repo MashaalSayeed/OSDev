@@ -20,7 +20,11 @@ ISO_DIR = iso
 
 # Compiler and linker flags
 CFLAGS = -ffreestanding -O2 -Wall -Wextra -O0 -I$(CURDIR)/include -std=gnu99
-CFLAGS += -g  # Enable debugging
+# Keep debug symbols by default. Set KEEP_DEBUG=0 to build without -g.
+KEEP_DEBUG ?= 1
+ifeq ($(KEEP_DEBUG),1)
+CFLAGS += -g
+endif
 LDFLAGS = -nostdlib -T $(BOOT_DIR)/linker.ld
 QEMU_FLAGS = -d int,page,cpu_reset,guest_errors -no-reboot -no-shutdown
 ASM_FLAGS = -f elf32

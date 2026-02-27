@@ -11,7 +11,6 @@
 #include "kernel/isr.h"
 #include "kernel/acpi.h"
 #include "kernel/framebuffer.h"
-#include "kernel/font.h"
 #include "kernel/process.h"
 #include "kernel/tests.h"
 #include "kernel/printf.h"
@@ -21,7 +20,9 @@
 #include "drivers/pci.h"
 #include "drivers/ata.h"
 #include "drivers/rtc.h"
-#include "kernel/gui.h"
+#include "kernel/shm.h"
+#include "kernel/wm_dev.h"
+#include "drivers/mouse.h"
 
 bool is_gui_enabled = false;
 elf_t kernel_elf;
@@ -147,7 +148,23 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 
 	if (is_gui_enabled) {
-		gui_init(&fb_data);
+		/*
+		 * User-space compositor path:
+		 *  1. Init the physical framebuffer (allocates backbuffer in kernel
+		 *     heap, maps FB VA, etc.).
+		 *  2. Init the SHM subsystem so clients can share pixel buffers.
+		 *  3. Register /DEV/WM (must run after vfs_init mounts devfs).
+		 *  4. Init PS/2 mouse and start the input-bridge kernel thread so
+		 *     mouse + keyboard events reach the compositor via /DEV/WM.
+		 *  5. exec("/BIN/COMPOSITOR") is triggered by init_main below.
+		 */
+		init_framebuffer(&fb_data);
+		shm_init();
+		wm_dev_init();
+		ps2_mouse_init();
+
+		kprintf(DEBUG, "GUI subsystems ready – launching compositor\n");
+		jmp_to_kernel_thread(init_proc->main_thread);
 	} else {
 		kprintf(DEBUG, "No GUI\n");
 		jmp_to_kernel_thread(init_proc->main_thread);
@@ -172,17 +189,13 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 void init_main() {
 	printf("Hello from init process!\n");
-	exec("/BIN/SHELL", NULL);
-	uint32_t i = 0;
-	for (;;) {
-		// asm volatile ("cli");
-		// printf("Hello from init process! %d\n", i);
-		vfs_file_t *file = vfs_open("/home", VFS_FLAG_READ);
-		vfs_close(file);
-		// asm volatile ("sti");
-		i++;
-		// asm volatile("hlt");
+	if (is_gui_enabled) {
+		exec("/BIN/DESKTOP", NULL);
+	} else {
+		exec("/BIN/SHELL", NULL);
 	}
+	/* If exec fails, spin */
+	for (;;) asm volatile("hlt");
 }
 
 void process_test() {

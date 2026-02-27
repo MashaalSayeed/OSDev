@@ -60,6 +60,37 @@ int syscall_getpid() {
     return syscall(SYSCALL_GETPID, 0, 0, 0);
 }
 
+/* -----------------------------------------------------------------------
+ * Shared-memory & framebuffer syscall wrappers
+ * --------------------------------------------------------------------- */
+
+int syscall_shm_create(uint32_t size) {
+    return syscall(SYSCALL_SHM_CREATE, (int)size, 0, 0);
+}
+
+void *syscall_shm_map(int shm_id) {
+    return (void *)syscall(SYSCALL_SHM_MAP, shm_id, 0, 0);
+}
+
+int syscall_shm_unmap(int shm_id) {
+    return syscall(SYSCALL_SHM_UNMAP, shm_id, 0, 0);
+}
+
+int syscall_shm_destroy(int shm_id) {
+    return syscall(SYSCALL_SHM_DESTROY, shm_id, 0, 0);
+}
+
+void *syscall_fb_map(uint32_t *out_width, uint32_t *out_height, uint32_t *out_pitch) {
+    return (void *)syscall(SYSCALL_FB_MAP,
+                           (int)out_width,
+                           (int)out_height,
+                           (int)out_pitch);
+}
+
+void syscall_yield(void) {
+    syscall(SYSCALL_YIELD, 0, 0, 0);
+}
+
 void *syscall_sbrk(int incr) {
     return (void *)syscall(SYSCALL_SBRK, incr, 0, 0);
 }

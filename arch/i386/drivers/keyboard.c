@@ -163,6 +163,14 @@ char kgetch() {
     return c;
 }
 
+/* Non-blocking: returns the next character, or -1 if the buffer is empty. */
+int keyboard_try_getchar(void) {
+    if (buffer_start == buffer_end) return -1;
+    char c = keyboard_buffer[buffer_start];
+    buffer_start = (buffer_start + 1) % BUFFER_SIZE;
+    return (unsigned char)c;
+}
+
 int kgets(char *buffer, size_t size) {
     size_t i = 0;
     while (i < size) {

@@ -29,3 +29,11 @@ int syscall_mkdir(const char *path, int mode);
 int syscall_rmdir(const char *path);
 int syscall_unlink(const char *path);
 int syscall_pipe(int fds[2]);
+
+/* --- Shared-memory & framebuffer (compositor clients) --- */
+int   syscall_shm_create(uint32_t size);
+void *syscall_shm_map(int shm_id);
+int   syscall_shm_unmap(int shm_id);
+int   syscall_shm_destroy(int shm_id);
+void *syscall_fb_map(uint32_t *out_width, uint32_t *out_height, uint32_t *out_pitch);
+void  syscall_yield(void);

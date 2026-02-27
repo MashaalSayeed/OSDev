@@ -174,6 +174,28 @@ void test_pipe_command() {
     syscall_close(fds[1]);
 }
 
+void test_shm_command() {
+    int shm_id = syscall_shm_create(4096); // Create a shared memory segment of 4KB
+    if (shm_id < 0) {
+        printf("Error: Failed to create shared memory\n");
+        return;
+    }
+
+    void *shm_ptr = syscall_shm_map(shm_id);
+    if (!shm_ptr) {
+        printf("Error: Failed to map shared memory\n");
+        return;
+    }
+
+    printf("Shared memory created with ID %d and mapped at %x\n", shm_id, shm_ptr);
+    strcpy((char *)shm_ptr, "Hello from shared memory!");
+    printf("Wrote to shared memory: %s\n", (char *)shm_ptr);
+
+    syscall_shm_unmap(shm_id);
+    syscall_shm_destroy(shm_id);
+    printf("Unmapped and destroyed shared memory\n");
+}
+
 void help_command() {
     printf("Commands:\n");
     printf("    echo <text> - Print text\n");
@@ -188,6 +210,7 @@ void help_command() {
     printf("    clear - Clear the screen\n");
     printf("    test_heap - Test heap memory allocation\n");
     printf("    test_pipe - Test pipe functionality\n");
+    printf("    test_shm - Test shared memory functionality\n");
     printf("    write <file> - Write to a file\n");
     printf("    history - Display command history\n");
     printf("    help - Display this help message\n");
@@ -211,6 +234,7 @@ command_t commands[] = {
     {"help", help_command},
     {"test_heap", test_heap_command},
     {"test_pipe", test_pipe_command},
+    {"test_shm", test_shm_command},
     {NULL, NULL}
 };
 

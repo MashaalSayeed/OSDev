@@ -2,6 +2,7 @@
 #include "kernel/kheap.h"
 #include "kernel/ramfs.h"
 #include "kernel/fat32.h"
+#include "kernel/devfs.h"
 #include "kernel/printf.h"
 #include "kernel/process.h"
 #include "user/dirent.h"
@@ -249,11 +250,11 @@ static vfs_inode_t * resolve_path(const char *path, vfs_mount_t **mount_out) {
 
     vfs_inode_t *current_inode = mount->sb->root;
 
-    char *path_copy = strdup(path);
+    char *path_copy = strdup(relative_path);
     char *token = strtok(path_copy, "/");
     while (token) {
         vfs_inode_t *next_inode = current_inode->inode_ops->lookup(current_inode, token);
-        if (!current_inode) {
+        if (!next_inode) {
             kfree(path_copy);
             return NULL;
         }
@@ -523,6 +524,17 @@ void vfs_init() {
 
     init_fs(&fat32_fs_type, "/dev/sda1", "/");
     init_fs(&ramfs_fs_type, NULL, "/mnt/ramfs");
+
+    /* Mount devfs at /DEV so that devices appear as /DEV/<NAME> */
+    vfs_superblock_t *devfs_sb = devfs_mount(NULL);
+    if (devfs_sb) {
+        if (vfs_mount("/DEV", devfs_sb) != 0)
+            printf("Failed to mount devfs at /DEV\n");
+        else
+            printf("devfs mounted at /DEV\n");
+    } else {
+        printf("Failed to create devfs superblock\n");
+    }
 
     int fd;
     if (vfs_create("/home", VFS_MODE_DIR) != 0) {

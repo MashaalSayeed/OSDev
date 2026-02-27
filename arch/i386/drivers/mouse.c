@@ -1,8 +1,9 @@
 #include "kernel/io.h"
 #include "drivers/mouse.h"
 #include "kernel/isr.h"
-#include "kernel/gui.h"
 #include "kernel/printf.h"
+#include "libc/string.h"
+#include "kernel/wm_dev.h"
 
 #define MOUSE_IRQ 12
 #define PACKET_SIZE 3
@@ -10,11 +11,12 @@
 static int mouse_x = 0, mouse_y = 0;
 static uint8_t mouse_cycle = 0;
 static uint8_t packet[PACKET_SIZE];
-static mouse_state_t mouse_state;
+// static mouse_state_t mouse_state;
+// static input_queue_t mouse_queue;
 
-mouse_state_t* get_mouse_state() {
-    return &mouse_state;
-}
+// mouse_state_t* get_mouse_state() {
+//     return &mouse_state;
+// }
 
 void ps2_mouse_wait(uint8_t type) {
     // type: 0 = data, 1 = signal
@@ -38,9 +40,9 @@ uint8_t ps2_mouse_read() {
     return inb(PS2_MOUSE_DATA_PORT);
 }
 
-static bool prev_left = false;
-static bool prev_right = false;
-static bool prev_middle = false;
+// static bool prev_left = false;
+// static bool prev_right = false;
+// static bool prev_middle = false;
 
 void mouse_irq_handler(registers_t *regs) {
     uint8_t data = ps2_mouse_read();
@@ -67,56 +69,58 @@ void mouse_irq_handler(registers_t *regs) {
         if (mouse_x < 0) mouse_x = 0;
         if (mouse_y < 0) mouse_y = 0;
 
-        bool left = packet[0] & 0x01;
-        bool right = packet[0] & 0x02;
-        bool middle = packet[0] & 0x04;
 
-        input_event_t evt = {
-            .type = INPUT_TYPE_MOUSE,
-            .mouse = {
-                .type = MOUSE_EVENT_MOVE,
-                .x = mouse_x,
-                .y = mouse_y,
-                .dx = dx,
-                .dy = dy,
-                .button = 0
-            }
-        };
+        // Bit 0: Left, Bit 1: Right, Bit 2: Middle
+        uint32_t buttons = packet[0] & 0x07;
 
-        input_push_event(&evt);
-        if (left && !prev_left) {
-            evt.mouse.type = MOUSE_EVENT_DOWN;
-            evt.mouse.button = 0; // Left button
-            input_push_event(&evt);
-        } else if (!left && prev_left) {
-            evt.mouse.type = MOUSE_EVENT_UP;
-            evt.mouse.button = 0; // Left button
-            input_push_event(&evt);
-        }
+        wm_dev_push_input_event(
+            WM_EVENT_MOUSE, 
+            mouse_x, 
+            mouse_y, 
+            0,       // Keycode (unused for mouse)
+            buttons  // Button mask
+        );
+        // bool left = packet[0] & 0x01;
+        // bool right = packet[0] & 0x02;
+        // bool middle = packet[0] & 0x04;
 
-        if (right && !prev_right) {
-            evt.mouse.type = MOUSE_EVENT_DOWN;
-            evt.mouse.button = 1; // Right button
-            input_push_event(&evt);
-        } else if (!right && prev_right) {
-            evt.mouse.type = MOUSE_EVENT_UP;
-            evt.mouse.button = 1; // Right button
-            input_push_event(&evt);
-        }
+        // unit32_t buttons;
 
-        if (middle && !prev_middle) {
-            evt.mouse.type = MOUSE_EVENT_DOWN;
-            evt.mouse.button = 2; // Middle button
-            input_push_event(&evt);
-        } else if (!middle && prev_middle) {
-            evt.mouse.type = MOUSE_EVENT_UP;
-            evt.mouse.button = 2; // Middle button
-            input_push_event(&evt);
-        }
+        // input_queue_push(&mouse_queue, &evt);
+        // wm_dev_push_input_event(WM_EVENT_MOUSE, mouse_x, mouse_y, 0, 0);
+        // if (left && !prev_left) {
+        //     evt.mouse.type = MOUSE_EVENT_DOWN;
+        //     evt.mouse.button = 0; // Left button
+        //     input_queue_push(&mouse_queue, &evt);
+        // } else if (!left && prev_left) {
+        //     evt.mouse.type = MOUSE_EVENT_UP;
+        //     evt.mouse.button = 0; // Left button
+        //     input_queue_push(&mouse_queue, &evt);
+        // }
 
-        prev_left = left;
-        prev_right = right;
-        prev_middle = middle;
+        // if (right && !prev_right) {
+        //     evt.mouse.type = MOUSE_EVENT_DOWN;
+        //     evt.mouse.button = 1; // Right button
+        //     input_queue_push(&mouse_queue, &evt);
+        // } else if (!right && prev_right) {
+        //     evt.mouse.type = MOUSE_EVENT_UP;
+        //     evt.mouse.button = 1; // Right button
+        //     input_queue_push(&mouse_queue, &evt);
+        // }
+
+        // if (middle && !prev_middle) {
+        //     evt.mouse.type = MOUSE_EVENT_DOWN;
+        //     evt.mouse.button = 2; // Middle button
+        //     input_queue_push(&mouse_queue, &evt);
+        // } else if (!middle && prev_middle) {
+        //     evt.mouse.type = MOUSE_EVENT_UP;
+        //     evt.mouse.button = 2; // Middle button
+        //     input_queue_push(&mouse_queue, &evt);
+        // }
+
+        // prev_left = left;
+        // prev_right = right;
+        // prev_middle = middle;
     }
 }
 
@@ -143,4 +147,19 @@ void ps2_mouse_init() {
 
     // Register mouse IRQ handler
     register_interrupt_handler(IRQ_BASE + MOUSE_IRQ, mouse_irq_handler);
+
+    // input_queue_init(&mouse_queue);
+
+    // static vfs_device_t mouse_dev;
+    // memset(&mouse_dev, 0, sizeof(mouse_dev));
+    // strncpy(mouse_dev.name, "MOUSE", DEVFS_NAME_LEN - 1);
+    // mouse_dev.type = DEVICE_TYPE_CHAR;
+    // mouse_dev.device_data = &mouse_queue;
+    // mouse_dev.char_dev.read_char  = input_dev_read;
+    // mouse_dev.char_dev.write_char = input_dev_write;
+
+    // if (devfs_register_device(&mouse_dev) == 0)
+    //     kprintf(INFO, "mouse_dev: registered /DEV/MOUSE\n");
+    // else
+    //     kprintf(ERROR, "mouse_dev: failed to register /DEV/MOUSE\n");
 }

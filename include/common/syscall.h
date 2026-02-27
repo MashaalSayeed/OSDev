@@ -23,6 +23,13 @@
 #define SYSCALL_EXIT 60
 #define SYSCALL_GETDENTS 78
 
+/* --- Shared-memory & framebuffer (user-space compositor) --- */
+#define SYSCALL_SHM_CREATE  19
+#define SYSCALL_SHM_MAP     20
+#define SYSCALL_SHM_UNMAP   21
+#define SYSCALL_SHM_DESTROY 22
+#define SYSCALL_FB_MAP      23
+#define SYSCALL_INPUT_READ  25
 
 // Standard file descriptors
 #define STDIN 0

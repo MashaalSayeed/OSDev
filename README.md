@@ -36,6 +36,10 @@ make run GUI=1
 
 Thank me later 😊
 
+## Folder Structure Guide
+
+-- TODO
+
 ## TODO List Guide
 
 ### 1. Basic
