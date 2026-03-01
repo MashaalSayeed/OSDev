@@ -26,6 +26,8 @@ extern uintptr_t read_eip();
 
 extern vfs_file_t* console_fds[3];
 
+process_t *process_list = NULL;
+
 static uint32_t pid_counter = 1;
 static uint32_t tid_counter = 1;
 static uint32_t allocate_pid() {
@@ -34,6 +36,35 @@ static uint32_t allocate_pid() {
 
 static uint32_t allocate_tid() {
     return tid_counter++;
+}
+
+static void add_process(process_t *process) {
+    if (!process_list) {
+        process_list = process;
+    } else {
+        process_t *temp = process_list;
+        while (temp->next) {
+            temp = temp->next;
+        }
+        temp->next = process;
+    }
+}
+
+static void remove_process(process_t *process) {
+    if (!process_list || !process) return;
+
+    if (process_list == process) {
+        process_list = process->next;
+        return;
+    }
+
+    process_t *temp = process_list;
+    while (temp->next && temp->next != process) {
+        temp = temp->next;
+    }
+    if (temp->next == process) {
+        temp->next = process->next;
+    }
 }
 
 static void * alloc_user_stack(thread_t *thread) {
@@ -59,6 +90,15 @@ static void * alloc_kernel_stack(thread_t *thread) {
     }
     thread->kernel_stack = kernel_stack;
     return kernel_stack + PROCESS_STACK_SIZE; // Return top of the stack
+}
+
+process_t* get_process(size_t pid) {
+    process_t *temp = process_list;
+    while (temp) {
+        if (temp->pid == pid) return temp;
+        temp = temp->next;
+    }
+    return NULL;
 }
 
 int proc_alloc_fd(process_t *proc, vfs_file_t *file) {
@@ -195,7 +235,15 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
     }
 
     proc->status = READY;
+
+    wait_queue_init(&proc->wait_queue);
+    add_process(proc);
     return proc;
+}
+
+void thread_wake(thread_t *thread) {
+    if (!thread || thread->status != WAITING) return;
+    thread->status = READY;
 }
 
 void kill_thread(thread_t *thread) {
@@ -231,37 +279,37 @@ void kill_process_threads(process_t *proc) {
 }
 
 void kill_process(process_t *process, int status) {
-    if (!process || process->status == TERMINATED) return;
+    if (!process || process->status == TERMINATED || process->status == ZOMBIE) return;
+    printf("Process %s (PID: %d) terminating with status %d\n", process->process_name, process->pid, status);
+
     kill_process_threads(process);
-    process->status = TERMINATED;
+
+    process->status = ZOMBIE;
+    process->exit_code = status;
+
+    for (int i = 3; i < MAX_OPEN_FILES; i++) {
+        if (process->fds[i]) {
+            proc_close_fd(process, i);
+        }
+    }
 
     // wake up parent if waiting
-    if (process->parent && process->parent->status == WAITING) {
-        process->parent->status = READY;
-        process->parent->main_thread->status = READY;
-    //     thread_t *parent_thread = process->parent->threads;
-    //     process->->context.eax = status; // TODO: save child status
-    //     // TODO: save child status
-        cleanup_process(process);
-    } else {
+    if (!wait_queue_empty(&process->wait_queue)) {
+        wait_queue_wake_all(&process->wait_queue);
+    } else if (!process->parent) {
         cleanup_process(process);
     }
 
-    printf("Process %s (PID: %d) terminated with status %d\n", process->process_name, process->pid, status);
     schedule(NULL);
 }
 
 void cleanup_process(process_t *proc) {
-    if (!proc || proc->status != TERMINATED) return;
+    if (!proc || proc->status != ZOMBIE) return;
 
     // // Free the process stack and process structure
     // // TODO: unmap all pages and heap
     free_page_directory(proc->root_page_table);
-    for (int i = 3; i < MAX_OPEN_FILES; i++) {
-        if (proc->fds[i]) {
-            proc_close_fd(proc, i);
-        }
-    }
+    remove_process(proc);
     kfree(proc);
 }
 
@@ -303,6 +351,8 @@ int fork(registers_t *regs) {
         }
     }
 
+    wait_queue_init(&child->wait_queue);
+    add_process(child);
 
     uint32_t eip, esp, ebp;
     thread_t *parent_thread = parent->main_thread;

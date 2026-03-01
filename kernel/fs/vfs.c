@@ -5,7 +5,7 @@
 #include "kernel/devfs.h"
 #include "kernel/printf.h"
 #include "kernel/process.h"
-#include "user/dirent.h"
+#include "common/dirent.h"
 #include "kernel/hashtable.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
@@ -326,7 +326,7 @@ vfs_file_t *vfs_open(const char *path, int flags) {
 int vfs_close(vfs_file_t *file) {
     if (!file) return -1;
     if (--file->ref_count > 0) return 0;
-    if (file->inode && file->inode->inode_ops->close) {
+    if (file->inode && file->inode->inode_ops && file->inode->inode_ops->close) {
         file->inode->inode_ops->close(file->inode);
     }
 

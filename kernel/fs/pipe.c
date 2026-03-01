@@ -10,10 +10,18 @@ static int pipe_read(vfs_file_t *file, void *buf, size_t count) {
     pipe_t *pipe = (pipe_t *)file->inode->fs_data;
     if (!pipe) return -1;
 
+    // Block until data is available or write end is closed
+    while (pipe->data_len == 0) {
+        if (pipe->write_closed) return 0; // EOF
+        wait_queue_sleep(&pipe->readers);  // yields; re-checks on wake
+    }
+
+    // copy data from pipe buffer to user buffer
     size_t bytes_read = 0;
     while (bytes_read < count && pipe->read_pos != pipe->write_pos) {
         ((char *)buf)[bytes_read++] = pipe->buffer[pipe->read_pos];
         pipe->read_pos = (pipe->read_pos + 1) % pipe->size;
+        pipe->data_len--;
     }
 
     return bytes_read;
@@ -28,36 +36,52 @@ static int pipe_write(vfs_file_t *file, const void *buf, size_t count) {
     while (bytes_written < count && ((pipe->write_pos + 1) % pipe->size) != pipe->read_pos) {
         pipe->buffer[pipe->write_pos] = ((const char *)buf)[bytes_written++];
         pipe->write_pos = (pipe->write_pos + 1) % pipe->size;
+        pipe->data_len++;
+    }
+
+    // Wake up any waiting readers
+    if (bytes_written > 0) {
+        wait_queue_wake(&pipe->readers);
     }
 
     return bytes_written;
 }
 
-static int pipe_close(vfs_file_t *file) {
-    if (!file) return -1;
-
-    pipe_t *pipe = (pipe_t *)file->inode->fs_data;
-    if (!pipe) {
-        kfree(file->inode);
-        kfree(file);
-        return -1;
-    }
-
-    pipe->refcount--;
-    if (pipe->refcount == 0) {
-        kfree(pipe->buffer);
-        kfree(pipe);
-        kfree(file->inode);
-    }
-
-    kfree(file);
+static int pipe_close_read(vfs_file_t *file) {
+    // No special handling needed for closing the read end in this simple implementation
+    // proc_close_fd already calls vfs_close(file), which will free the file and inode if ref_count reaches 0
     return 0;
 }
 
-static struct vfs_file_operations pipe_file_ops = {
+static int pipe_close_write(vfs_file_t *file) {
+    if (!file) return -1;
+
+    pipe_t *pipe = (pipe_t *)file->inode->fs_data;
+    if (!pipe) return -1;
+
+    pipe->write_closed = true; // Mark the write end as closed
+    wait_queue_wake_all(&pipe->readers); // Wake all readers to unblock them
+
+    if (pipe->data_len == 0) {
+        kfree(pipe->buffer);
+        kfree(file->inode);
+        kfree(pipe);
+    }
+    
+    return 0;
+}
+
+static struct vfs_file_operations pipe_read_ops = {
     .read = pipe_read,
+    .write = NULL,
+    .close = pipe_close_read,
+    .seek = NULL
+};
+
+static struct vfs_file_operations pipe_write_ops = {
+    .read = NULL,
     .write = pipe_write,
-    .close = pipe_close,
+    .close = pipe_close_write,
     .seek = NULL
 };
 
@@ -70,7 +94,11 @@ int pipe_create(vfs_file_t **read_end, vfs_file_t **write_end, size_t size) {
     pipe->size = size;
     pipe->read_pos = 0;
     pipe->write_pos = 0;
-    pipe->refcount = 2;
+    pipe->data_len = 0;
+    pipe->write_closed = false;
+    wait_queue_init(&pipe->readers);
+    wait_queue_init(&pipe->writers);
+
     pipe->buffer = (char *)kmalloc(size);
     if (!pipe->buffer) {
         kfree(pipe);
@@ -94,14 +122,14 @@ int pipe_create(vfs_file_t **read_end, vfs_file_t **write_end, size_t size) {
     (*read_end)->flags = O_RDONLY;
     (*read_end)->offset = 0;
     (*read_end)->ref_count = 1;
-    (*read_end)->file_ops = &pipe_file_ops;
+    (*read_end)->file_ops = &pipe_read_ops;
 
     *write_end = (vfs_file_t *)kmalloc(sizeof(vfs_file_t));
     (*write_end)->inode = inode;
     (*write_end)->flags = O_WRONLY;
     (*write_end)->offset = 0;
     (*write_end)->ref_count = 1;
-    (*write_end)->file_ops = &pipe_file_ops;
+    (*write_end)->file_ops = &pipe_write_ops;
 
     return 0;
 }

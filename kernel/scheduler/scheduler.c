@@ -50,8 +50,13 @@ void schedule(registers_t* context) {
 
         tss_entry.esp0 = (uint32_t)current_thread->kernel_stack + PROCESS_STACK_SIZE;
         switch_task(&prev_thread->esp, current_thread->esp);
-    } else {
+    } else if (next_thread == current_thread) {
         current_thread->status = RUNNING;
+    } else {
+        // pick_next_thread() returned NULL, meaning every thread is WAITING or TERMINATED.
+        // In this case, we can halt the cpu and wait for the next timer interrupt to wake us up. 
+        // This can happen if all threads are waiting for some event (e.g. I/O) to complete.
+        asm volatile ("sti; hlt");
     }
 }
 
@@ -76,6 +81,7 @@ void jmp_to_kernel_thread(thread_t *thread) {
 }
 
 process_t* get_current_process() {
+    if (!current_thread) return NULL;
     return current_thread->owner;
 }
 
@@ -88,17 +94,6 @@ thread_t* get_thread(size_t tid) {
     if (temp == NULL) return NULL;
     do {
         if (temp->tid == tid) return temp;
-        temp = temp->next_global;
-    } while (temp != thread_list);
-
-    return NULL;
-}
-
-process_t* get_process(size_t pid) {
-    thread_t *temp = thread_list;
-    if (temp == NULL) return NULL;
-    do {
-        if (temp->owner->pid == pid) return temp->owner;
         temp = temp->next_global;
     } while (temp != thread_list);
 

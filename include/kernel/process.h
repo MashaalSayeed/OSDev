@@ -6,6 +6,7 @@
 #include "kernel/vfs.h"
 #include "kernel/isr.h"
 #include "kernel/paging.h"
+#include "kernel/wait_queue.h"
 
 #define PROCESS_NAME_MAX_LEN 32
 #define PATH_NAME_MAX_LEN 256
@@ -21,6 +22,7 @@ typedef enum {
     READY,
     RUNNING,
     WAITING,
+    ZOMBIE,
     TERMINATED
 } process_status_t;
 
@@ -43,19 +45,21 @@ typedef struct thread {
 
 typedef struct process {
     size_t pid;
+    int exit_code;
     process_status_t status;
     char process_name[PROCESS_NAME_MAX_LEN];
     char cwd[PATH_NAME_MAX_LEN];
     
     page_directory_t *root_page_table;
     vfs_file_t* fds[MAX_OPEN_FILES];
-
+    
     void *heap_start;
     void *brk;
     void *heap_end;
-
+    
     thread_t* main_thread;
     thread_t* thread_list;
+    wait_queue_t wait_queue;
     bool is_kernel_process;
 
     struct process* parent;
@@ -70,7 +74,6 @@ int proc_alloc_fd(process_t *proc, vfs_file_t *file);
 int proc_close_fd(process_t *proc, int fd);
 
 process_t* create_process(char *process_name, void (*entry_point)(), uint32_t flags);
-void add_process(process_t *process);
 void kill_process(process_t *process, int status);
 void cleanup_process(process_t *proc);
 

@@ -1,7 +1,7 @@
 #include "user/stdio.h"
 #include "shell.h"
 #include "user/syscall.h"
-#include "user/dirent.h"
+#include "common/dirent.h"
 #include "user/stdlib.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
@@ -329,6 +329,10 @@ void execute_command(char **args) {
     } else {
         int status;
         syscall_waitpid(pid, &status, 0);
+
+        if (status != 0) {
+            printf("Command '%s' exited with status %d\n", args[0], status);
+        }
     }
 }
 

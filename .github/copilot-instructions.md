@@ -67,7 +67,7 @@ All `#include` paths are relative to `include/`. Use angle brackets for all kern
 - Prefer `kprintf` with an appropriate level for any new diagnostic output.
 
 ## Adding a New User Program
-1. Create `user/core/<name>.c`; use only headers under `include/user/` and `include/libc/`.
+1. Create `user/core/<name>/main.c`; use only headers under `user/core/<name>/include` `include/user/` and `include/libc/` .
 2. Add the binary name to `PROGS` in `user/Makefile`.
 3. Run `make` then `./scripts/install.sh` to deploy to `zdisk.img`.
 4. The binary will be accessible at `/BIN/<NAME>` inside the OS.

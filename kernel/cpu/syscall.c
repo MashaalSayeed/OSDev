@@ -5,7 +5,7 @@
 #include <kernel/vfs.h>
 #include <kernel/process.h>
 #include "libc/string.h"
-#include "user/dirent.h"
+#include "common/dirent.h"
 #include "drivers/tty.h"
 #include <kernel/pipe.h>
 #include <kernel/shm.h>
@@ -72,13 +72,23 @@ int sys_waitpid(int pid, int *status, int options) {
     process_t *proc = current_thread->owner;
     if (!child || child->parent != proc) return -1;
 
-    if (child->status != TERMINATED) {
-        proc->status = WAITING;
-        current_thread->status = WAITING;
+    // wait_queue_sleep returns when any waker calls wait_queue_wake. 
+    // If the child is not actually a zombie yet (spurious wake), waitpid falls through
+    while (child->status != ZOMBIE) {
         kprintf(DEBUG, "[%d] Waiting for child process %d to terminate...\n", proc->pid, pid);
-        schedule(interrupt_frame);
+        
+        // Yield to scheduler until child exits
+        wait_queue_sleep(&child->wait_queue);
+
+        // Re-fetch child process after it may have changed state (or may have been cleaned up already)
+        child = get_process(pid);
+        if (!child) return -1;
     }
-    return -1;
+
+    kprintf(DEBUG, "[%d] Cleaning up child process %d...\n", proc->pid, pid);
+    if (status) *status = child->exit_code;
+    cleanup_process(child);
+    return pid;
 }
 
 int sys_fork() {
