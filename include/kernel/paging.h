@@ -52,7 +52,7 @@ typedef struct page_directory {
 
 
 extern page_directory_t * initial_page_dir;
-extern uint32_t _kernel_start;
+extern const uint32_t _kernel_start;
 
 void paging_init();
 void switch_page_directory(page_directory_t *dir);

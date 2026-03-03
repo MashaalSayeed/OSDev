@@ -152,19 +152,19 @@ void test_scheduler() {
 	process_t* process2 = create_process("process2", &test_process, PROCESS_FLAG_USER);
 	process_t* process3 = create_process("process3", &test_process, PROCESS_FLAG_USER);
 
-	add_process(process1);
-	add_process(process2);
-	add_process(process3);
+	schedule_process_threads(process1);
+	schedule_process_threads(process2);
+	schedule_process_threads(process3);
 	// print_process_list();
 	print_thread_list();
 }
 
 void test_fork() {
 	process_t* process3 = create_process("fork", &fork_proc, PROCESS_FLAG_USER);
-	add_process(process3);
+	schedule_process_threads(process3);
 }
 
 void test_shell() {
 	process_t* process = create_process("shell", &shell, PROCESS_FLAG_USER);
-	add_process(process);
+	schedule_process_threads(process);
 }

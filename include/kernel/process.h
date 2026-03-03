@@ -88,6 +88,8 @@ void kill_thread(thread_t *thread);
 void remove_thread(thread_t *thread);
 void jmp_to_kernel_thread(thread_t *context);
 
+void schedule_process_threads(process_t *process);
+
 thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thread_name);
 void print_thread_list();
 

@@ -37,7 +37,7 @@ elf_header_t* load_elf(vfs_file_t* file, page_directory_t *page_dir) {
         }
 
         if (ph.type != PT_LOAD) continue;
-        map_memory(page_dir, ph.vaddr, 0, ph.mem_size, 0x7);
+        map_memory(page_dir, ph.vaddr, -1, ph.mem_size, 0x7);
         void *buf = (void *)ph.vaddr;
 
         file->file_ops->seek(file, ph.offset, VFS_SEEK_SET);

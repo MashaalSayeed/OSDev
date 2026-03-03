@@ -15,8 +15,10 @@
 
 #define BLOCK_ALIGN(addr) (((addr) & 0xFFFFF000) + 0x1000)
 
+extern const uint32_t _kernel_start;
 extern const uint32_t _kernel_end;
 
+void pmm_mark_used(uint32_t base, uint32_t length);
 void pmm_init(struct multiboot_tag *mbd, uint32_t mem_size);
 uint32_t pmm_alloc_block();
 void pmm_free_block(uint32_t block);

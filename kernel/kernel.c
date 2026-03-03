@@ -49,18 +49,6 @@ static void multiboot2_init(struct multiboot_tag* mbd) {
 			// framebuffer = init_framebuffer(fb->framebuffer_width, fb->framebuffer_height, fb->framebuffer_pitch, fb->framebuffer_bpp, fb->framebuffer_addr);
 			is_gui_enabled = fb->framebuffer_type == MULTIBOOT_FRAMEBUFFER_TYPE_RGB;
 		}
-		else if (tag->type == MULTIBOOT_TAG_TYPE_MMAP) {
-			mmap_tag = (struct multiboot_tag_mmap*) tag;
-			struct multiboot_mmap_entry * entry = mmap_tag->entries;
-			while ((uint32_t)entry < (uint32_t)mmap_tag + mmap_tag->size) {
-				// printf("Memory: %x - %x, Type: %d\n", entry->addr, entry->addr + entry->len, entry->type);
-				// if (entry->type == MULTIBOOT_MEMORY_AVAILABLE) {
-				// 	add_memory_region(entry->addr, entry->len); // Add memory region to the bitmap
-				// }
-
-				entry = (struct multiboot_mmap_entry*)((uint32_t)entry + mmap_tag->entry_size);
-			}
-		}
 		else if (tag->type == MULTIBOOT_TAG_TYPE_MODULE) {
 			struct multiboot_tag_module* module = (struct multiboot_tag_module*) tag;
 			printf("Module: %s\n", module->cmdline);
@@ -116,9 +104,9 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// Allocate 1096MB of memory
 	printf("Allocating 1096MB of memory\n");
 	pmm_init(mbd, 1096 * 0x100000);
-	printf("Initialized Physical Memory Management\n\n");
 
 	paging_init();
+	printf("Allocating 1096MB of memory\n");
 	kheap_init();
 	printf("Initialized Paging!!\n\n");
 
@@ -141,8 +129,8 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	process_t *init_proc = create_process("init", init_main, PROCESS_FLAG_KERNEL);
 	process_t *test_proc = create_process("test", process_test, PROCESS_FLAG_KERNEL);
 
-	add_process(init_proc);
-	add_process(test_proc);
+	schedule_process_threads(init_proc);
+	schedule_process_threads(test_proc);
 
 	// jmp_to_kernel_thread(test_proc->main_thread);
 
@@ -169,18 +157,6 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 		kprintf(DEBUG, "No GUI\n");
 		jmp_to_kernel_thread(init_proc->main_thread);
 	}
-
-
-
-	// find_rsdt();
-
-	// print_thread_list();
-
-
-	// exec("/BIN/SHELL", NULL);
-	// test_string();
-
-	// exec("/BIN/HELLO", NULL);
 
 	for (;;) {
 		asm volatile("hlt");

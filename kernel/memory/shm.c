@@ -65,7 +65,7 @@ int shm_create(uint32_t size) {
          * This calls alloc_page() for every page, pulling frames from PMM.
          * The kernel will be able to read/write the buffer at kvaddr.
          */
-        kmap_memory(kvaddr, 0, size, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+        kmap_memory(kvaddr, -1, size, PAGE_PRESENT | PAGE_RW | PAGE_USER);
 
         shm_table[i].id        = shm_next_id++;
         shm_table[i].slot      = i;

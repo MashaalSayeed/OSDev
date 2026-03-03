@@ -139,7 +139,7 @@ void remove_thread(thread_t *thread) {
     prev->next_global = thread->next_global;
 }
 
-void add_process(process_t *process) {
+void schedule_process_threads(process_t *process) {
     if (!process) return;
 
     thread_t *thread = process->thread_list;

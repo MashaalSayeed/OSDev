@@ -30,6 +30,14 @@ void * dumb_kmalloc(uint32_t size, uint32_t align) {
     return ret;
 }
 
+void dumb_kmalloc_finalize() {
+    uint32_t phys_start = 0;
+    uint32_t phys_end = (uint32_t)temp_mem - LOAD_MEMORY_ADDRESS;
+    pmm_mark_used(phys_start, phys_end);
+    // Poison the pointer so any further dumb_kmalloc calls crash visibly
+    temp_mem = NULL;
+}
+
 void * virtual2physical(page_directory_t * dir, void * virtual) {
     if (!paging_enabled) {
         return virtual - LOAD_MEMORY_ADDRESS;
@@ -95,6 +103,7 @@ void alloc_page(page_table_entry_t *page, uint32_t flags) {
         return;
     }
 
+    // pmm_alloc_block gives block index block index == physical page number when BLOCK_SIZE == PAGE_SIZE
     uint32_t frame = pmm_alloc_block();
     page->frame = (uint32_t)frame;
     page->present = 1;
@@ -114,6 +123,7 @@ void free_page(page_table_entry_t *page) {
 
 void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags) {
     uint32_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE; // Round up to full pages
+    bool should_alloc = (physical_start == (uint32_t)-1);
 
     // if (physical_start && !IS_ALIGN(physical_start)) {
     //     // printf("Warning: physical_start is not page aligned, aligning it\n");
@@ -122,7 +132,6 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
 
     for (uint32_t i = 0; i < num_pages; i++) {
         uint32_t virtual_addr = virtual_start + (i * PAGE_SIZE);
-        uint32_t physical_addr = (physical_start) ? (physical_start + (i * PAGE_SIZE)) : 0;
 
         // Request a page
         page_table_entry_t *page = get_page(virtual_addr, 1, dir);
@@ -137,15 +146,15 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
         }
 
         // Allocate and map the frame if physical_start is provided
-        if (physical_addr) {
-            page->frame = physical_addr >> 12;
-        } else {
+        if (should_alloc) {
             alloc_page(page, flags); // Allocate normally
+        } else {
+            uint32_t physical_addr = physical_start + (i * PAGE_SIZE);
+            page->frame = physical_addr >> 12;
+            page->present = 1;
+            page->rw = (flags & PAGE_RW) ? 1 : 0;
+            page->user = (flags & PAGE_USER) ? 1 : 0;
         }
-
-        page->present = 1;
-        page->rw = (flags & PAGE_RW) ? 1 : 0;
-        page->user = (flags & PAGE_USER) ? 1 : 0;
     }
 }
 
@@ -161,6 +170,7 @@ void switch_page_directory(page_directory_t *dir) {
         return;
     }
 
+    // printf("[switch_page_directory] Loading CR3: %x\n", phys);
     asm volatile("mov %0, %%cr3" :: "r"(phys) : "memory");
 }
 
@@ -271,15 +281,18 @@ void paging_init() {
     // Map the first 4MB of memory to the first 4MB of physical memory
     // 768 - 1024 is reserved for the kernel stack and other kernel data
     kmap_memory(LOAD_MEMORY_ADDRESS, 0, 4 * 0x100000, PAGE_PRESENT | PAGE_RW);
-
     // Map some memory for the kernel heap
-    kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, 0, KHEAP_INITIAL_SIZE, PAGE_PRESENT | PAGE_RW);
+    kmap_memory(LOAD_MEMORY_ADDRESS + 4 * 0x100000, -1, KHEAP_INITIAL_SIZE, PAGE_PRESENT | PAGE_RW);
     // Setup a guard page for the kernel stack
     // free_page(get_page((uint32_t) &kernel_stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
+    
     // Switch to the new page directory
     switch_page_directory(kpage_dir);
     enable_paging();
+
+    // Finalize dumb_kmalloc by marking its reserved physical memory as used in the PMM and poisoning the pointer to catch any future accidental usage
+    dumb_kmalloc_finalize();
 }
 
 void debug_page_mapping(page_directory_t *dir, uint32_t virtual_address) {

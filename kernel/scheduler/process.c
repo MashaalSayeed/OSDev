@@ -73,11 +73,11 @@ static void * alloc_user_stack(thread_t *thread) {
     for (thread_t *t = proc->thread_list; t; t = t->next) {
         thread_count++;
     }
-
+    
     void *stack_top = (void *)USER_STACK_TOP - thread_count * PROCESS_STACK_SIZE;
     void *stack_bottom = (void *)(stack_top - PROCESS_STACK_SIZE);
 
-    map_memory(proc->root_page_table, (uint32_t)stack_bottom, 0, PROCESS_STACK_SIZE, 0x7);
+    map_memory(proc->root_page_table, (uint32_t)stack_bottom, -1, PROCESS_STACK_SIZE, 0x7);
     thread->user_stack = stack_bottom;
     return stack_top;
 }
