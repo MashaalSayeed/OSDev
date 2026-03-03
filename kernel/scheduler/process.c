@@ -456,6 +456,7 @@ int exec(const char *path, char **argv) {
     
     // 6. Load the ELF file into new page directory
     elf_header_t* elf = load_elf(file, new_page_dir);
+    switch_page_directory(new_page_dir);
     if (!elf) {
         printf("Failed to load ELF file\n");
         kfree(k_argv);

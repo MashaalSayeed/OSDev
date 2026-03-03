@@ -3,6 +3,7 @@
 #include "libc/string.h"
 #include "kernel/printf.h"
 #include "kernel/system.h"
+#include "kernel/locks.h"
 #include <stdbool.h>
  
 uint8_t *bitmap = (uint8_t *)(& _kernel_end);
@@ -10,6 +11,7 @@ uint8_t *mem_start;
 uint32_t total_blocks;
 uint32_t bitmap_size;
 
+static spinlock_t pmm_lock;
 bool out_of_memory = false;
 
 
@@ -81,6 +83,8 @@ void pmm_init(struct multiboot_tag *mbd, uint32_t mem_size) {
     pmm_mark_used(kernel_phys_start, kernel_phys_end - kernel_phys_start);
     printf("Kernel memory range: %x - %x\n", kernel_phys_start, kernel_phys_end);
 
+    spinlock_init(&pmm_lock);
+
     uint32_t free_blocks = 0;
     for (uint32_t i = 0; i < total_blocks; i++) {
         if (!ISSET(i)) {
@@ -102,21 +106,30 @@ static uint32_t first_free_block() {
 }
 
 uint32_t pmm_alloc_block() {
+    uint32_t flags;
+    spinlock_acquire_irq(&pmm_lock, &flags);
+
     uint32_t block = first_free_block();
     if (out_of_memory == true) {
         printf("Error: Out of memory\n");
+        spinlock_release_irq(&pmm_lock, flags);
         return 0;
     }
 
     SETBIT(block);
+    spinlock_release_irq(&pmm_lock, flags);
     return block;
 }
 
 void pmm_free_block(uint32_t block) {
+    uint32_t flags;
+    spinlock_acquire_irq(&pmm_lock, &flags);
     if (block == 0) {
         printf("Warning: Attempt to free block 0, ignoring\n");
+        spinlock_release_irq(&pmm_lock, flags);
         return;
     }
 
     CLEARBIT(block);
+    spinlock_release_irq(&pmm_lock, flags);
 }

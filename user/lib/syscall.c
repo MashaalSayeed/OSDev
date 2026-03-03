@@ -59,6 +59,14 @@ int syscall_getpid() {
     return syscall(SYSCALL_GETPID, 0, 0, 0);
 }
 
+int syscall_fstat(int fd, stat_t *buf) {
+    return syscall(SYSCALL_FSTAT, fd, (int)buf, 0);
+}
+
+int syscall_stat(const char *path, stat_t *buf) {
+    return syscall(SYSCALL_STAT, (int)path, (int)buf, 0);
+}
+
 /* -----------------------------------------------------------------------
  * Shared-memory & framebuffer syscall wrappers
  * --------------------------------------------------------------------- */

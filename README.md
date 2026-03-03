@@ -131,4 +131,4 @@ Thank me later 😊
 
 ## Known Issues
 
-1. Random page faults when using fork()/exec() method to spawn a process
+1. Running "/BIN/EDITOR ME.TXT" after "ls" command always page faults

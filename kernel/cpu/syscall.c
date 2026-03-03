@@ -176,9 +176,25 @@ int sys_pipe(int fds[2]) {
     return 0;
 }
 
-//////////////// MY SYSCALLS //////////////////////
-void sys_set_cursor(int x, int y) {
-    terminal_set_cursor(x, y);
+int sys_stat(const char *path, stat_t *st) {
+    vfs_file_t *file = vfs_open(path, VFS_FLAG_READ);
+    if (!file) return -1;
+
+    st->size = file->inode->size;
+    st->mode = file->inode->mode;
+
+    vfs_close(file);
+    return 0;
+}
+
+int sys_fstat(int fd, stat_t *st) {
+    process_t *proc = get_current_process();
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
+
+    vfs_file_t *file = proc->fds[fd];
+    st->size = file->inode->size;
+    st->mode = file->inode->mode;
+    return 0;
 }
 
 /* --- Shared-memory syscalls --- */
@@ -261,6 +277,8 @@ syscall_t syscall_table[] = {
     [SYSCALL_SHM_DESTROY] = (syscall_t)sys_shm_destroy,
     [SYSCALL_FB_MAP]      = (syscall_t)sys_fb_map,
     [SYSCALL_YIELD]       = (syscall_t)sys_yield,
+    [SYSCALL_FSTAT]       = (syscall_t)sys_fstat,
+    [SYSCALL_STAT]        = (syscall_t)sys_stat,
     // [SYSCALL_INPUT_READ]  = (syscall_t)sys_input_read,
 };
 

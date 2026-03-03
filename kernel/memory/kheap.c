@@ -1,6 +1,7 @@
 #include "kernel/kheap.h"
 #include "kernel/printf.h"
 #include "kernel/process.h"
+#include "kernel/locks.h"
 
 #define MIN_BLOCK_SIZE (sizeof(kheap_block_t) + KHEAP_ALIGNMENT)
 
@@ -9,8 +10,12 @@ uint8_t *kheap_end;
 uint8_t *kheap_curr;
 
 static kheap_block_t *free_list;
+static spinlock_t kheap_lock;
 
 void *kmalloc(size_t size) {
+    uint32_t flags;
+    spinlock_acquire_irq(&kheap_lock, &flags);
+
     if (size < KHEAP_ALIGNMENT) {
         size = KHEAP_ALIGNMENT;
     }
@@ -44,6 +49,7 @@ void *kmalloc(size_t size) {
                 }
             }
 
+            spinlock_release_irq(&kheap_lock, flags);
             return (void *)((uint8_t *)cur_block + sizeof(kheap_block_t));
         }
 
@@ -53,12 +59,15 @@ void *kmalloc(size_t size) {
 
     printf("kmalloc: Out of memory, requested size: %x\n", size);
     print_kheap();
+    spinlock_release_irq(&kheap_lock, flags);
     return NULL; // Out of memory
 }
 
 void kfree(void *ptr) {
     if (!ptr) return;
 
+    uint32_t flags;
+    spinlock_acquire_irq(&kheap_lock, &flags);
     kheap_block_t *block = (kheap_block_t *)((uint8_t *)ptr - sizeof(kheap_block_t));
 
     // Insert back into the free list in sorted order
@@ -101,6 +110,8 @@ void kfree(void *ptr) {
         prev_block->size += block->size + sizeof(kheap_block_t);
         prev_block->next = block->next;
     }
+
+    spinlock_release_irq(&kheap_lock, flags);
 }
 
 void *kmalloc_aligned(size_t size, size_t align) {
@@ -156,4 +167,6 @@ void kheap_init() {
     free_list = (kheap_block_t *)kheap_start;
     free_list->size = KHEAP_INITIAL_SIZE - sizeof(kheap_block_t);
     free_list->next = NULL;
+
+    spinlock_init(&kheap_lock);
 }

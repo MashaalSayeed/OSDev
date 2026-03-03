@@ -45,8 +45,6 @@ static void multiboot2_init(struct multiboot_tag* mbd) {
 		else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
 			fb = (struct multiboot_tag_framebuffer*) tag;
 			fb_data = framebuffer_from_multiboot(fb);
-
-			// framebuffer = init_framebuffer(fb->framebuffer_width, fb->framebuffer_height, fb->framebuffer_pitch, fb->framebuffer_bpp, fb->framebuffer_addr);
 			is_gui_enabled = fb->framebuffer_type == MULTIBOOT_FRAMEBUFFER_TYPE_RGB;
 		}
 		else if (tag->type == MULTIBOOT_TAG_TYPE_MODULE) {

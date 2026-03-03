@@ -7,6 +7,7 @@
 #include "kernel/multiboot.h"
 
 extern int paging_enabled;
+extern page_directory_t *kpage_dir;
 
 int is_valid_elf(elf_header_t *header) {
     if (header->magic != ELF_MAGIC) return 0;
@@ -18,35 +19,54 @@ elf_header_t* load_elf(vfs_file_t* file, page_directory_t *page_dir) {
 
     if (file->file_ops->read(file, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {
         printf("Error: Failed to read ELF header\n");
+        kfree(header);
         return NULL;
     }
 
     if (!is_valid_elf(header)) {
         printf("Error: Invalid ELF file\n");
+        kfree(header);
         return NULL;
     }
 
     // Load program headers
     elf_program_header_t ph;
-
     for (int i = 0; i < header->ph_entry_count; i++) {
         file->file_ops->seek(file, header->ph_offset + i * sizeof(elf_program_header_t), VFS_SEEK_SET);
         if (file->file_ops->read(file, &ph, sizeof(elf_program_header_t)) != sizeof(elf_program_header_t)) {
             printf("Error: Failed to read program header\n");
+            kfree(header);
             return NULL;
         }
 
         if (ph.type != PT_LOAD) continue;
-        map_memory(page_dir, ph.vaddr, -1, ph.mem_size, 0x7);
-        void *buf = (void *)ph.vaddr;
+        map_memory(page_dir, ph.vaddr, (uint32_t)-1, ph.mem_size, 0x7);
 
-        file->file_ops->seek(file, ph.offset, VFS_SEEK_SET);
-        if (file->file_ops->read(file, buf, ph.file_size) != ph.file_size) {
-            printf("Error: Failed to read program header\n");
+        // Read segment data into a kernel buffer first, then copy to user space
+        uint8_t *tmp = kmalloc(ph.file_size);
+        if (!tmp) {
+            printf("Error: Failed to allocate segment buffer\n");
+            kfree(header);
             return NULL;
         }
 
-        memset((uint8_t*)(buf + ph.file_size), 0, ph.mem_size - ph.file_size);
+
+
+        // void *buf = (void *)ph.vaddr;
+        file->file_ops->seek(file, ph.offset, VFS_SEEK_SET);
+        if (file->file_ops->read(file, tmp, ph.file_size) != ph.file_size) {
+            printf("Error: Failed to read program header\n");
+            kfree(tmp);
+            kfree(header);
+            return NULL;
+        }
+
+        switch_page_directory(page_dir);
+        memcpy((void *)ph.vaddr, tmp, ph.file_size);
+        memset((void *)(ph.vaddr + ph.file_size), 0, ph.mem_size - ph.file_size);
+        switch_page_directory(kpage_dir);
+
+        kfree(tmp);
     }
 
     return header;

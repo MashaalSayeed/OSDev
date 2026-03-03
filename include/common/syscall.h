@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 // This file defines the syscall numbers for the kernel.
 // I tried to keep the syscall numbers consistent with the Linux kernel.
 #define SYSCALL_READ 0
@@ -22,6 +24,8 @@
 #define SYSCALL_EXEC 59
 #define SYSCALL_EXIT 60
 #define SYSCALL_GETDENTS 78
+#define SYSCALL_FSTAT 80
+#define SYSCALL_STAT 81
 
 /* --- Shared-memory & framebuffer (user-space compositor) --- */
 #define SYSCALL_SHM_CREATE  19
@@ -35,3 +39,9 @@
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
+
+typedef struct {
+    uint32_t size;
+    uint32_t mode;
+    // uint32_t inode;
+} stat_t;

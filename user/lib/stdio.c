@@ -15,6 +15,11 @@ int printf(const char *format, ...) {
     return -1;
 }
 
+int putchar(int c) {
+    char ch = (char)c;
+    return syscall_write(STDOUT, &ch, 1);
+}
+
 int puts(const char *str) {
     if (!str) return -1;
 

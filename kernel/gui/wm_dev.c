@@ -265,7 +265,7 @@ void wm_dev_init(void) {
     wm_device.char_dev.read_char  = wm_dev_read;
     wm_device.char_dev.write_char = wm_dev_write;
 
-    initialize_lock(&wm_lock);
+    spinlock_init(&wm_lock);
 
     if (devfs_register_device(&wm_device) == 0)
         kprintf(INFO, "wm_dev: registered /DEV/WM\n");
