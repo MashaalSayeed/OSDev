@@ -297,29 +297,16 @@ vfs_file_t *vfs_open(const char *path, int flags) {
         }
     }
 
-    // Find an available file descriptor
-    int fd;
-    for (fd = 3; fd < MAX_OPEN_FILES; fd++) {
-        if (!proc->fds[fd]) break;
-    }
-
-    if (fd == MAX_OPEN_FILES) {
-        printf("Error: No available file descriptors\n");
-        return NULL;
-    }
-
     vfs_file_t* file = (vfs_file_t *)kmalloc(sizeof(vfs_file_t));
     if (!file) return NULL;
 
-    file->fd = fd;
+    file->fd = -1; //fd;
     file->inode = inode;
     file->offset = 0;
     file->flags = flags;
     file->ref_count = 1;
 
     file->file_ops = &vfs_default_file_ops;
-
-    proc->fds[fd] = file;
     return file;
 }
 

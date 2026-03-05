@@ -23,7 +23,7 @@ void idle_process() {
 }
 
 void scheduler_init() {
-    init_timer(100);
+    pit_init(100);
     // init_process = create_process("init", idle_process, PROCESS_FLAG_KERNEL);
     // init_process->status = INIT;
     // add_process(init_process);
@@ -152,10 +152,21 @@ void schedule_process_threads(process_t *process) {
 thread_t *pick_next_thread() {
     if (!current_thread) return NULL;
 
+    uint32_t ticks = pit_get_ticks();
+
     thread_t *next = current_thread->next_global;
     while (next && next != current_thread) {
+        // Wake up sleeping threads whose wakeup time has arrived
+        if (next->status == SLEEPING && next->wakeup_tick <= ticks) {
+            next->status = READY;
+        }
+
         if (next->status == READY) return next;
         next = next->next_global;
+    }
+
+    if (current_thread->status == SLEEPING && current_thread->wakeup_tick <= ticks) {
+        current_thread->status = READY;
     }
 
     return current_thread->status == READY ? current_thread : NULL;

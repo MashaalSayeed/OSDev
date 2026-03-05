@@ -31,6 +31,8 @@ int syscall_unlink(const char *path);
 int syscall_pipe(int fds[2]);
 int syscall_fstat(int fd, stat_t *buf);
 int syscall_stat(const char *path, stat_t *buf);
+void * syscall_mmap(void *addr, size_t length, int prot, int flags, int fd, uint32_t offset);
+void * syscall_munmap(void *addr, size_t length);
 
 /* --- Shared-memory & framebuffer (compositor clients) --- */
 int   syscall_shm_create(uint32_t size);
@@ -39,3 +41,6 @@ int   syscall_shm_unmap(int shm_id);
 int   syscall_shm_destroy(int shm_id);
 void *syscall_fb_map(uint32_t *out_width, uint32_t *out_height, uint32_t *out_pitch);
 void  syscall_yield(void);
+
+uint32_t syscall_get_ticks();
+void sleep(uint32_t ms);

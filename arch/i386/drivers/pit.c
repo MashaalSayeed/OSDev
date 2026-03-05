@@ -6,18 +6,18 @@
 
 #define SCHEDULER_FREQ 100 // 100 Hz or 10 ms per tick
 
-uint32_t tick = 0;
+static volatile uint32_t tick = 0;
 uint32_t timer_freq = 100;
 bool scheduler_enabled = false;
 
-void timer_callback(registers_t *regs) {
+void pit_handler(registers_t *regs) {
     // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second or 10 ms per tick)
     tick++;
+    schedule(regs);
+}
 
-    // Switch to the next process every 10 ticks (or every 100 ms)
-    if (tick % 1 == 0) schedule(regs);
-    // printf("Tick: %d\n", tick);
-    // schedule(regs);
+uint32_t pit_get_ticks() {
+    return tick;
 }
 
 void sleep(uint32_t ms) {
@@ -30,8 +30,8 @@ void sleep(uint32_t ms) {
     }
 }
 
-void init_timer(uint32_t freq) {
-    register_interrupt_handler(32, &timer_callback);
+void pit_init(uint32_t freq) {
+    register_interrupt_handler(32, &pit_handler);
 
     tick = 0;
     timer_freq = freq;

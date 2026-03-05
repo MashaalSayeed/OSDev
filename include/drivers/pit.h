@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include "kernel/isr.h"
 
-void timer_callback(registers_t *regs);
-uint32_t get_timer_ticks();
+uint32_t pit_get_ticks();
 void sleep(uint32_t ms);
-void init_timer(uint32_t freq);
+void pit_init(uint32_t freq);

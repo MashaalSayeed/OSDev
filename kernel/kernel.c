@@ -130,8 +130,6 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	schedule_process_threads(init_proc);
 	schedule_process_threads(test_proc);
 
-	// jmp_to_kernel_thread(test_proc->main_thread);
-
 
 	if (is_gui_enabled) {
 		/*

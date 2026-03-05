@@ -105,7 +105,6 @@ int proc_alloc_fd(process_t *proc, vfs_file_t *file) {
     for (int fd = 3; fd < MAX_OPEN_FILES; fd++) {
         if (proc->fds[fd] == NULL) {
             proc->fds[fd] = file;
-            file->ref_count++;
             file->fd = fd;
             return fd;
         }
@@ -115,8 +114,9 @@ int proc_alloc_fd(process_t *proc, vfs_file_t *file) {
 
 int proc_close_fd(process_t *proc, int fd) {
     if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
-
     vfs_file_t *file = proc->fds[fd];
+    kprintf(DEBUG, "proc_close_fd: fd=%d file=%x inode=%x ref=%d\n",
+        fd, file, file->inode, file->ref_count);
 
     proc->fds[fd] = NULL;
     return vfs_close(file);
@@ -163,7 +163,6 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     thread->thread_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
 
     // Set up thread stack for context switch
-    printf("MOO\n");
     void *stack = alloc_kernel_stack(thread);
 
     PUSH(stack, uint32_t, (uintptr_t)entry_point);
@@ -173,9 +172,7 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
 
     // Set up thread context
     if (!proc->is_kernel_process) {
-        printf("MOO\n");
         thread->user_esp = (uintptr_t)alloc_user_stack(thread);
-        printf("MOO\n");
     }
 
     thread->esp = (uintptr_t)stack;
@@ -209,6 +206,7 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
 
     proc->is_kernel_process = (flags & PROCESS_FLAG_KERNEL) != 0;
     proc->root_page_table = proc->is_kernel_process ? kpage_dir : clone_page_directory(kpage_dir);
+    proc->mmap_base = (void *)MMAP_BASE; 
     if (!proc->root_page_table) {
         printf("Error: Failed to create page directory for process %s\n", process_name);
         kfree(proc);
@@ -246,7 +244,7 @@ void thread_wake(thread_t *thread) {
     thread->status = READY;
 }
 
-void kill_thread(thread_t *thread) {
+void kill_thread(thread_t *thread, bool free_user_stack) {
     if (!thread || thread->status == TERMINATED) return;
     thread->status = TERMINATED;
 
@@ -332,6 +330,7 @@ int fork(registers_t *regs) {
     child->heap_start = parent->heap_start;
     child->heap_end = parent->heap_end;
     child->brk = parent->brk;
+    child->mmap_base = parent->mmap_base;
     child->is_kernel_process = parent->is_kernel_process;
     strncpy(child->cwd, parent->cwd, sizeof(parent->cwd));
 
@@ -341,13 +340,9 @@ int fork(registers_t *regs) {
 
     // Copy file descriptors
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
-        if (parent->fds[i] != NULL) {
-            child->fds[i] = vfs_get_file(parent->fds[i]->fd); // TODO: Check if this is correct
-            if (child->fds[i]) {
-                child->fds[i]->ref_count++;
-            }
-        } else {
-            child->fds[i] = NULL;
+        child->fds[i] = parent->fds[i];
+        if (child->fds[i]) {
+            child->fds[i]->ref_count++;
         }
     }
 
@@ -466,7 +461,7 @@ int exec(const char *path, char **argv) {
 
     // 7. Create a new main thread for the process
     thread_t *thread = create_thread(proc, (void (*)(void))elf->entry, proc->process_name);
-    printf("MOOO\n");
+
     proc->main_thread = thread;
     proc->thread_list = thread;
 
@@ -503,6 +498,7 @@ int exec(const char *path, char **argv) {
 
     current_thread = thread;
     tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
+    kprintf(DEBUG, "[exec] PID %d", proc->pid);
     switch_context(thread);
 
     // Should not return here

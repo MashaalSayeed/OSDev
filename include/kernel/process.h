@@ -16,12 +16,14 @@
 
 #define PROCESS_FLAG_USER 0x1
 #define PROCESS_FLAG_KERNEL 0x2
+#define MMAP_BASE 0x40000000
 
 typedef enum {
     INIT,
     READY,
     RUNNING,
     WAITING,
+    SLEEPING,
     ZOMBIE,
     TERMINATED
 } process_status_t;
@@ -34,6 +36,8 @@ typedef struct thread {
     uintptr_t user_esp;
 
     process_status_t status;
+    uint32_t wakeup_tick; 
+
     char thread_name[PROCESS_NAME_MAX_LEN];
     void *kernel_stack; // ESP saved when context switching
     void *user_stack;
@@ -47,6 +51,7 @@ typedef struct process {
     size_t pid;
     int exit_code;
     process_status_t status;
+
     char process_name[PROCESS_NAME_MAX_LEN];
     char cwd[PATH_NAME_MAX_LEN];
     
@@ -56,6 +61,7 @@ typedef struct process {
     void *heap_start;
     void *brk;
     void *heap_end;
+    void *mmap_base;
     
     thread_t* main_thread;
     thread_t* thread_list;

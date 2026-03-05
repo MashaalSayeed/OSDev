@@ -196,6 +196,34 @@ void test_shm_command(char **args) {
     printf("Unmapped and destroyed shared memory\n");
 }
 
+void sleep_command(char **args) {
+    if (!args[1]) {
+        printf("Usage: sleep <milliseconds>\n");
+        return;
+    }
+    uint32_t ms = 10;//(uint32_t)atoi(args[1]);
+    sleep(ms);
+}
+
+void test_mmap_command(char **args) {
+    void *p = syscall_mmap(NULL, 4096, 0, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+    if (p == (void*)-1) { printf("mmap failed\n"); return; }
+
+    // Should be zeroed
+    char *bytes = p;
+    for (int i = 0; i < 4096; i++) {
+        if (bytes[i] != 0) { printf("not zeroed at %d\n", i); return; }
+    }
+
+    // Should be writable
+    bytes[0] = 42;
+    bytes[4095] = 99;
+    printf("mmap ok, [0]=%d [4095]=%d\n", bytes[0], bytes[4095]);
+
+    syscall_munmap(p, 4096);
+    printf("munmap ok\n");
+}
+
 void help_command(char **args) {
     printf("Commands:\n");
     printf("    echo <text> - Print text\n");
@@ -235,6 +263,8 @@ command_t commands[] = {
     {"test_heap", test_heap_command},
     {"test_pipe", test_pipe_command},
     {"test_shm", test_shm_command},
+    {"test_mmap", test_mmap_command},
+    {"sleep", sleep_command},
     {NULL, NULL}
 };
 

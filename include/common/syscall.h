@@ -26,6 +26,11 @@
 #define SYSCALL_GETDENTS 78
 #define SYSCALL_FSTAT 80
 #define SYSCALL_STAT 81
+#define SYSCALL_GET_TICKS 100
+#define SYSCALL_NANOSLEEP 162
+#define SYSCALL_MMAP 192
+#define SYSCALL_MUNMAP 91
+
 
 /* --- Shared-memory & framebuffer (user-space compositor) --- */
 #define SYSCALL_SHM_CREATE  19
@@ -40,8 +45,24 @@
 #define STDOUT 1
 #define STDERR 2
 
+#define F_DUPFD   0
+#define F_GETFD   1
+#define F_SETFD   2
+#define F_GETFL   3
+#define F_SETFL   4
+#define FD_CLOEXEC 1
+
+#define MAP_PRIVATE    0x02  // private mapping, changes not shared
+#define MAP_ANONYMOUS  0x20  // not file-backed
+#define MAP_FIXED      0x10  // must use exact address given
+
 typedef struct {
     uint32_t size;
     uint32_t mode;
     // uint32_t inode;
 } stat_t;
+
+typedef struct {
+    uint32_t tv_sec;
+    uint32_t tv_nsec;
+} timespec_t;
