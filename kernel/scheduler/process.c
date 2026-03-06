@@ -115,8 +115,6 @@ int proc_alloc_fd(process_t *proc, vfs_file_t *file) {
 int proc_close_fd(process_t *proc, int fd) {
     if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
     vfs_file_t *file = proc->fds[fd];
-    kprintf(DEBUG, "proc_close_fd: fd=%d file=%x inode=%x ref=%d\n",
-        fd, file, file->inode, file->ref_count);
 
     proc->fds[fd] = NULL;
     return vfs_close(file);
@@ -244,7 +242,7 @@ void thread_wake(thread_t *thread) {
     thread->status = READY;
 }
 
-void kill_thread(thread_t *thread, bool free_user_stack) {
+void kill_thread(thread_t *thread) {
     if (!thread || thread->status == TERMINATED) return;
     thread->status = TERMINATED;
 
@@ -274,6 +272,7 @@ void kill_process_threads(process_t *proc) {
         thread = next;
     }
     proc->thread_list = NULL;
+    proc->main_thread = NULL;
 }
 
 void kill_process(process_t *process, int status) {
@@ -303,6 +302,8 @@ void kill_process(process_t *process, int status) {
 
 void cleanup_process(process_t *proc) {
     if (!proc || proc->status != ZOMBIE) return;
+    kprintf(DEBUG, "cleanup_process: freeing pid=%d name=%s\n", 
+            proc->pid, proc->process_name);
 
     // // Free the process stack and process structure
     // // TODO: unmap all pages and heap
@@ -408,6 +409,7 @@ int exec(const char *path, char **argv) {
     switch_page_directory(proc->root_page_table);
     if (!new_page_dir) {
         printf("Failed to create new page directory\n");
+        vfs_close(file);
         return -1;
     }
     
@@ -451,6 +453,7 @@ int exec(const char *path, char **argv) {
     
     // 6. Load the ELF file into new page directory
     elf_header_t* elf = load_elf(file, new_page_dir);
+    vfs_close(file);
     switch_page_directory(new_page_dir);
     if (!elf) {
         printf("Failed to load ELF file\n");
@@ -498,9 +501,143 @@ int exec(const char *path, char **argv) {
 
     current_thread = thread;
     tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
-    kprintf(DEBUG, "[exec] PID %d", proc->pid);
     switch_context(thread);
 
     // Should not return here
     return -1;
 }
+
+
+// int exec(const char *path, char **argv) {
+// 	asm volatile ("cli");
+
+//     process_t *proc = get_current_process();
+//     vfs_file_t* file = NULL;
+//     page_directory_t* new_page_dir = NULL;
+//     char **k_argv = NULL;
+//     char *k_strings = NULL;
+//     elf_header_t* elf = NULL;
+    
+//     // 1. Open the ELF file
+//     file = vfs_open(path, VFS_FLAG_READ);
+//     if (!file) {
+//         kprintf(ERROR, "exec: Failed to load file %s\n", path);
+//         goto fail;
+//     }
+    
+//     // 2. Create new address space
+//     new_page_dir = clone_page_directory(kpage_dir);
+//     switch_page_directory(proc->root_page_table);
+//     if (!new_page_dir) {
+//         kprintf(ERROR, "exec: Failed to clone page directory\n");
+//         goto fail;
+//     }
+    
+//     // 3. Copy arguments into k_argv and k_strings (kernel memory)
+//     int argc = 0;
+//     size_t total_len = 0;
+//     if (argv) {
+//         while (argv[argc]) {
+//             total_len += strlen(argv[argc]) + 1;
+//             argc++;
+//         }
+//     }
+    
+//     if (argc > 0) {
+//         k_argv = (char **)kmalloc((argc + 1) * sizeof(char *));
+//         k_strings = (char *)kmalloc(total_len);
+
+//         if (!k_argv || !k_strings) {
+//             kprintf(ERROR, "exec: failed to allocate argv\n");
+//             goto fail;
+//         }
+        
+//         char *str_ptr = k_strings;
+//         for (int i = 0; i < argc; i++) {
+//             size_t len = strlen(argv[i]) + 1;
+//             memcpy(str_ptr, argv[i], len);
+//             k_argv[i] = str_ptr;
+//             str_ptr += len;
+//         }
+//         k_argv[argc] = NULL;
+//     }
+    
+//     strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
+//     proc->process_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
+    
+//     // 4. Clear existing threads after copying arguments
+//     kill_process_threads(proc);
+    
+//     // 5. Switch to the new page directory and free the old one
+//     switch_page_directory(new_page_dir);
+//     free_page_directory(proc->root_page_table);
+//     proc->root_page_table = new_page_dir;
+//     proc->is_kernel_process = false;
+//     new_page_dir = NULL;
+    
+//     // 6. Load the ELF file into new page directory
+//     elf = load_elf(file, new_page_dir);
+//     vfs_close(file);
+//     file = NULL;
+
+//     switch_page_directory(new_page_dir);
+//     if (!elf) {
+//         kprintf(ERROR, "exec: Failed to load ELF file %s\n", path);
+//         goto fail;
+//     }
+
+//     // 7. Create a new main thread for the process
+//     thread_t *thread = create_thread(proc, (void (*)(void))elf->entry, proc->process_name);
+//     if (!thread) {
+//         kprintf(ERROR, "exec: Failed to create main thread for process %s\n", proc->process_name);
+//         goto fail;
+//     }
+
+//     proc->main_thread = thread;
+//     proc->thread_list = thread;
+
+//     // 8. Set up the user stack and copy arguments to the user stack
+//     char *stack_strings = (char *)((uintptr_t)USER_STACK_TOP - total_len);
+//     char **stack_argv = (char **)(stack_strings - (sizeof(char *) * (argc + 1)));
+
+//     char *str_ptr = stack_strings;
+//     for (int i = 0; i < argc; i++) {
+//         size_t len = strlen(k_argv[i]) + 1;
+//         memcpy(str_ptr, k_argv[i], len);
+//         stack_argv[i] = str_ptr;
+//         str_ptr += len;
+//     }
+//     stack_argv[argc] = NULL;
+
+//     kfree(k_argv); k_argv = NULL;
+//     kfree(k_strings); k_strings = NULL;
+
+//     void *stack_top = (void *)stack_argv;
+//     PUSH(stack_top, uint32_t, (uint32_t)NULL); // envp = NULL for now
+//     PUSH(stack_top, uint32_t, (uint32_t)stack_argv);
+//     PUSH(stack_top, uint32_t, argc);
+
+//     // 9. Set up the thread context and file descriptors
+//     thread->user_esp = (uintptr_t)stack_top;
+//     proc->status = READY;
+
+//     // 10. Clean up the ELF header and switch to the new process
+//     kfree(elf); elf = NULL;
+
+//     add_thread(thread);
+
+//     current_thread = thread;
+//     tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
+//     switch_context(thread);
+
+//     // Should not return here
+//     return -1;
+
+// fail:
+//     if (file) vfs_close(file);
+//     if (elf) kfree(elf);
+//     if (new_page_dir) free_page_directory(new_page_dir);
+//     if (k_argv) kfree(k_argv);
+//     if (k_strings) kfree(k_strings);
+//     return -1;
+// }

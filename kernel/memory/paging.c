@@ -105,7 +105,12 @@ void alloc_page(page_table_entry_t *page, uint32_t flags) {
 
     // pmm_alloc_block gives block index block index == physical page number when BLOCK_SIZE == PAGE_SIZE
     uint32_t frame = pmm_alloc_block();
-    page->frame = (uint32_t)frame;
+    if (!frame) {
+        printf("alloc_page: Failed to allocate physical frame\n");
+        return;
+    }
+
+    page->frame = frame;
     page->present = 1;
     page->rw = (flags & PAGE_RW) ? 1 : 0;
     page->user = (flags & PAGE_USER) ? 1 : 0;
@@ -119,6 +124,16 @@ void free_page(page_table_entry_t *page) {
 
     pmm_free_block(page->frame);
     memset(page, 0, sizeof(page_table_entry_t));
+}
+
+void map_page_to_frame(page_table_entry_t *page, uint32_t frame, uint32_t flags) {
+    if (page->present) free_page(page);   // unmap existing first
+
+    pmm_ref_frame(frame);                 // increment refcount — shared owner
+    page->frame   = frame;
+    page->present = 1;
+    page->rw      = (flags & PAGE_RW)   ? 1 : 0;
+    page->user    = (flags & PAGE_USER) ? 1 : 0;
 }
 
 void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags) {
@@ -141,7 +156,8 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
         }
 
         if (page->present) {
-            printf("map_memory: Page already present at %x (dir: %x)\n", virtual_addr, dir);
+            uint32_t new_frame = should_alloc ? 0 : (physical_start + i * PAGE_SIZE) >> 12;
+            // printf("map_memory: Page already present at %x (dir: %x)\n", virtual_addr, dir);
             continue;
         }
 
@@ -174,21 +190,88 @@ void switch_page_directory(page_directory_t *dir) {
     asm volatile("mov %0, %%cr3" :: "r"(phys) : "memory");
 }
 
+// uint32_t copy_from_page(page_directory_t* src, uint32_t virt) {
+//     switch_page_directory(src);
+//     uint32_t tmp_virt = 0xFFF00000;
+//     page_table_entry_t *temp_page = get_page(tmp_virt, 1, src);
+//     alloc_page(temp_page, 0x7);
+//     memcpy((void *)tmp_virt, (void *)virt, PAGE_SIZE);
+
+//     uint32_t frame = temp_page->frame;
+//     temp_page->present = 0; // Mark as not present to avoid freeing it
+//     temp_page->frame = 0; // Clear the frame to avoid double free
+//     switch_page_directory(kpage_dir); // Switch back to the kernel page directory
+//     return frame;
+// }
+
+// // TODO: Implement copy-on-write
+// page_directory_t * clone_page_directory(page_directory_t *src) {
+//     page_directory_t *new_dir = (page_directory_t*) kmalloc_aligned(sizeof(page_directory_t), PAGE_SIZE);
+//     if (!new_dir) {
+//         printf("Failed to allocate new page directory\n");
+//         return NULL;
+//     }
+
+//     memset(new_dir, 0, sizeof(page_directory_t));
+//     for (uint32_t i = 0; i < 1024; i++) {
+//         if (!src->tables[i].present) continue;
+
+//         page_table_t *src_table = src->ref_tables[i];
+
+//         // Copy kernel mappings by reference
+//         if (i >= 768 && src_table && kpage_dir->ref_tables[i] == src_table) {
+//             new_dir->tables[i] = src->tables[i];
+//             new_dir->ref_tables[i] = src_table;
+//             continue;
+//         }
+
+//         page_table_t *new_table = (page_table_t*) kmalloc_aligned(sizeof(page_table_t), PAGE_SIZE);
+//         memset(new_table, 0, sizeof(page_table_t));
+
+//         for (uint32_t j = 0; j < 1024; j++) {
+//             if (!src_table->pages[j].present) continue;
+
+//             uint32_t virt_addr = i << 22 | j << 12;
+//             new_table->pages[j].frame = copy_from_page(src, virt_addr);
+//             new_table->pages[j].present = 1;
+//             new_table->pages[j].rw = 1; // 0 for COW
+//             new_table->pages[j].user = 1; // src_table->pages[j].user;
+//         }
+
+//         uint32_t t = (uint32_t) virtual2physical(src, new_table);
+//         new_dir->tables[i].present = 1;
+//         new_dir->tables[i].rw = src->tables[i].rw; // 0 for COW
+//         new_dir->tables[i].user = src->tables[i].user;
+//         new_dir->tables[i].frame = t >> 12;
+//         new_dir->ref_tables[i] = new_table;
+//     }
+
+//     return new_dir;
+// }
+
 uint32_t copy_from_page(page_directory_t* src, uint32_t virt) {
     switch_page_directory(src);
+    
     uint32_t tmp_virt = 0xFFF00000;
     page_table_entry_t *temp_page = get_page(tmp_virt, 1, src);
-    alloc_page(temp_page, 0x7);
+    alloc_page(temp_page, 0x7);          // refcount = 1
     memcpy((void *)tmp_virt, (void *)virt, PAGE_SIZE);
 
     uint32_t frame = temp_page->frame;
-    temp_page->present = 0; // Mark as not present to avoid freeing it
-    temp_page->frame = 0; // Clear the frame to avoid double free
-    switch_page_directory(kpage_dir); // Switch back to the kernel page directory
-    return frame;
+    
+    // FIX: use free_page instead of manually zeroing — refcount drops to 0
+    // and clears the temp mapping cleanly. The frame itself stays alive
+    // because the caller will store it in a new page table entry.
+    // But wait — free_page would free the frame too since refcount = 1.
+    // So we still need to manually detach without freeing the frame.
+    // Increment refcount first so free_page doesn't release the frame.
+    pmm_ref_frame(frame);               // refcount = 2
+    free_page(temp_page);               // refcount = 1, temp mapping gone
+    
+    switch_page_directory(kpage_dir);
+    return frame;                        // caller owns the remaining refcount
 }
 
-// TODO: Implement copy-on-write
 page_directory_t * clone_page_directory(page_directory_t *src) {
     page_directory_t *new_dir = (page_directory_t*) kmalloc_aligned(sizeof(page_directory_t), PAGE_SIZE);
     if (!new_dir) {
@@ -206,6 +289,7 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
         if (i >= 768 && src_table && kpage_dir->ref_tables[i] == src_table) {
             new_dir->tables[i] = src->tables[i];
             new_dir->ref_tables[i] = src_table;
+            pmm_ref_frame(src->tables[i].frame); // Increment refcount for shared kernel page table
             continue;
         }
 

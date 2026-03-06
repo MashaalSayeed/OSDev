@@ -279,13 +279,13 @@ void parse_input(char *input, char **args) {
 }
 
 int is_valid_command(char *command) {
-    char *bin_commands[] = {"HELLO", "EDITOR"};
+    char *bin_commands[] = {"HELLO", "EDITOR", "TEST", "SHELL"};
     for (size_t i = 0; i < sizeof(bin_commands) / sizeof(bin_commands[0]); i++) {
         if (strcmp(command, bin_commands[i]) == 0) {
             return 1;
         }
     }
-
+    printf("Command '%s' not found in /BIN\n", command);
     return 0;
 }
 

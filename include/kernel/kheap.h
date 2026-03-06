@@ -30,6 +30,7 @@ void *kmalloc_aligned(size_t size, size_t align);
 void kfree(void *ptr);
 void kfree_aligned(void *ptr);
 
+size_t kheap_used();
 void print_kheap();
 void kheap_init();
 void *calloc(size_t num, size_t size);

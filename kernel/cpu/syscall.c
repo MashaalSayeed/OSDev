@@ -11,6 +11,7 @@
 #include <kernel/shm.h>
 #include <kernel/framebuffer.h>
 #include "drivers/pit.h"
+#include "kernel/kheap.h"
 
 extern struct tss_entry tss_entry;
 extern thread_t *current_thread;
@@ -95,6 +96,7 @@ int sys_waitpid(int pid, int *status, int options) {
     kprintf(DEBUG, "[%d] Cleaning up child process %d...\n", proc->pid, pid);
     if (status) *status = child->exit_code;
     cleanup_process(child);
+    kprintf(DEBUG, "[waitpid] heap used after cleanup: %d\n", kheap_used());
     return pid;
 }
 
@@ -379,50 +381,6 @@ int sys_yield(void) {
     return 0;
 }
 
-/* Read one raw input event (compositor polls this for mouse/keyboard) */
-// int sys_input_read(input_event_t *evt) {
-//     if (!evt) return -1;
-//     return input_pop_event(evt) ? 1 : 0;
-// }
-
-
-syscall_t syscall_table[] = {
-    [SYSCALL_READ]     = (syscall_t)sys_read,
-    [SYSCALL_WRITE]    = (syscall_t)sys_write,
-    [SYSCALL_OPEN]     = (syscall_t)sys_open,
-    [SYSCALL_CLOSE]    = (syscall_t)sys_close,
-    [SYSCALL_EXIT]     = (syscall_t)sys_exit,
-    [SYSCALL_GETDENTS] = (syscall_t)sys_getdents,
-    [SYSCALL_GETPID]   = (syscall_t)sys_getpid, // Wrap in a function for consistency
-    [SYSCALL_FORK]     = (syscall_t)sys_fork,
-    [SYSCALL_EXEC]     = (syscall_t)sys_exec,
-    [SYSCALL_WAITPID]  = (syscall_t)sys_waitpid,
-    [SYSCALL_SBRK]     = (syscall_t)sys_sbrk,
-    [SYSCALL_GETCWD]   = (syscall_t)sys_getcwd,
-    [SYSCALL_CHDIR]    = (syscall_t)sys_chdir,
-    [SYSCALL_DUP2]     = (syscall_t)sys_dup2,
-    [SYSCALL_MKDIR]    = (syscall_t)sys_mkdir,
-    [SYSCALL_RMDIR]    = (syscall_t)sys_rmdir,
-    [SYSCALL_UNLINK]   = (syscall_t)sys_unlink,
-    [SYSCALL_LSEEK]    = (syscall_t)sys_lseek,
-    [SYSCALL_SBRK]     = (syscall_t)sys_sbrk,
-    [SYSCALL_PIPE]     = (syscall_t)sys_pipe,
-    /* --- SHM / framebuffer / misc --- */
-    [SYSCALL_SHM_CREATE]  = (syscall_t)sys_shm_create,
-    [SYSCALL_SHM_MAP]     = (syscall_t)sys_shm_map,
-    [SYSCALL_SHM_UNMAP]   = (syscall_t)sys_shm_unmap,
-    [SYSCALL_SHM_DESTROY] = (syscall_t)sys_shm_destroy,
-    [SYSCALL_FB_MAP]      = (syscall_t)sys_fb_map,
-    [SYSCALL_YIELD]       = (syscall_t)sys_yield,
-    [SYSCALL_FSTAT]       = (syscall_t)sys_fstat,
-    [SYSCALL_STAT]        = (syscall_t)sys_stat,
-    [SYSCALL_GET_TICKS]   = (syscall_t)sys_get_ticks,
-    [SYSCALL_NANOSLEEP]   = (syscall_t)sys_nanosleep,
-    // [SYSCALL_MMAP]        = (syscall_t)sys_mmap,
-    // [SYSCALL_MUNMAP]      = (syscall_t)sys_munmap,
-    // [SYSCALL_INPUT_READ]  = (syscall_t)sys_input_read,
-};
-
 static int dispatch(uint32_t num, registers_t *regs) {
     switch (num) {
         case SYSCALL_READ:     return sys_read(regs->ebx, (void *)regs->ecx, regs->edx);
@@ -438,7 +396,9 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_SBRK:     return (int)sys_sbrk(regs->ebx);
         case SYSCALL_GETCWD:   return (int)sys_getcwd((char *)regs->ebx, regs->ecx);
         case SYSCALL_CHDIR:    return sys_chdir((const char *)regs->ebx);
+        case SYSCALL_DUP:      return sys_dup(regs->ebx);
         case SYSCALL_DUP2:     return sys_dup2(regs->ebx, regs->ecx);
+        case SYSCALL_FCNTL:    return sys_fcntl(regs->ebx, regs->ecx, regs->edx);
         case SYSCALL_MKDIR:    return sys_mkdir((const char *)regs->ebx, regs->ecx);
         case SYSCALL_RMDIR:    return sys_rmdir((const char *)regs->ebx);
         case SYSCALL_UNLINK:   return sys_unlink((const char *)regs->ebx);
@@ -468,11 +428,4 @@ void syscall_handler(registers_t *regs) {
     interrupt_frame = regs;
     regs->eax = dispatch(regs->eax, regs);
     interrupt_frame = NULL;
-    // if (regs->eax < sizeof(syscall_table) / sizeof(syscall_table[0]) &&
-    //     syscall_table[regs->eax] != NULL) {
-    //     regs->eax = syscall_table[regs->eax](regs->ebx, regs->ecx, regs->edx);
-    // } else {
-    //     kprintf(WARNING, "Unknown syscall: %d\n", regs->eax);
-    //     regs->eax = -1;
-    // }
 }

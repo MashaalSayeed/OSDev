@@ -100,11 +100,10 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	init_keyboard();
 
 	// Allocate 1096MB of memory
-	printf("Allocating 1096MB of memory\n");
-	pmm_init(mbd, 1096 * 0x100000);
+	printf("Allocating %xMB of memory\n", MAX_MEMORY / (1024 * 1024));
+	pmm_init(mbd, MAX_MEMORY);
 
 	paging_init();
-	printf("Allocating 1096MB of memory\n");
 	kheap_init();
 	printf("Initialized Paging!!\n\n");
 

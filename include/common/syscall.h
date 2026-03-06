@@ -14,12 +14,13 @@
 #define SYSCALL_SBRK 11
 #define SYSCALL_GETCWD 12
 #define SYSCALL_CHDIR 13
-#define SYSCALL_DUP2 14
-#define SYSCALL_PIPE 15
-#define SYSCALL_MKDIR 16
-#define SYSCALL_RMDIR 17
-#define SYSCALL_UNLINK 18
-#define SYSCALL_YIELD 24
+#define SYSCALL_DUP 14
+#define SYSCALL_DUP2 15
+#define SYSCALL_PIPE 16
+#define SYSCALL_MKDIR 17
+#define SYSCALL_RMDIR 18
+#define SYSCALL_UNLINK 26
+#define SYSCALL_YIELD 50
 #define SYSCALL_FORK 57
 #define SYSCALL_EXEC 59
 #define SYSCALL_EXIT 60
@@ -30,6 +31,7 @@
 #define SYSCALL_NANOSLEEP 162
 #define SYSCALL_MMAP 192
 #define SYSCALL_MUNMAP 91
+#define SYSCALL_FCNTL 72
 
 
 /* --- Shared-memory & framebuffer (user-space compositor) --- */
@@ -38,7 +40,6 @@
 #define SYSCALL_SHM_UNMAP   21
 #define SYSCALL_SHM_DESTROY 22
 #define SYSCALL_FB_MAP      23
-#define SYSCALL_INPUT_READ  25
 
 // Standard file descriptors
 #define STDIN 0

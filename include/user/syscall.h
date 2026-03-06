@@ -19,7 +19,9 @@ void syscall_exit(int status);
 int syscall_getdents(int fd, void *dirp, size_t count);
 int syscall_fork();
 int syscall_exec(const char *path, char **args);
+int syscall_dup(int fd);
 int syscall_dup2(int oldfd, int newfd);
+int syscall_fcntl(int fd, int cmd, int arg);
 char *syscall_getcwd(char *buf, size_t size);
 int syscall_chdir(const char *path);
 int syscall_waitpid(int pid, int *status, int options);
@@ -31,8 +33,8 @@ int syscall_unlink(const char *path);
 int syscall_pipe(int fds[2]);
 int syscall_fstat(int fd, stat_t *buf);
 int syscall_stat(const char *path, stat_t *buf);
-void * syscall_mmap(void *addr, size_t length, int prot, int flags, int fd, uint32_t offset);
-void * syscall_munmap(void *addr, size_t length);
+void *syscall_mmap(void *addr, uint32_t length, int prot, int flags, int fd, uint32_t offset);
+void *syscall_munmap(void *addr, size_t length);
 
 /* --- Shared-memory & framebuffer (compositor clients) --- */
 int   syscall_shm_create(uint32_t size);

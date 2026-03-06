@@ -64,6 +64,10 @@ int syscall_exec(const char *path, char **args) {
     return syscall(SYSCALL_EXEC, (uintptr_t)path, (uintptr_t)args, 0);
 }
 
+int syscall_dup(int fd) {
+    return syscall(SYSCALL_DUP, fd, 0, 0);
+}
+
 int syscall_dup2(int oldfd, int newfd) {
     return syscall(SYSCALL_DUP2, oldfd, newfd, 0);
 }
@@ -82,6 +86,10 @@ int syscall_fstat(int fd, stat_t *buf) {
 
 int syscall_stat(const char *path, stat_t *buf) {
     return syscall(SYSCALL_STAT, (int)path, (int)buf, 0);
+}
+
+int syscall_fcntl(int fd, int cmd, int arg) {
+    return syscall(SYSCALL_FCNTL, fd, cmd, arg);
 }
 
 /* -----------------------------------------------------------------------

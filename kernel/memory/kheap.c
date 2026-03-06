@@ -132,6 +132,16 @@ void kfree_aligned(void *ptr) {
     }
 }
 
+size_t kheap_used() {
+    size_t free = 0;
+    kheap_block_t *cur = free_list;
+    while (cur) {
+        free += cur->size + sizeof(kheap_block_t);
+        cur = cur->next;
+    }
+    return KHEAP_INITIAL_SIZE - free;
+}
+
 void print_kheap() {
     kheap_block_t *cur_block = free_list;
     uint32_t total_free = 0;
