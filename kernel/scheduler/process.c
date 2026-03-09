@@ -167,6 +167,7 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     for (int i = 0; i < 8; i++) {
         PUSH(stack, uint32_t, 0); // Clear registers
     }
+    PUSH(stack, uint32_t, 0x23); // gs
 
     // Set up thread context
     if (!proc->is_kernel_process) {
@@ -213,7 +214,6 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
 
     proc->heap_start = (void *)USER_HEAP_START;
     proc->brk = proc->heap_start;
-    proc->heap_end = proc->heap_start;
 
     strncpy(proc->cwd, "/home", sizeof(proc->cwd));
 
@@ -329,7 +329,6 @@ int fork(registers_t *regs) {
     strncpy(child->process_name, parent->process_name, PROCESS_NAME_MAX_LEN);
     child->status = READY;
     child->heap_start = parent->heap_start;
-    child->heap_end = parent->heap_end;
     child->brk = parent->brk;
     child->mmap_base = parent->mmap_base;
     child->is_kernel_process = parent->is_kernel_process;
@@ -376,6 +375,7 @@ int fork(registers_t *regs) {
                 PUSH(stack, uint32_t, 0); // Clear registers
             }
         }
+        PUSH(stack, uint32_t, 0x23); // gs
         child_thread->esp = stack;
 
         add_thread(child_thread);
@@ -394,7 +394,8 @@ int fork(registers_t *regs) {
 
 // TODO: Reuse old thread instead of destroying it and creating a new one
 int exec(const char *path, char **argv) {
-	asm volatile ("cli");
+    printf("exec: Loading new program %s\n", path);
+    asm volatile ("cli");
 
     // 1. Open the ELF file
     process_t *proc = get_current_process();
@@ -405,6 +406,7 @@ int exec(const char *path, char **argv) {
     }
     
     // 2. Create new address space
+    printf("Switching to new process %s (PID: %d)\n", proc->process_name, proc->pid);
     page_directory_t* new_page_dir = clone_page_directory(kpage_dir);
     switch_page_directory(proc->root_page_table);
     if (!new_page_dir) {
@@ -443,6 +445,7 @@ int exec(const char *path, char **argv) {
     proc->process_name[PROCESS_NAME_MAX_LEN - 1] = '\0'; // Ensure null termination
     
     // 4. Clear existing threads after copying arguments
+    printf("Switching to new process %s (PID: %d)\n", proc->process_name, proc->pid);
     kill_process_threads(proc);
     
     // 5. Switch to the new page directory and free the old one

@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 
-#define GDT_ENTRY_COUNT 6
+#define GDT_ENTRY_COUNT 7
+#define GDT_TLS 6
 
 struct gdt_entry {
     uint16_t limit_low;
@@ -49,6 +50,5 @@ struct tss_entry {
 } __attribute__((packed));
 
 
-void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran);
-void load_tss(uint32_t num, uint16_t ss0, uint32_t esp0);
+void gdt_set_tls(uint32_t base, uint32_t limit);
 void gdt_install();

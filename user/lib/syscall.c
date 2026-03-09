@@ -160,7 +160,7 @@ int syscall_nanosleep(const timespec_t *req, timespec_t *rem) {
 }
 
 void *syscall_mmap(void *addr, uint32_t length, int prot, int flags, int fd, uint32_t offset) {
-    return (void *)syscall6(SYSCALL_MMAP, (int)addr, length, prot, flags, fd, offset);
+    return (void *)syscall6(SYSCALL_MMAP2, (int)addr, length, prot, flags, fd, offset);
 }
 
 void *syscall_munmap(void *addr, size_t length) {

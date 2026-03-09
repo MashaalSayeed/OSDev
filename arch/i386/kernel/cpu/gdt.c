@@ -10,7 +10,7 @@ struct gdt_entry gdt[GDT_ENTRY_COUNT];
 struct gdt_ptr gp;
 struct tss_entry tss_entry;
 
-void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
+static void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
     gdt[num].base_low = (base & 0xFFFF);
     gdt[num].base_middle = (base >> 16) & 0xFF;
     gdt[num].base_high = (base >> 24) & 0xFF;
@@ -22,7 +22,7 @@ void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_
     gdt[num].access = access;
 }
 
-void load_tss(uint32_t num, uint16_t ss0, uint32_t esp0) {
+static void load_tss(uint32_t num, uint16_t ss0, uint32_t esp0) {
     uint32_t base = (uint32_t)&tss_entry;
     uint32_t limit = sizeof(struct tss_entry) - 1;
 
@@ -34,6 +34,14 @@ void load_tss(uint32_t num, uint16_t ss0, uint32_t esp0) {
     tss_entry.cs = 0x08;
     tss_entry.ss = tss_entry.ds = tss_entry.es = tss_entry.fs = tss_entry.gs = 0x10;
     tss_entry.trap = 0x0;
+}
+
+void gdt_set_tls(uint32_t base, uint32_t limit) {
+    // User data segment, ring 3, 32-bit, byte granularity
+    gdt_set_gate(GDT_TLS, base, limit, 0xF2, 0xCF);
+
+    // Reload GDT — TLS entry changes at every exec/thread switch
+    gdt_flush(&gp);
 }
 
 void gdt_install() {

@@ -13,13 +13,13 @@
 #define MAX_OPEN_FILES 100
 
 #define PROCESS_STACK_SIZE 0x1000
+#define PROCESS_MAX_HEAP_SIZE 0x100000 // 1MB
 
 #define PROCESS_FLAG_USER 0x1
 #define PROCESS_FLAG_KERNEL 0x2
 #define MMAP_BASE 0x40000000
 
 typedef enum {
-    INIT,
     READY,
     RUNNING,
     WAITING,
@@ -34,6 +34,7 @@ typedef struct thread {
     uintptr_t esp;
     uintptr_t ebp;
     uintptr_t user_esp;
+    uint16_t gs;
 
     process_status_t status;
     uint32_t wakeup_tick; 
@@ -60,7 +61,6 @@ typedef struct process {
     
     void *heap_start;
     void *brk;
-    void *heap_end;
     void *mmap_base;
     
     thread_t* main_thread;

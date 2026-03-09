@@ -97,23 +97,24 @@ page_table_entry_t *get_page(uint32_t virtual, int make, page_directory_t *dir) 
 
 // Allocate a page and set its flags
 // If the page is already allocated, it will not reallocate
-void alloc_page(page_table_entry_t *page, uint32_t flags) {
+bool alloc_page(page_table_entry_t *page, uint32_t flags) {
     if (page->present) {
         printf("alloc_page: Page already allocated %x\n", page);
-        return;
+        return false;
     }
 
     // pmm_alloc_block gives block index block index == physical page number when BLOCK_SIZE == PAGE_SIZE
     uint32_t frame = pmm_alloc_block();
     if (!frame) {
         printf("alloc_page: Failed to allocate physical frame\n");
-        return;
+        return false;
     }
 
     page->frame = frame;
     page->present = 1;
     page->rw = (flags & PAGE_RW) ? 1 : 0;
     page->user = (flags & PAGE_USER) ? 1 : 0;
+    return true;
 }
 
 void free_page(page_table_entry_t *page) {

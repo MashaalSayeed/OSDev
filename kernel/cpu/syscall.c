@@ -12,6 +12,7 @@
 #include <kernel/framebuffer.h>
 #include "drivers/pit.h"
 #include "kernel/kheap.h"
+#include "kernel/gdt.h"
 
 extern struct tss_entry tss_entry;
 extern thread_t *current_thread;
@@ -106,6 +107,26 @@ int sys_fork() {
 
 int sys_exec(const char *path, char **args) {
     return exec(path, args);
+}
+
+int sys_set_thread_area(user_desc_t *desc) {
+    if (!desc) return -1;
+
+    // musl passes entry_number = -1 to request allocation
+    if (desc->entry_number == -1) {
+        desc->entry_number = 6; // We only have one TLS segment, so just use that
+    }
+
+    gdt_set_tls(desc->base_addr, desc->limit);
+    uint16_t selector = (GDT_TLS << 3) | 3;
+    asm volatile("mov %0, %%gs" :: "r"(selector));
+    current_thread->gs = selector;
+
+    return 0;
+}
+
+int sys_mprotect(void *addr, size_t len, int prot) {
+    return 0; // TODO: implement
 }
 
 // --- Directory and file system ---
@@ -219,9 +240,51 @@ int sys_unlink(const char *path) {
 }
 
 // --- Memory management ---
+void *sys_brk(void *addr) {
+    process_t *proc = get_current_process();
+    if (!addr || addr < proc->heap_start) return proc->brk;
+
+    void *heap_limit = proc->heap_start + PROCESS_MAX_HEAP_SIZE;
+    if (addr > heap_limit) return proc->brk;
+
+    void *new_brk = (void *)PAGE_ALIGN_UP((uintptr_t)addr);
+    void *old_brk = proc->brk;
+
+    if (new_brk > old_brk) {
+        for (void *p = old_brk; p < new_brk; p += PAGE_SIZE) {
+            page_table_entry_t *page = get_page((uintptr_t)p, 1, proc->root_page_table);
+            if (!page || !alloc_page(page, 0x7)) {
+                // FIX: partial allocation — roll back everything we mapped
+                // so far to keep the heap in a consistent state
+                for (void *rb = old_brk; rb < p; rb += PAGE_SIZE) {
+                    page_table_entry_t *rp = get_page((uintptr_t)rb, 0, proc->root_page_table);
+                    if (rp && rp->present) free_page(rp);
+                }
+                return old_brk;  // signal failure by returning unchanged brk
+            }
+        }
+    } else if (new_brk < old_brk) {
+        for (void *p = new_brk; p < old_brk; p += PAGE_SIZE) {
+            page_table_entry_t *page = get_page((uintptr_t)p, 0, proc->root_page_table);
+            if (page && page->present) free_page(page);
+        }
+    }
+
+    proc->brk = new_brk;
+    return proc->brk;
+}
+
+// sbrk is just a thin wrapper over brk — no independent logic
 void *sys_sbrk(int incr) {
     process_t *proc = get_current_process();
-    return sbrk(proc, incr);
+    if (incr == 0) return proc->brk;
+
+    void *old_brk = proc->brk;
+    void *result = sys_brk(proc->brk + incr);
+
+    // sbrk returns old brk on success, -1 on failure
+    if (result == old_brk && incr != 0) return (void *)-1;
+    return old_brk;
 }
 
 int sys_pipe(int fds[2]) {
@@ -393,6 +456,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_FORK:     return sys_fork();
         case SYSCALL_EXEC:     return sys_exec((const char *)regs->ebx, (char **)regs->ecx);
         case SYSCALL_WAITPID:  return sys_waitpid(regs->ebx, (int *)regs->ecx, regs->edx);
+        case SYSCALL_BRK:      return (int)sys_brk((void *)regs->ebx);
         case SYSCALL_SBRK:     return (int)sys_sbrk(regs->ebx);
         case SYSCALL_GETCWD:   return (int)sys_getcwd((char *)regs->ebx, regs->ecx);
         case SYSCALL_CHDIR:    return sys_chdir((const char *)regs->ebx);
@@ -414,8 +478,10 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_SHM_DESTROY: return sys_shm_destroy(regs->ebx);
         case SYSCALL_FB_MAP:      return (int)sys_fb_map((uint32_t *)regs->ebx, (uint32_t *)regs->ecx, (uint32_t *)regs->edx);
         case SYSCALL_YIELD:       return sys_yield();
-        case SYSCALL_MMAP:        return (int)sys_mmap((void *)regs->ebx, regs->ecx, regs->edx, regs->esi, regs->edi, regs->ebp);
+        case SYSCALL_MMAP2:        return (int)sys_mmap((void *)regs->ebx, regs->ecx, regs->edx, regs->esi, regs->edi, regs->ebp);
         case SYSCALL_MUNMAP:      return (int)sys_munmap((void *)regs->ebx, regs->ecx);
+        case SYSCALL_MPROTECT:    return sys_mprotect(regs->ebx, regs->ecx, regs->edx);
+        case SYSCALL_EXIT_GROUP:    return sys_exit(regs->ebx);
         // case SYSCALL_INPUT_READ:  return sys_input_read((input_event_t *)regs->ebx);
         default:
             kprintf(WARNING, "Unknown syscall: %d\n", num);

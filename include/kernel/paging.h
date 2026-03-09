@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "kernel/isr.h"
 
 #define PAGE_SIZE       0x1000
@@ -20,6 +21,7 @@
 
 #define IS_ALIGN(addr) (((uint32_t)(addr) & (PAGE_SIZE - 1)) == 0)
 #define PAGE_ALIGN(addr) ((uint32_t)(addr) & ~(PAGE_SIZE - 1))
+#define PAGE_ALIGN_UP(addr) (((addr) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1))
 
 typedef struct page_directory_entry {
     uint32_t present    : 1;
@@ -59,7 +61,7 @@ void switch_page_directory(page_directory_t *dir);
 void enable_paging();
 
 page_table_entry_t * get_page(uint32_t virtual, int make, page_directory_t *dir);
-void alloc_page(page_table_entry_t *page, uint32_t flags);
+bool alloc_page(page_table_entry_t *page, uint32_t flags);
 void free_page(page_table_entry_t *page);
 
 void * virtual2physical(page_directory_t *dir, void *virtual);

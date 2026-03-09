@@ -15,5 +15,5 @@ _start:
     call main
 
     mov ebx, eax        ; move return value to ebx
-    mov eax, 60
+    mov eax, 1
     int 0x80            ; syscall to exit with return value in ebx
