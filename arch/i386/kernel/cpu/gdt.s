@@ -7,7 +7,6 @@ gdt_flush:
     MOV ds, ax
     MOV es, ax
     MOV fs, ax
-    MOV gs, ax
     MOV ss, ax
     JMP 0x08:.flush
 .flush:

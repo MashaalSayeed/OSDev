@@ -12,6 +12,7 @@
 
 uint8_t * temp_mem;
 page_directory_t *kpage_dir; // Kernel page directory
+uint32_t kpage_dir_phys;
 
 extern uint8_t *bitmap;
 extern uint32_t bitmap_size;
@@ -71,7 +72,6 @@ page_table_entry_t *get_page(uint32_t virtual, int make, page_directory_t *dir) 
 
     if (!dir->ref_tables[pd_index]) {
         if (!make) return NULL;
-
         page_table_t *table = NULL;
         if (!paging_enabled) {
             table = (page_table_t*) dumb_kmalloc(sizeof(page_table_t), 1);
@@ -88,7 +88,7 @@ page_table_entry_t *get_page(uint32_t virtual, int make, page_directory_t *dir) 
         dir->tables[pd_index].present = 1;
         dir->tables[pd_index].rw = 1;
         dir->tables[pd_index].user = 1;
-        dir->tables[pd_index].frame = (uint32_t)virtual2physical(dir, table) >> 12;
+        dir->tables[pd_index].frame = (uint32_t)virtual2physical(kpage_dir, table) >> 12;
         dir->ref_tables[pd_index] = table;
     }
 
@@ -123,13 +123,19 @@ void free_page(page_table_entry_t *page) {
         return;
     }
 
+    if (page->frame == 0) {
+        kprintf(WARNING, "free_page: page has frame=0, likely uninitialized\n");
+        page->present = 0;
+        return;
+    }
+
     pmm_free_block(page->frame);
     memset(page, 0, sizeof(page_table_entry_t));
 }
 
 void map_page_to_frame(page_table_entry_t *page, uint32_t frame, uint32_t flags) {
-    if (page->present) free_page(page);   // unmap existing first
-
+    // if (page->present) free_page(page);   // unmap existing first
+    ASSERT(!page->present);
     pmm_ref_frame(frame);                 // increment refcount — shared owner
     page->frame   = frame;
     page->present = 1;
@@ -142,8 +148,8 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
     bool should_alloc = (physical_start == (uint32_t)-1);
 
     // if (physical_start && !IS_ALIGN(physical_start)) {
-    //     // printf("Warning: physical_start is not page aligned, aligning it\n");
-    //     physical_start = PAGE_ALIGN(physical_start);
+    //     printf("Warning: physical_start is not page aligned, aligning it\n");
+    //     // physical_start = PAGE_ALIGN(physical_start);
     // }
 
     for (uint32_t i = 0; i < num_pages; i++) {
@@ -161,6 +167,7 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
             // printf("map_memory: Page already present at %x (dir: %x)\n", virtual_addr, dir);
             continue;
         }
+
 
         // Allocate and map the frame if physical_start is provided
         if (should_alloc) {
@@ -181,96 +188,130 @@ void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size,
 
 void switch_page_directory(page_directory_t *dir) {
     // Set the CR3 register to the physical address of the page directory
-    uint32_t phys = (uint32_t)virtual2physical(kpage_dir, dir);
+    uint32_t phys;
+    if (dir == kpage_dir) {
+        phys = kpage_dir_phys;  // always known, no table walk needed
+    } else {
+        phys = (uint32_t)virtual2physical(kpage_dir, dir);
+    }
     if (!phys) {
-        printf("Failed to switch page directory\n");
+        kprintf(ERROR, "switch_page_directory: failed to resolve %x\n", dir);
         return;
     }
 
-    // printf("[switch_page_directory] Loading CR3: %x\n", phys);
     asm volatile("mov %0, %%cr3" :: "r"(phys) : "memory");
 }
 
-// uint32_t copy_from_page(page_directory_t* src, uint32_t virt) {
-//     switch_page_directory(src);
-//     uint32_t tmp_virt = 0xFFF00000;
-//     page_table_entry_t *temp_page = get_page(tmp_virt, 1, src);
-//     alloc_page(temp_page, 0x7);
-//     memcpy((void *)tmp_virt, (void *)virt, PAGE_SIZE);
+// Internal helper — map a physical frame into a kernel temp window
+static page_table_entry_t *map_tmp(uint32_t vaddr, uint32_t frame) {
+    page_table_entry_t *page = get_page(vaddr, 1, kpage_dir);
+    ASSERT(!page->present);
+    map_page_to_frame(page, frame, PAGE_RW);
+    invalidate_page(vaddr);
+    return page;
+}
 
-//     uint32_t frame = temp_page->frame;
-//     temp_page->present = 0; // Mark as not present to avoid freeing it
-//     temp_page->frame = 0; // Clear the frame to avoid double free
-//     switch_page_directory(kpage_dir); // Switch back to the kernel page directory
-//     return frame;
-// }
+// Internal helper — unmap a kernel temp window
+static void unmap_tmp(uint32_t vaddr, uint32_t frame) {
+    page_table_entry_t *page = get_page(vaddr, 0, kpage_dir);
+    if (!page || !page->present) return;
+    pmm_free_block(frame);   // decrement refcount from map_page_to_frame
+    page->present = 0;
+    page->frame   = 0;
+    invalidate_page(vaddr);
+}
 
-// // TODO: Implement copy-on-write
-// page_directory_t * clone_page_directory(page_directory_t *src) {
-//     page_directory_t *new_dir = (page_directory_t*) kmalloc_aligned(sizeof(page_directory_t), PAGE_SIZE);
-//     if (!new_dir) {
-//         printf("Failed to allocate new page directory\n");
-//         return NULL;
-//     }
+int copy_to_user(page_directory_t *dir, uint32_t user_vaddr,
+                 const void *src, size_t size) {
+    const uint8_t *ksrc = (const uint8_t *)src;
+    uint32_t remaining = size;
+    uint32_t offset = 0;
 
-//     memset(new_dir, 0, sizeof(page_directory_t));
-//     for (uint32_t i = 0; i < 1024; i++) {
-//         if (!src->tables[i].present) continue;
+    while (remaining > 0) {
+        uint32_t page_offset = (user_vaddr + offset) & (PAGE_SIZE - 1);
+        uint32_t chunk = PAGE_SIZE - page_offset;
+        if (chunk > remaining) chunk = remaining;
 
-//         page_table_t *src_table = src->ref_tables[i];
+        // Find the physical frame backing this user virtual address
+        page_table_entry_t *user_page = get_page(user_vaddr + offset, 0, dir);
+        if (!user_page || !user_page->present) {
+            kprintf(ERROR, "copy_to_user: page not mapped at %x\n", 
+                    user_vaddr + offset);
+            return -1;
+        }
 
-//         // Copy kernel mappings by reference
-//         if (i >= 768 && src_table && kpage_dir->ref_tables[i] == src_table) {
-//             new_dir->tables[i] = src->tables[i];
-//             new_dir->ref_tables[i] = src_table;
-//             continue;
-//         }
+        // Map the physical frame into kernel temp window
+        map_tmp(UACCESS_TMP_DST + page_offset, user_page->frame);
+        memcpy((void *)(UACCESS_TMP_DST + page_offset), ksrc + offset, chunk);
+        unmap_tmp(UACCESS_TMP_DST + page_offset, user_page->frame);
 
-//         page_table_t *new_table = (page_table_t*) kmalloc_aligned(sizeof(page_table_t), PAGE_SIZE);
-//         memset(new_table, 0, sizeof(page_table_t));
+        offset    += chunk;
+        remaining -= chunk;
+    }
+    return 0;
+}
 
-//         for (uint32_t j = 0; j < 1024; j++) {
-//             if (!src_table->pages[j].present) continue;
+int copy_from_user(page_directory_t *dir, void *dst,
+                   uint32_t user_vaddr, size_t size) {
+    uint8_t *kdst = (uint8_t *)dst;
+    uint32_t remaining = size;
+    uint32_t offset = 0;
 
-//             uint32_t virt_addr = i << 22 | j << 12;
-//             new_table->pages[j].frame = copy_from_page(src, virt_addr);
-//             new_table->pages[j].present = 1;
-//             new_table->pages[j].rw = 1; // 0 for COW
-//             new_table->pages[j].user = 1; // src_table->pages[j].user;
-//         }
+    while (remaining > 0) {
+        uint32_t page_offset = (user_vaddr + offset) & (PAGE_SIZE - 1);
+        uint32_t chunk = PAGE_SIZE - page_offset;
+        if (chunk > remaining) chunk = remaining;
 
-//         uint32_t t = (uint32_t) virtual2physical(src, new_table);
-//         new_dir->tables[i].present = 1;
-//         new_dir->tables[i].rw = src->tables[i].rw; // 0 for COW
-//         new_dir->tables[i].user = src->tables[i].user;
-//         new_dir->tables[i].frame = t >> 12;
-//         new_dir->ref_tables[i] = new_table;
-//     }
+        page_table_entry_t *user_page = get_page(user_vaddr + offset, 0, dir);
+        if (!user_page || !user_page->present) {
+            kprintf(ERROR, "copy_from_user: page not mapped at %x\n",
+                    user_vaddr + offset);
+            return -1;
+        }
 
-//     return new_dir;
-// }
+        map_tmp(UACCESS_TMP_SRC, user_page->frame);
+        memcpy(kdst + offset, (void *)(UACCESS_TMP_SRC + page_offset), chunk);
+        unmap_tmp(UACCESS_TMP_SRC, user_page->frame);
 
-uint32_t copy_from_page(page_directory_t* src, uint32_t virt) {
-    switch_page_directory(src);
-    
-    uint32_t tmp_virt = 0xFFF00000;
-    page_table_entry_t *temp_page = get_page(tmp_virt, 1, src);
-    alloc_page(temp_page, 0x7);          // refcount = 1
-    memcpy((void *)tmp_virt, (void *)virt, PAGE_SIZE);
+        offset    += chunk;
+        remaining -= chunk;
+    }
+    return 0;
+}
 
-    uint32_t frame = temp_page->frame;
-    
-    // FIX: use free_page instead of manually zeroing — refcount drops to 0
-    // and clears the temp mapping cleanly. The frame itself stays alive
-    // because the caller will store it in a new page table entry.
-    // But wait — free_page would free the frame too since refcount = 1.
-    // So we still need to manually detach without freeing the frame.
-    // Increment refcount first so free_page doesn't release the frame.
-    pmm_ref_frame(frame);               // refcount = 2
-    free_page(temp_page);               // refcount = 1, temp mapping gone
-    
-    switch_page_directory(kpage_dir);
-    return frame;                        // caller owns the remaining refcount
+uint32_t copy_page_frame(page_directory_t *src_dir, uint32_t src_vaddr) {
+    page_table_entry_t *src_page = get_page(src_vaddr, 0, src_dir);
+    if (!src_page || !src_page->present) return 0;
+
+    // Allocate a new frame for the copy
+    uint32_t new_frame = pmm_alloc_block();  // refcount = 1
+    if (!new_frame) return 0;
+
+    // Map both src and dst into kernel temp windows
+    map_tmp(UACCESS_TMP_SRC, src_page->frame);
+    map_tmp(UACCESS_TMP_DST, new_frame);
+
+    memcpy((void *)UACCESS_TMP_DST, (void *)UACCESS_TMP_SRC, PAGE_SIZE);
+
+    unmap_tmp(UACCESS_TMP_SRC, src_page->frame);
+    unmap_tmp(UACCESS_TMP_DST, new_frame);
+    // new_frame refcount is still 1 — caller owns it
+
+    return new_frame;
+}
+
+// Copy a null-terminated string from user space into a kernel buffer
+// Returns length of string (excluding null) or -1 on fault
+int strncpy_from_user(page_directory_t *dir, char *dst,
+                      uint32_t user_vaddr, size_t max) {
+    for (size_t i = 0; i < max; i++) {
+        char c;
+        if (copy_from_user(dir, &c, user_vaddr + i, 1) < 0) return -1;
+        dst[i] = c;
+        if (c == '\0') return (int)i;
+    }
+    dst[max - 1] = '\0';
+    return (int)max - 1;
 }
 
 page_directory_t * clone_page_directory(page_directory_t *src) {
@@ -301,13 +342,24 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
             if (!src_table->pages[j].present) continue;
 
             uint32_t virt_addr = i << 22 | j << 12;
-            new_table->pages[j].frame = copy_from_page(src, virt_addr);
+            uint32_t frame = copy_page_frame(src, virt_addr);
+            if (!frame) {
+                kprintf(ERROR, "clone_page_directory: FAILED to copy page at virt=%x"
+            " src_frame=%x refcount=%d\n", 
+            virt_addr,
+            src->ref_tables[i] ? src->ref_tables[i]->pages[j].frame : 0,
+            src->ref_tables[i] ? 
+                100 : -1);
+                continue;
+            }
+
+            new_table->pages[j].frame = frame;
             new_table->pages[j].present = 1;
             new_table->pages[j].rw = 1; // 0 for COW
             new_table->pages[j].user = 1; // src_table->pages[j].user;
         }
 
-        uint32_t t = (uint32_t) virtual2physical(src, new_table);
+        uint32_t t = (uint32_t) virtual2physical(kpage_dir, new_table);
         new_dir->tables[i].present = 1;
         new_dir->tables[i].rw = src->tables[i].rw; // 0 for COW
         new_dir->tables[i].user = src->tables[i].user;
@@ -324,13 +376,20 @@ void free_page_directory(page_directory_t *dir) {
         if (!dir->tables[i].present) continue;
 
         page_table_t *table = dir->ref_tables[i];
-        if (!table || kpage_dir->ref_tables[i] == table) continue;
+        if (!table) continue;
+
+        // Shared kernel page tables are not freed here since they are owned by the kernel, not the process
+        if (i >= 768 && kpage_dir->ref_tables[i] == table) {
+            pmm_deref_frame(dir->tables[i].frame); // Decrement refcount for shared kernel page table
+            continue;
+        }
 
         for (uint32_t j = 0; j < 1024; j++) {
             if (!table->pages[j].present) continue;
             free_page(&table->pages[j]);
         }
 
+        uint32_t table_frame = dir->tables[i].frame;
         kfree_aligned(table);
     }
 
@@ -359,6 +418,7 @@ void paging_init() {
 
     // Remove the temporary page directory in kernel's data section and install new one
     kpage_dir = (page_directory_t*) dumb_kmalloc(sizeof(page_directory_t), 1);
+    kpage_dir_phys = (uint32_t)kpage_dir - LOAD_MEMORY_ADDRESS;
     memset(kpage_dir, 0, sizeof(page_directory_t));
 
     register_interrupt_handler(14, page_fault_handler);
@@ -445,7 +505,7 @@ void page_fault_handler(registers_t *regs) {
 
     printf("Page fault at %x\n", faulting_address);
     printf("Error code: %x\n", regs->err_code);
-    printf("Page Directory: %x (kernel: %s)\n", cr3, cr3 == (uint32_t)kpage_dir ? "yes" : "no");
+    printf("Page Directory: %x (kernel: %s)\n", cr3, cr3 == kpage_dir_phys ? "yes" : "no");
     print_debug_info(regs);
     
     process_t *proc = get_current_process();
@@ -467,5 +527,13 @@ void page_fault_handler(registers_t *regs) {
 
     print_stack_trace(regs);
 
-    // for (;;) ;
+    if (user && proc) {
+        printf("Killing process %d due to page fault\n", proc->pid);
+        page_fault_detected = 0;   // reset before kill_process calls schedule
+        kill_process(proc, -1);
+        // unreachable if schedule() switches away
+    }
+
+    page_fault_detected = 0;  // reset so nested detection still works
+    for (;;);
 }

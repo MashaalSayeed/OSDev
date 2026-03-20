@@ -25,28 +25,40 @@ static struct vfs_inode_operations fat32_inode_ops = {
 };
 
 int fat32_read_cluster(fat32_superblock_t *sb, uint32_t cluster_number, void *buffer) {
-    if (cluster_number < 2 || cluster_number >= (sb->total_sectors / sb->sectors_per_cluster)) {
-        printf("[fat32_read_cluster] Error: Invalid cluster number: %x\n", cluster_number);
+    if (cluster_number < 2) {
+        kprintf(ERROR, "fat32_read_cluster: invalid cluster %d\n", cluster_number);
         return -1;
     }
 
     uint32_t first_sector = sb->data_sector + (cluster_number - 2) * sb->sectors_per_cluster;
-    uint8_t temp_buffer[512];
+    if (first_sector >= sb->total_sectors) {
+        kprintf(ERROR, "fat32_read_cluster: cluster %d maps to sector %d beyond volume (%d sectors)\n",
+                cluster_number, first_sector, sb->total_sectors);
+        return -1;
+    }
+
+    uint8_t *temp_buffer = kmalloc(sb->bytes_per_sector);
+    if (!temp_buffer) {
+        kprintf(ERROR, "fat32_read_cluster: failed to allocate temp buffer\n");
+        return -1;
+    }
 
     for (uint32_t i = 0; i < sb->sectors_per_cluster; i++) {
         if (sb->device->read_block(sb->device, first_sector + i, temp_buffer) != 0) {
-            printf("Error: Failed to read sector %d\n", first_sector + i);
+            kprintf(ERROR, "fat32_read_cluster: failed to read sector %d\n", first_sector + i);
+            kfree(temp_buffer);
             return -1;
         }
-
-        memcpy((uint8_t*)buffer + (i * sb->bytes_per_sector), temp_buffer, sb->bytes_per_sector);
+        memcpy((uint8_t *)buffer + (i * sb->bytes_per_sector), temp_buffer, sb->bytes_per_sector);
     }
 
+    kfree(temp_buffer);
     return 0;
 }
 
 int fat32_write_cluster(fat32_superblock_t *sb, uint32_t cluster_number, const void *buffer) {
-    if (cluster_number < 2 || cluster_number >= (sb->total_sectors / sb->sectors_per_cluster)) {
+    uint32_t total_clusters = (sb->total_sectors - sb->data_sector) / sb->sectors_per_cluster + 2;
+    if (cluster_number < 2 || cluster_number >= total_clusters) {
         printf("[fat32_write_cluster] Error: Invalid cluster number: %u\n", cluster_number);
         return -1;
     }
@@ -123,18 +135,25 @@ static uint32_t fat32_set_next_cluster(fat32_superblock_t *sb, uint32_t cluster,
     uint32_t fat_sector = sb->reserved_sectors + (fat_offset / sb->bytes_per_sector);
     uint32_t offset = fat_offset % sb->bytes_per_sector;
 
-    uint8_t buffer[512];
+    uint8_t *buffer = kmalloc(sb->bytes_per_sector);
+    if (!buffer) {
+        printf("Error: Failed to allocate buffer for FAT sector %d\n", fat_sector);
+        return -1;
+    }
     if (sb->device->read_block(sb->device, fat_sector, buffer) != 0) {
         printf("Error: Failed to read FAT sector %d\n", fat_sector);
+        kfree(buffer);
         return -1;
     }
 
     *(uint32_t *)(buffer + offset) = next_cluster & 0x0FFFFFFF;
     if (sb->device->write_block(sb->device, fat_sector, buffer) != 0) {
         printf("Error: Failed to write FAT sector %d\n", fat_sector);
+        kfree(buffer);
         return -1;
     }
 
+    kfree(buffer);
     return 0;
 }
 
@@ -539,7 +558,11 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
     
     if (fat32_get_cluster_at_offset(sb, &cluster, offset) != 0) return read;
     uint8_t *buffer = kmalloc(sb->cluster_size);
-    
+    if (!buffer) {
+        kprintf(ERROR, "fat32_read: failed to allocate cluster buffer\n");
+        return 0;
+    }
+
     while (read < count && cluster != FAT32_CLUSTER_LAST) {
         uint32_t cluster_offset = offset % sb->cluster_size;
         uint32_t to_read = sb->cluster_size - cluster_offset;
@@ -547,6 +570,7 @@ static uint32_t fat32_read(vfs_file_t *file, void *buf, size_t count) {
             to_read = count - read;
         }
 
+        // kprintf(DEBUG, "fat32_read: cluster=%d fat_entry=%x offset=%d\n", cluster, buffer[cluster], offset);
         if (fat32_read_cluster(sb, cluster, buffer) != 0) {
             kfree(buffer);
             return read;

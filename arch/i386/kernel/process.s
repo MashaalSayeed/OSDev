@@ -8,6 +8,18 @@ switch_context:
     MOV es, cx
     MOV fs, cx
 
+    ; Restore gs from thread->gs
+    MOVZX ecx, WORD [eax+20]
+    TEST ecx, ecx
+    JZ .use_default_gs
+    MOV gs, cx
+    JMP .do_iret
+
+.use_default_gs:
+    MOV cx, 0x23
+    MOV gs, cx
+
+.do_iret:
     PUSH DWORD 0x23     ; SS
     PUSH DWORD [eax+16] ; USER ESP
     PUSH DWORD 0x202    ; EFLAGS
@@ -36,6 +48,13 @@ switch_task:
 
     popad
     ret
+
+global fork_trampoline
+fork_trampoline:
+    pop gs
+    popad
+    add esp, 8 
+    iret
 
 global read_eip
 read_eip:

@@ -94,7 +94,6 @@ isr_common_stub:
     MOV ds, ax
     MOV es, ax
     MOV fs, ax
-    MOV gs, ax
 
     PUSH esp   ; Push the stack pointer
     CALL isr_handler
@@ -104,7 +103,6 @@ isr_common_stub:
     MOV ds, ax
     MOV es, ax
     MOV fs, ax
-    MOV gs, ax
 
     POPA
     ADD esp, 8 ; Remove error code and interrupt number
@@ -121,7 +119,6 @@ irq_common_stub:
     MOV ds, ax
     MOV es, ax
     MOV fs, ax
-    MOV gs, ax
 
     PUSH esp
     CALL irq_handler
@@ -131,9 +128,7 @@ irq_common_stub:
     MOV ds, bx
     MOV es, bx
     MOV fs, bx
-    MOV gs, bx
 
     POPA
     ADD esp, 8
-    STI
     IRET ; pop EIP, CS, EFLAGS, ESP, SS

@@ -1,7 +1,8 @@
-#include "user/stdio.h"
-#include "user/syscall.h"
+// user/core/hello/main.c
+#include <stdio.h>
+#include <stdlib.h>
 
-int main() {
-    printf("Hello, World!\n");
+int main(int argc, char **argv) {
+    printf("Hello from musl!\n");
     return 0;
 }

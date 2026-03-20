@@ -137,6 +137,23 @@ void write_command(char ** args) {
     syscall_close(fd);
 }
 
+void test_fork_command(char **args) {
+    for (int i = 0; i < 3; i++) {
+        int pid = syscall_fork();
+        if (pid < 0) {
+            printf("Error: fork failed\n");
+        } else if (pid == 0) {
+            // Child process
+            printf("Hello from child process! PID: %d\n", syscall_getpid());
+            syscall_exit(0);
+        } else {
+            // Parent process
+            printf("Hello from parent process! PID: %d, child PID: %d\n", syscall_getpid(), pid);
+            syscall_waitpid(pid, NULL, 0);
+        }
+    }
+}
+
 void test_heap_command(char **args) {
     void *ptr = malloc(1024); // Allocate 1KB
     if (ptr == (void *)-1) {
@@ -237,6 +254,7 @@ void help_command(char **args) {
     printf("    cd <dir> - Change directory\n");
     printf("    clear - Clear the screen\n");
     printf("    test_heap - Test heap memory allocation\n");
+    printf("    test_fork - Test fork functionality\n");
     printf("    test_pipe - Test pipe functionality\n");
     printf("    test_shm - Test shared memory functionality\n");
     printf("    write <file> - Write to a file\n");
@@ -263,6 +281,7 @@ command_t commands[] = {
     {"test_heap", test_heap_command},
     {"test_pipe", test_pipe_command},
     {"test_shm", test_shm_command},
+    {"test_fork", test_fork_command},
     {"test_mmap", test_mmap_command},
     {"sleep", sleep_command},
     {NULL, NULL}

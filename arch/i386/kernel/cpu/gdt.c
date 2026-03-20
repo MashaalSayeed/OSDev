@@ -1,5 +1,6 @@
 #include "kernel/gdt.h"
 #include "libc/string.h"
+#include "kernel/printf.h"
 
 extern uint8_t kernel_stack_top;
 extern void gdt_flush(void* addr);
@@ -39,9 +40,6 @@ static void load_tss(uint32_t num, uint16_t ss0, uint32_t esp0) {
 void gdt_set_tls(uint32_t base, uint32_t limit) {
     // User data segment, ring 3, 32-bit, byte granularity
     gdt_set_gate(GDT_TLS, base, limit, 0xF2, 0xCF);
-
-    // Reload GDT — TLS entry changes at every exec/thread switch
-    gdt_flush(&gp);
 }
 
 void gdt_install() {

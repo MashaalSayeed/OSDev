@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 // This file defines the syscall numbers for the kernel.
 // I tried to keep the syscall numbers consistent with the Linux kernel.
@@ -23,6 +24,7 @@
 #define SYSCALL_BRK 45
 #define SYSCALL_SBRK 46
 #define SYSCALL_YIELD 50
+#define SYSCALL_IOCTL 54
 #define SYSCALL_FCNTL 55
 #define SYSCALL_DUP2 63
 #define SYSCALL_GETDENTS 78
@@ -34,7 +36,10 @@
 #define SYSCALL_NANOSLEEP 162
 #define SYSCALL_GETCWD 183
 #define SYSCALL_MMAP2 192
+#define SYSCALL_SET_THREAD_AREA 243
 #define SYSCALL_EXIT_GROUP 252
+#define SYSCALL_SET_TID_ADDRESS 258
+#define SYSCALL_WRITEV 146
 
 
 /* --- Shared-memory & framebuffer (user-space compositor) --- */
@@ -82,3 +87,8 @@ typedef struct {
     unsigned seg_not_present:1;
     unsigned useable:1;
 } user_desc_t;
+
+typedef struct {
+    void *iov_base;
+    size_t iov_len;
+} iovec_t;

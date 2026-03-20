@@ -149,27 +149,61 @@ void schedule_process_threads(process_t *process) {
     }
 }
 
+// thread_t *pick_next_thread() {
+//     if (!current_thread) return NULL;
+
+//     uint32_t ticks = pit_get_ticks();
+
+//     thread_t *next = current_thread->next_global;
+//     while (next && next != current_thread) {
+//         // Wake up sleeping threads whose wakeup time has arrived
+//         if (next->status == SLEEPING && next->wakeup_tick <= ticks) {
+//             next->status = READY;
+//         }
+
+//         if (next->status == READY) return next;
+//         next = next->next_global;
+//     }
+
+//     if (current_thread->status == SLEEPING && current_thread->wakeup_tick <= ticks) {
+//         current_thread->status = READY;
+//     }
+
+//     return current_thread->status == READY ? current_thread : NULL;
+// }
+
 thread_t *pick_next_thread() {
-    if (!current_thread) return NULL;
+    if (!thread_list) return NULL;
 
     uint32_t ticks = pit_get_ticks();
 
-    thread_t *next = current_thread->next_global;
-    while (next && next != current_thread) {
-        // Wake up sleeping threads whose wakeup time has arrived
-        if (next->status == SLEEPING && next->wakeup_tick <= ticks) {
-            next->status = READY;
+    // Start scanning from after current_thread, or from head if terminated
+    thread_t *start;
+    if (!current_thread || current_thread->status == TERMINATED) {
+        start = thread_list;
+    } else {
+        start = current_thread->next_global;
+        if (!start) start = thread_list;  // wrap around
+    }
+
+    // Scan all threads starting from start, wrapping once
+    thread_t *t = start;
+    do {
+        if (t->status == SLEEPING && t->wakeup_tick <= ticks) {
+            t->status = READY;
         }
+        if (t->status == READY) return t;
 
-        if (next->status == READY) return next;
-        next = next->next_global;
+        t = t->next_global;
+        if (!t) t = thread_list;  // wrap
+    } while (t != start);
+
+    // No other ready thread — can current_thread run?
+    if (current_thread && current_thread->status == READY) {
+        return current_thread;
     }
 
-    if (current_thread->status == SLEEPING && current_thread->wakeup_tick <= ticks) {
-        current_thread->status = READY;
-    }
-
-    return current_thread->status == READY ? current_thread : NULL;
+    return NULL;
 }
 
 void print_thread_list() {

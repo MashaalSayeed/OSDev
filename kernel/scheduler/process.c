@@ -17,6 +17,7 @@
 
 
 extern page_directory_t* kpage_dir;
+extern uint32_t kpage_dir_phys;
 extern thread_t* current_thread;
 extern void switch_context(thread_t* context);
 extern void switch_task(uintptr_t* prev, uintptr_t next);
@@ -247,9 +248,6 @@ void kill_thread(thread_t *thread) {
     thread->status = TERMINATED;
 
     remove_thread(thread);
-    if (thread->kernel_stack) {
-        kfree_aligned((void *)thread->kernel_stack);
-    }
 
     if (thread->user_stack) {
         uint32_t stack_bottom = (uint32_t)thread->user_stack;
@@ -259,7 +257,11 @@ void kill_thread(thread_t *thread) {
         }
     }
 
-    kfree(thread);
+    if (thread == current_thread) return;
+    if (thread->kernel_stack) {
+        kfree_aligned((void *)thread->kernel_stack);
+        kfree(thread);
+    }
 }
 
 void kill_process_threads(process_t *proc) {
@@ -302,8 +304,7 @@ void kill_process(process_t *process, int status) {
 
 void cleanup_process(process_t *proc) {
     if (!proc || proc->status != ZOMBIE) return;
-    kprintf(DEBUG, "cleanup_process: freeing pid=%d name=%s\n", 
-            proc->pid, proc->process_name);
+    kprintf(DEBUG, "cleanup_process: pid=%d dir=%x\n", proc->pid, proc->root_page_table);
 
     // // Free the process stack and process structure
     // // TODO: unmap all pages and heap
@@ -312,33 +313,40 @@ void cleanup_process(process_t *proc) {
     kfree(proc);
 }
 
+extern void fork_trampoline(void);
 int fork(registers_t *regs) {
     asm volatile ("cli");
+    
     process_t *parent = get_current_process();
+    thread_t *parent_thread = parent->main_thread;
+
+    // Allocate and initialize child process
     process_t *child = (process_t *)kmalloc(sizeof(process_t));
     if (!child) {
         printf("Error: Failed to allocate memory for child process\n");
         return -1;
     }
 
-    // Copy parent process info
     memset(child, 0, sizeof(process_t));
     child->pid = allocate_pid();
     child->parent = parent;
-
-    strncpy(child->process_name, parent->process_name, PROCESS_NAME_MAX_LEN);
     child->status = READY;
     child->heap_start = parent->heap_start;
     child->brk = parent->brk;
     child->mmap_base = parent->mmap_base;
     child->is_kernel_process = parent->is_kernel_process;
+    strncpy(child->process_name, parent->process_name, PROCESS_NAME_MAX_LEN);
     strncpy(child->cwd, parent->cwd, sizeof(parent->cwd));
 
-    // Copy page directory
+    // Clone page directory
     child->root_page_table = clone_page_directory(parent->root_page_table);
-    switch_page_directory(parent->root_page_table);
+    if (!child->root_page_table) {
+        kprintf(ERROR, "fork: failed to clone page directory\n");
+        kfree(child);
+        return -1;
+    }
 
-    // Copy file descriptors
+    // Copy file descriptors (increment ref counts)
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
         child->fds[i] = parent->fds[i];
         if (child->fds[i]) {
@@ -346,76 +354,170 @@ int fork(registers_t *regs) {
         }
     }
 
+    // Initialize child wait queue
     wait_queue_init(&child->wait_queue);
     add_process(child);
 
-    uint32_t eip, esp, ebp;
-    thread_t *parent_thread = parent->main_thread;
-    uint32_t magic = 0xFEEDBEEF;
-    eip = read_eip();
-
-    if (current_thread == parent_thread) {
-        asm volatile ("mov %%esp, %0" : "=r" (esp));
-        asm volatile ("mov %%ebp, %0" : "=r" (ebp));
-
-        thread_t *child_thread = create_thread(child, (void (*)(void))eip, "");
-        child->main_thread = child_thread;
-
-        memcpy(child_thread->kernel_stack, parent_thread->kernel_stack, PROCESS_STACK_SIZE);
-        
-        int32_t offset = (uint32_t)child_thread->kernel_stack - (uint32_t)parent_thread->kernel_stack;
-        child_thread->esp = esp + offset; // Adjust kernel stack pointer
-
-        uintptr_t stack = child_thread->esp;
-        PUSH(stack, uint32_t, eip);
-        for (int i = 0; i < 8; i++) {
-            if (i == 5) {
-                PUSH(stack, uint32_t, ebp + offset);
-            } else {
-                PUSH(stack, uint32_t, 0); // Clear registers
-            }
-        }
-        PUSH(stack, uint32_t, 0x23); // gs
-        child_thread->esp = stack;
-
-        add_thread(child_thread);
-        parent_thread->status = READY;
-        current_thread = child_thread;
-        switch_page_directory(child->root_page_table);
-
-        tss_entry.esp0 = (uint32_t)child_thread->kernel_stack + PROCESS_STACK_SIZE;
-        switch_task(&parent_thread->esp, child_thread->esp);
-
-        return child->pid;
-    } else {
-        return 0;
+    // Step 9: Allocate child thread
+    thread_t *child_thread = (thread_t *)kmalloc(sizeof(thread_t));
+    if (!child_thread) {
+        kprintf(ERROR, "fork: failed to allocate child thread\n");
+        free_page_directory(child->root_page_table);
+        kfree(child);
+        return -1;
     }
+
+    memset(child_thread, 0, sizeof(thread_t));
+    child_thread->tid = allocate_tid();
+    child_thread->owner = child;
+    child_thread->status = READY;
+    child_thread->next = NULL;
+    child_thread->next_global = NULL;
+    child->main_thread = child_thread;
+    child->thread_list = child_thread;
+    strncpy(child_thread->thread_name, "", PROCESS_NAME_MAX_LEN);
+
+
+    // Step 10: Allocate kernel stack for child and copy parent's kernel stack
+    void *child_kernel_stack = alloc_kernel_stack(child_thread);
+    if (!child_kernel_stack) {
+        kprintf(ERROR, "fork: failed to allocate kernel stack for child thread\n");
+        kfree(child_thread);
+        free_page_directory(child->root_page_table);
+        kfree(child);
+        return -1;
+    }
+
+    // Copy parent's entire kernel stack to child
+    memcpy(child_thread->kernel_stack, parent_thread->kernel_stack, PROCESS_STACK_SIZE);
+
+    // Step 11: Fix stack pointers in child's kernel stack
+    uintptr_t offset = (uintptr_t)child_thread->kernel_stack - (uintptr_t)parent_thread->kernel_stack;
+    uintptr_t *sp = (uintptr_t *)((uintptr_t)regs + offset);
+    
+    *(--sp) = (uintptr_t)fork_trampoline;  // ret addr
+    *(--sp) = parent_thread->gs;     // matches your switch_task
+    *(--sp) = regs->edi;
+    *(--sp) = regs->esi;
+    *(--sp) = regs->ebp;
+    *(--sp) = 0;            // esp dummy for popad
+    *(--sp) = regs->ebx;
+    *(--sp) = regs->edx;
+    *(--sp) = regs->ecx;
+    *(--sp) = regs->eax;    // eax (will be overwritten anyway)
+
+    child_thread->esp = (uintptr_t)sp;
+    child_thread->ebp = parent_thread->ebp + offset;
+    
+    registers_t *child_regs = (registers_t *)((uintptr_t)regs + offset);
+    child_regs->eax = 0;           // child sees fork() == 0
+    regs->eax = child->pid;
+
+    // Step 14-15: Attach child thread to PCB and add to scheduler
+    add_thread(child_thread);
+    asm volatile ("sti");
+    return child->pid;
 }
 
 // TODO: Reuse old thread instead of destroying it and creating a new one
+#define AT_NULL   0
+#define AT_PAGESZ 6
+// Returns the final user esp, or 0 on failure
+static uint32_t build_user_stack(page_directory_t *dir, char **argv, int argc) {
+    uint32_t u_esp = USER_STACK_TOP;
+    uint32_t zero  = 0;
+
+    // ── 1. String data ────────────────────────────────────────────────────────
+    uint32_t u_strings = 0;
+    uint32_t *str_addrs = NULL;  // user-space address of each argv[i] string
+
+    if (argc > 0) {
+        // Calculate total and copy strings to top of stack
+        size_t total_len = 0;
+        for (int i = 0; i < argc; i++) total_len += strlen(argv[i]) + 1;
+
+        char *k_strings = kmalloc(total_len);
+        if (!k_strings) return 0;
+
+        char *ptr = k_strings;
+        for (int i = 0; i < argc; i++) {
+            size_t len = strlen(argv[i]) + 1;
+            memcpy(ptr, argv[i], len);
+            ptr += len;
+        }
+
+        u_esp    -= total_len;
+        u_esp    &= ~0xF;
+        u_strings = u_esp;
+        copy_to_user(dir, u_strings, k_strings, total_len);
+        kfree(k_strings);
+
+        // Record user-space address of each string
+        str_addrs = kmalloc(argc * sizeof(uint32_t));
+        if (!str_addrs) return 0;
+        uint32_t off = 0;
+        for (int i = 0; i < argc; i++) {
+            str_addrs[i] = u_strings + off;
+            off += strlen(argv[i]) + 1;
+        }
+    }
+
+    // ── 2. Aux vector ─────────────────────────────────────────────────────────
+    // Must come before envp/argv in memory (higher address) since
+    // _start scans upward past envp NULL to find auxv
+    uint32_t auxv[] = { AT_PAGESZ, PAGE_SIZE, AT_NULL, 0 };
+    u_esp -= sizeof(auxv);
+    u_esp &= ~0xF;
+    copy_to_user(dir, u_esp, auxv, sizeof(auxv));
+
+    // ── 3. envp: NULL (no environment) ───────────────────────────────────────
+    u_esp -= 4;
+    copy_to_user(dir, u_esp, &zero, 4);
+
+    // ── 4. argv[argc] = NULL terminator ──────────────────────────────────────
+    u_esp -= 4;
+    copy_to_user(dir, u_esp, &zero, 4);
+
+    // ── 5. argv[0..argc-1] — push in reverse so argv[0] at lowest addr ───────
+    for (int i = argc - 1; i >= 0; i--) {
+        u_esp -= 4;
+        uint32_t uptr = str_addrs[i];
+        copy_to_user(dir, u_esp, &uptr, 4);
+    }
+    if (str_addrs) kfree(str_addrs);
+
+    // ── 6. argc ───────────────────────────────────────────────────────────────
+    // u_esp &= ~0xF;
+    u_esp -= 4;
+    copy_to_user(dir, u_esp, &argc, 4);
+
+    if (u_esp < (uint32_t)(USER_STACK_TOP - PROCESS_STACK_SIZE)) {
+        kprintf(ERROR, "build_user_stack: overflow\n");
+        return 0;
+    }
+
+    return u_esp;
+}
+
 int exec(const char *path, char **argv) {
-    printf("exec: Loading new program %s\n", path);
     asm volatile ("cli");
 
-    // 1. Open the ELF file
-    process_t *proc = get_current_process();
-    vfs_file_t* file = vfs_open(path, VFS_FLAG_READ);
+    process_t        *proc        = get_current_process();
+    vfs_file_t       *file        = NULL;
+    page_directory_t *new_page_dir = NULL;
+    elf_header_t     *elf         = NULL;
+    int               ret         = -1;
+
+    switch_page_directory(kpage_dir);
+
+    // ── 1. Open ELF ──────────────────────────────────────────────────────────
+    file = vfs_open(path, VFS_FLAG_READ);
     if (!file) {
-        printf("Failed to load ELF file\n");
-        return -1;
+        kprintf(ERROR, "exec: failed to open %s\n", path);
+        goto fail;
     }
-    
-    // 2. Create new address space
-    printf("Switching to new process %s (PID: %d)\n", proc->process_name, proc->pid);
-    page_directory_t* new_page_dir = clone_page_directory(kpage_dir);
-    switch_page_directory(proc->root_page_table);
-    if (!new_page_dir) {
-        printf("Failed to create new page directory\n");
-        vfs_close(file);
-        return -1;
-    }
-    
-    // 3. Copy arguments into k_argv and k_strings (kernel memory)
+
+    // ── 2. Count argv (already kernel pointers from sys_exec) ────────────────
     int argc = 0;
     size_t total_len = 0;
     if (argv) {
@@ -424,223 +526,127 @@ int exec(const char *path, char **argv) {
             argc++;
         }
     }
-    
-    char **k_argv = NULL;
-    char *k_strings = NULL;
-    if (argc > 0) {
-        k_argv = (char **)kmalloc((argc + 1) * sizeof(char *));
-        k_strings = (char *)kmalloc(total_len);
-        
-        char *str_ptr = k_strings;
-        for (int i = 0; i < argc; i++) {
-            size_t len = strlen(argv[i]) + 1;
-            memcpy(str_ptr, argv[i], len);
-            k_argv[i] = str_ptr;
-            str_ptr += len;
-        }
-        k_argv[argc] = NULL;
+
+    // ── 3. New address space ──────────────────────────────────────────────────
+    new_page_dir = clone_page_directory(kpage_dir);
+    if (!new_page_dir) {
+        kprintf(ERROR, "exec: failed to clone page directory\n");
+        goto fail;
     }
-    
-    strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
-    proc->process_name[PROCESS_NAME_MAX_LEN - 1] = '\0'; // Ensure null termination
-    
-    // 4. Clear existing threads after copying arguments
-    printf("Switching to new process %s (PID: %d)\n", proc->process_name, proc->pid);
-    kill_process_threads(proc);
-    
-    // 5. Switch to the new page directory and free the old one
-    switch_page_directory(new_page_dir);
-    free_page_directory(proc->root_page_table);
-    proc->root_page_table = new_page_dir;
-    proc->is_kernel_process = false; // Ensure this is a user process
-    
-    // 6. Load the ELF file into new page directory
-    elf_header_t* elf = load_elf(file, new_page_dir);
+
+    // ── 4. Load ELF into new address space ────────────────────────────────────
+    elf = load_elf(file, new_page_dir);
     vfs_close(file);
-    switch_page_directory(new_page_dir);
+    file = NULL;
     if (!elf) {
-        printf("Failed to load ELF file\n");
-        kfree(k_argv);
-        kfree(k_strings);
-        return -1;
+        kprintf(ERROR, "exec: failed to load ELF %s\n", path);
+        goto fail;
     }
 
-    // 7. Create a new main thread for the process
-    thread_t *thread = create_thread(proc, (void (*)(void))elf->entry, proc->process_name);
+    // ── 5. Point of no return — save old stack, tear down old state ───────────
+    strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
+    proc->process_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
 
+    thread_t *old_thread = current_thread;
+    void     *old_stack  = old_thread->kernel_stack;
+    old_thread->kernel_stack = NULL;   // prevent kill_thread from freeing it
+
+    kill_process_threads(proc);
+    free_page_directory(proc->root_page_table);
+    proc->root_page_table   = new_page_dir;
+    proc->is_kernel_process = false;
+    new_page_dir = NULL;
+
+    // ── 6. Create new main thread (maps user stack too) ───────────────────────
+    thread_t *thread = create_thread(proc, (void (*)(void))elf->entry,
+                                     proc->process_name);
+    if (!thread) {
+        kprintf(ERROR, "exec: failed to create thread\n");
+        goto fail;
+    }
     proc->main_thread = thread;
     proc->thread_list = thread;
 
-    // 8. Set up the user stack and copy arguments to the user stack
-    void *stack_top = (void *)USER_STACK_TOP;
-    char *stack_strings = (char *)(stack_top - total_len);
-    char **stack_argv = (char **)(stack_strings - (sizeof(char *) * (argc + 1)));
+    // ── 7. Build user stack ───────────────────────────────────────────────────
+    // Layout (high → low):
+    //   [ string data        ]
+    //   [ auxv: AT_PAGESZ,4096, AT_NULL,0 ]
+    //   [ NULL               ]  ← end of envp
+    //   [ NULL               ]  ← end of argv (or argv ptrs if argc>0)
+    //   [ argv[0..n-1] ptrs  ]
+    //   [ argc               ]  ← esp on entry to _start
 
-    char *str_ptr = stack_strings;
-    for (int i = 0; i < argc; i++) {
-        size_t len = strlen(k_argv[i]) + 1;
-        memcpy(str_ptr, k_argv[i], len);
-        stack_argv[i] = str_ptr;
-        str_ptr += len;
+    uint32_t u_esp = build_user_stack(proc->root_page_table, argv, argc);
+    if (!u_esp) {
+        kprintf(ERROR, "exec: failed to build user stack\n");
+        goto fail;
     }
-    stack_argv[argc] = NULL;
 
-    kfree(k_argv);
-    kfree(k_strings);
-    stack_top = (void *)stack_argv;
-
-    PUSH(stack_top, uint32_t, (uint32_t)NULL); // envp = NULL for now
-    PUSH(stack_top, uint32_t, (uint32_t)stack_argv);
-    PUSH(stack_top, uint32_t, argc);
-
-    // 9. Set up the thread context and file descriptors
-    thread->user_esp = (uintptr_t)stack_top;
-    proc->status = READY;
-
-    // 10. Clean up the ELF header and switch to the new process
+    // ── 9. Launch ─────────────────────────────────────────────────────────────
+    thread->user_esp = u_esp;
+    proc->status     = READY;
     kfree(elf);
+    elf = NULL;
 
     add_thread(thread);
-
     current_thread = thread;
     tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
-    switch_context(thread);
+    switch_page_directory(proc->root_page_table);
 
-    // Should not return here
+    // Free old thread and kernel stack — last thing before iret
+    kfree(old_thread);
+    kfree_aligned(old_stack);
+    switch_context(thread);   // iret — never returns
     return -1;
+
+fail:
+    if (file)         vfs_close(file);
+    if (elf)          kfree(elf);
+    if (new_page_dir) free_page_directory(new_page_dir);
+    return ret;
 }
 
 
-// int exec(const char *path, char **argv) {
-// 	asm volatile ("cli");
+// Layout (grows downward from USER_STACK_TOP):
+    //   [argc][argv ptr][envp=NULL]  ← stack_top (user esp)
+    //   [argv[0] ptr][argv[1] ptr]...[NULL]
+    //   [string data]
+//     uint32_t u_stack_top   = USER_STACK_TOP;
+//     uint32_t u_strings     = u_stack_top - total_len;
+//     uint32_t u_argv_ptrs   = u_strings - (sizeof(char *) * (argc + 1));
 
-//     process_t *proc = get_current_process();
-//     vfs_file_t* file = NULL;
-//     page_directory_t* new_page_dir = NULL;
-//     char **k_argv = NULL;
-//     char *k_strings = NULL;
-//     elf_header_t* elf = NULL;
-    
-//     // 1. Open the ELF file
-//     file = vfs_open(path, VFS_FLAG_READ);
-//     if (!file) {
-//         kprintf(ERROR, "exec: Failed to load file %s\n", path);
-//         goto fail;
-//     }
-    
-//     // 2. Create new address space
-//     new_page_dir = clone_page_directory(kpage_dir);
-//     switch_page_directory(proc->root_page_table);
-//     if (!new_page_dir) {
-//         kprintf(ERROR, "exec: Failed to clone page directory\n");
-//         goto fail;
-//     }
-    
-//     // 3. Copy arguments into k_argv and k_strings (kernel memory)
-//     int argc = 0;
-//     size_t total_len = 0;
-//     if (argv) {
-//         while (argv[argc]) {
-//             total_len += strlen(argv[argc]) + 1;
-//             argc++;
-//         }
-//     }
-    
+//     // Copy string data into user stack
 //     if (argc > 0) {
-//         k_argv = (char **)kmalloc((argc + 1) * sizeof(char *));
-//         k_strings = (char *)kmalloc(total_len);
+//         copy_to_user(proc->root_page_table, u_strings, k_strings, total_len);
 
-//         if (!k_argv || !k_strings) {
-//             kprintf(ERROR, "exec: failed to allocate argv\n");
-//             goto fail;
-//         }
-        
-//         char *str_ptr = k_strings;
+//         // Build argv pointer array in kernel, fixing up user-space addresses
+//         char **tmp_argv = kmalloc((argc + 1) * sizeof(char *));
+//         uint32_t str_offset = 0;
 //         for (int i = 0; i < argc; i++) {
-//             size_t len = strlen(argv[i]) + 1;
-//             memcpy(str_ptr, argv[i], len);
-//             k_argv[i] = str_ptr;
-//             str_ptr += len;
+//             tmp_argv[i] = (char *)(u_strings + str_offset);
+//             str_offset += strlen(k_argv[i]) + 1;
 //         }
-//         k_argv[argc] = NULL;
-//     }
-    
-//     strncpy(proc->process_name, path, PROCESS_NAME_MAX_LEN);
-//     proc->process_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
-    
-//     // 4. Clear existing threads after copying arguments
-//     kill_process_threads(proc);
-    
-//     // 5. Switch to the new page directory and free the old one
-//     switch_page_directory(new_page_dir);
-//     free_page_directory(proc->root_page_table);
-//     proc->root_page_table = new_page_dir;
-//     proc->is_kernel_process = false;
-//     new_page_dir = NULL;
-    
-//     // 6. Load the ELF file into new page directory
-//     elf = load_elf(file, new_page_dir);
-//     vfs_close(file);
-//     file = NULL;
+//         tmp_argv[argc] = NULL;
 
-//     switch_page_directory(new_page_dir);
-//     if (!elf) {
-//         kprintf(ERROR, "exec: Failed to load ELF file %s\n", path);
-//         goto fail;
+//         copy_to_user(proc->root_page_table, u_argv_ptrs,
+//                      tmp_argv, (argc + 1) * sizeof(char *));
+//         kfree(tmp_argv);
 //     }
 
-//     // 7. Create a new main thread for the process
-//     thread_t *thread = create_thread(proc, (void (*)(void))elf->entry, proc->process_name);
-//     if (!thread) {
-//         kprintf(ERROR, "exec: Failed to create main thread for process %s\n", proc->process_name);
-//         goto fail;
-//     }
-
-//     proc->main_thread = thread;
-//     proc->thread_list = thread;
-
-//     // 8. Set up the user stack and copy arguments to the user stack
-//     char *stack_strings = (char *)((uintptr_t)USER_STACK_TOP - total_len);
-//     char **stack_argv = (char **)(stack_strings - (sizeof(char *) * (argc + 1)));
-
-//     char *str_ptr = stack_strings;
-//     for (int i = 0; i < argc; i++) {
-//         size_t len = strlen(k_argv[i]) + 1;
-//         memcpy(str_ptr, k_argv[i], len);
-//         stack_argv[i] = str_ptr;
-//         str_ptr += len;
-//     }
-//     stack_argv[argc] = NULL;
-
-//     kfree(k_argv); k_argv = NULL;
+//     kfree(k_argv);    k_argv    = NULL;
 //     kfree(k_strings); k_strings = NULL;
 
-//     void *stack_top = (void *)stack_argv;
-//     PUSH(stack_top, uint32_t, (uint32_t)NULL); // envp = NULL for now
-//     PUSH(stack_top, uint32_t, (uint32_t)stack_argv);
-//     PUSH(stack_top, uint32_t, argc);
+//     // Push argc, argv, envp onto user stack
+//     uint32_t u_esp = u_argv_ptrs;
+//     uint32_t envp  = 0;
+//     uint32_t argv_ptr = u_argv_ptrs;
 
-//     // 9. Set up the thread context and file descriptors
-//     thread->user_esp = (uintptr_t)stack_top;
-//     proc->status = READY;
+//     u_esp -= sizeof(uint32_t); copy_to_user(proc->root_page_table, u_esp, &envp,     sizeof(uint32_t));
+//     u_esp -= sizeof(uint32_t); copy_to_user(proc->root_page_table, u_esp, &argv_ptr, sizeof(uint32_t));
+//     u_esp -= sizeof(uint32_t); copy_to_user(proc->root_page_table, u_esp, &argc,     sizeof(uint32_t));
 
-//     // 10. Clean up the ELF header and switch to the new process
-//     kfree(elf); elf = NULL;
-
-//     add_thread(thread);
-
-//     current_thread = thread;
-//     tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
-//     switch_context(thread);
-
-//     // Should not return here
-//     return -1;
-
-// fail:
-//     if (file) vfs_close(file);
-//     if (elf) kfree(elf);
-//     if (new_page_dir) free_page_directory(new_page_dir);
-//     if (k_argv) kfree(k_argv);
-//     if (k_strings) kfree(k_strings);
-//     return -1;
+//     // Verify we haven't gone below the mapped region
+// if (u_esp < (uint32_t)(USER_STACK_TOP - PROCESS_STACK_SIZE)) {
+//     kprintf(ERROR, "exec: argv too large, overflows user stack\n");
+//     goto fail;
 // }

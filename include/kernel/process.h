@@ -12,7 +12,7 @@
 #define PATH_NAME_MAX_LEN 256
 #define MAX_OPEN_FILES 100
 
-#define PROCESS_STACK_SIZE 0x1000
+#define PROCESS_STACK_SIZE 0x4000
 #define PROCESS_MAX_HEAP_SIZE 0x100000 // 1MB
 
 #define PROCESS_FLAG_USER 0x1
@@ -101,4 +101,4 @@ void print_thread_list();
 
 void *sbrk(process_t *proc, int incr);
 int fork(registers_t *regs);
-int exec(const char *path, char **args);
+int exec(const char *path, char **argv);

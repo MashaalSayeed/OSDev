@@ -383,7 +383,6 @@ int vfs_read(vfs_file_t *file, void* buf, size_t count) {
     //     return -1;
     // }
 
-    memset(buf, 0, count);
     return file->inode->inode_ops->read(file, buf, count);
 }
 

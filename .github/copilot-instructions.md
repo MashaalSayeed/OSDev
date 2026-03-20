@@ -65,6 +65,8 @@ All `#include` paths are relative to `include/`. Use angle brackets for all kern
 - `kprintf(DEBUG|INFO|WARNING|ERROR, fmt, ...)` — levelled kernel logging (serial + TTY).
 - `printf(fmt, ...)` — plain TTY output, also available in kernel.
 - Prefer `kprintf` with an appropriate level for any new diagnostic output.
+- Avoid `printf` in kernel code except for very early boot messages before `kprintf` is safe to use.
+- Logs are written to `serial_output.log` (QEMU `-serial file:...`) — check this for all kernel boot and runtime diagnostics.
 
 ## Adding a New User Program
 1. Create `user/core/<name>/main.c`; use only headers under `user/core/<name>/include` `include/user/` and `include/libc/` .

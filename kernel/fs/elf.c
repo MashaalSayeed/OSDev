@@ -14,62 +14,85 @@ int is_valid_elf(elf_header_t *header) {
     return 1;
 }
 
-elf_header_t* load_elf(vfs_file_t* file, page_directory_t *page_dir) {
-    elf_header_t * header = kmalloc(sizeof(elf_header_t));
+elf_header_t *load_elf(vfs_file_t *file, page_directory_t *page_dir) {
+    elf_header_t *header = kmalloc(sizeof(elf_header_t));
+    if (!header) return NULL;
 
     if (file->file_ops->read(file, header, sizeof(elf_header_t)) != sizeof(elf_header_t)) {
-        printf("Error: Failed to read ELF header\n");
-        kfree(header);
-        return NULL;
+        kprintf(ERROR, "load_elf: failed to read ELF header\n");
+        goto fail;
     }
 
     if (!is_valid_elf(header)) {
-        printf("Error: Invalid ELF file\n");
-        kfree(header);
-        return NULL;
+        kprintf(ERROR, "load_elf: invalid ELF magic\n");
+        goto fail;
     }
 
-    // Load program headers
     elf_program_header_t ph;
     for (int i = 0; i < header->ph_entry_count; i++) {
-        file->file_ops->seek(file, header->ph_offset + i * sizeof(elf_program_header_t), VFS_SEEK_SET);
-        if (file->file_ops->read(file, &ph, sizeof(elf_program_header_t)) != sizeof(elf_program_header_t)) {
-            printf("Error: Failed to read program header\n");
-            kfree(header);
-            return NULL;
+        file->file_ops->seek(file,
+            header->ph_offset + i * sizeof(elf_program_header_t),
+            VFS_SEEK_SET);
+
+        if (file->file_ops->read(file, &ph, sizeof(elf_program_header_t))
+                != sizeof(elf_program_header_t)) {
+            kprintf(ERROR, "load_elf: failed to read program header %d\n", i);
+            goto fail;
         }
+
 
         if (ph.type != PT_LOAD) continue;
-        map_memory(page_dir, ph.vaddr, (uint32_t)-1, ph.mem_size, 0x7);
 
-        // Read segment data into a kernel buffer first, then copy to user space
+        // Map physical frames into the new process page dir
+        map_memory(page_dir, ph.vaddr, (uint32_t)-1, ph.mem_size, 0x7);
+        page_table_entry_t *dbg = get_page(ph.vaddr, 0, page_dir);
+        
+        // Read segment data into kernel buffer
         uint8_t *tmp = kmalloc(ph.file_size);
         if (!tmp) {
-            printf("Error: Failed to allocate segment buffer\n");
-            kfree(header);
-            return NULL;
+            kprintf(ERROR, "load_elf: failed to allocate segment buffer\n");
+            goto fail;
         }
 
-
-
-        // void *buf = (void *)ph.vaddr;
         file->file_ops->seek(file, ph.offset, VFS_SEEK_SET);
         if (file->file_ops->read(file, tmp, ph.file_size) != ph.file_size) {
-            printf("Error: Failed to read program header\n");
+            kprintf(ERROR, "load_elf: failed to read segment %d\n", i);
             kfree(tmp);
-            kfree(header);
-            return NULL;
+            goto fail;
         }
 
-        switch_page_directory(page_dir);
-        memcpy((void *)ph.vaddr, tmp, ph.file_size);
-        memset((void *)(ph.vaddr + ph.file_size), 0, ph.mem_size - ph.file_size);
-        switch_page_directory(kpage_dir);
-
+        // Copy file data into user address space via copy_to_user
+        if (copy_to_user(page_dir, ph.vaddr, tmp, ph.file_size) < 0) {
+            kprintf(ERROR, "load_elf: copy_to_user failed for segment %d\n", i);
+            kfree(tmp);
+            goto fail;
+        }
         kfree(tmp);
+
+        // Zero BSS region (mem_size > file_size)
+        if (ph.mem_size > ph.file_size) {
+            uint32_t bss_vaddr = ph.vaddr + ph.file_size;
+            uint32_t bss_size  = ph.mem_size - ph.file_size;
+            uint8_t *zeros = kmalloc(bss_size);
+            if (!zeros) {
+                kprintf(ERROR, "load_elf: failed to allocate BSS zero buffer\n");
+                goto fail;
+            }
+            memset(zeros, 0, bss_size);
+            if (copy_to_user(page_dir, bss_vaddr, zeros, bss_size) < 0) {
+                kprintf(ERROR, "load_elf: copy_to_user failed for BSS\n");
+                kfree(zeros);
+                goto fail;
+            }
+            kfree(zeros);
+        }
     }
 
     return header;
+
+fail:
+    kfree(header);
+    return NULL;
 }
 
 elf_t elf_from_multiboot(struct multiboot_tag_elf_sections * elf_sec) {

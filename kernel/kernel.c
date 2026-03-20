@@ -163,6 +163,7 @@ void init_main() {
 	if (is_gui_enabled) {
 		exec("/BIN/DESKTOP", NULL);
 	} else {
+		// exec("/BIN/HELLO", NULL);
 		exec("/BIN/SHELL", NULL);
 	}
 	/* If exec fails, spin */

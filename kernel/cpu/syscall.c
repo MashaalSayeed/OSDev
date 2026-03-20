@@ -97,7 +97,6 @@ int sys_waitpid(int pid, int *status, int options) {
     kprintf(DEBUG, "[%d] Cleaning up child process %d...\n", proc->pid, pid);
     if (status) *status = child->exit_code;
     cleanup_process(child);
-    kprintf(DEBUG, "[waitpid] heap used after cleanup: %d\n", kheap_used());
     return pid;
 }
 
@@ -105,8 +104,47 @@ int sys_fork() {
     return fork(interrupt_frame);
 }
 
-int sys_exec(const char *path, char **args) {
-    return exec(path, args);
+int sys_exec(const char *path, char **argv) {
+    process_t *proc = get_current_process();
+    kprintf(DEBUG, "sys_exec: called by pid=%d\n", get_current_process()->pid);
+    char k_path[256];
+    if (strncpy_from_user(proc->root_page_table, k_path, (uint32_t)path, sizeof(k_path)) < 0) {
+        kprintf(ERROR, "sys_exec: failed to read path\n");
+        return -1;
+    }
+
+    char **k_argv = NULL;
+    if (argv) {
+        // Count argc
+        int argc = 0;
+        while (1) {
+            uint32_t uptr = 0;
+            copy_from_user(proc->root_page_table, &uptr,
+                           (uint32_t)(argv + argc), sizeof(uint32_t));
+            if (!uptr) break;
+            argc++;
+        }
+
+        kprintf(DEBUG, "sys_exec: argc=%d\n", argc);
+        k_argv = kmalloc((argc + 1) * sizeof(char *));
+        for (int i = 0; i < argc; i++) {
+            uint32_t uptr = 0;
+            copy_from_user(proc->root_page_table, &uptr,
+                           (uint32_t)(argv + i), sizeof(uint32_t));
+            char *s = kmalloc(256);
+            strncpy_from_user(proc->root_page_table, s, uptr, 256);
+            k_argv[i] = s;
+        }
+        k_argv[argc] = NULL;
+    }
+
+    int ret = exec(k_path, k_argv);
+    if (k_argv) {
+        for (int i = 0; k_argv[i]; i++) kfree(k_argv[i]);
+        kfree(k_argv);
+    }
+
+    return ret;
 }
 
 int sys_set_thread_area(user_desc_t *desc) {
@@ -121,8 +159,13 @@ int sys_set_thread_area(user_desc_t *desc) {
     uint16_t selector = (GDT_TLS << 3) | 3;
     asm volatile("mov %0, %%gs" :: "r"(selector));
     current_thread->gs = selector;
-
     return 0;
+}
+
+int sys_set_tid_address(int *tidptr) {
+    // current_thread->tidptr = tidptr;
+    // return 0;
+    return current_thread->tid; // Return TID as syscall result for testing purposes
 }
 
 int sys_mprotect(void *addr, size_t len, int prot) {
@@ -399,6 +442,41 @@ void *sys_munmap(void *addr, uint32_t length) {
     return (void *)0;  // success
 }
 
+int sys_ioctl(int fd, int request, void *arg) {
+    // // For now just support TTY ioctls for demonstration
+    // process_t *proc = get_current_process();
+    // if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
+
+    // vfs_file_t *file = proc->fds[fd];
+    // if (!file->file_ops || !file->file_ops->ioctl) return -1;
+
+    // return file->file_ops->ioctl(file, request, arg);
+    return -1; // ioctl not implemented yet
+}
+
+int sys_writev(int fd, const iovec_t *iov, int iovcnt) {
+    // For demonstration, just implement writev for TTYs
+    // process_t *proc = get_current_process();
+    // if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
+
+    // vfs_file_t *file = proc->fds[fd];
+    // if (!file->file_ops || !file->file_ops->write) return -1;
+
+    // int total_written = 0;
+    // for (int i = 0; i < iovcnt; i++) {
+    //     total_written += file->file_ops->write(file, iov[i].iov_base, iov[i].iov_len);
+    // }
+    // return total_written;
+    int total = 0;
+    for (int i = 0; i < iovcnt; i++) {
+        if (!iov[i].iov_base || iov[i].iov_len == 0) continue;
+        int n = sys_write(fd, iov[i].iov_base, iov[i].iov_len);
+        if (n < 0) return n;
+        total += n;
+    }
+    return total;
+}
+
 /* --- Shared-memory syscalls --- */
 int sys_shm_create(uint32_t size) {
     return shm_create(size);
@@ -480,8 +558,12 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_YIELD:       return sys_yield();
         case SYSCALL_MMAP2:        return (int)sys_mmap((void *)regs->ebx, regs->ecx, regs->edx, regs->esi, regs->edi, regs->ebp);
         case SYSCALL_MUNMAP:      return (int)sys_munmap((void *)regs->ebx, regs->ecx);
-        case SYSCALL_MPROTECT:    return sys_mprotect(regs->ebx, regs->ecx, regs->edx);
+        case SYSCALL_MPROTECT:    return sys_mprotect((void *)regs->ebx, regs->ecx, regs->edx);
         case SYSCALL_EXIT_GROUP:    return sys_exit(regs->ebx);
+        case SYSCALL_SET_THREAD_AREA: return sys_set_thread_area((user_desc_t *)regs->ebx);
+        case SYSCALL_SET_TID_ADDRESS: return sys_set_tid_address((int *)regs->ebx);
+        case SYSCALL_IOCTL:       return sys_ioctl(regs->ebx, regs->ecx, (void *)regs->edx);
+        case SYSCALL_WRITEV:      return sys_writev(regs->ebx, (const iovec_t *)regs->ecx, regs->edx);
         // case SYSCALL_INPUT_READ:  return sys_input_read((input_event_t *)regs->ebx);
         default:
             kprintf(WARNING, "Unknown syscall: %d\n", num);
@@ -491,6 +573,8 @@ static int dispatch(uint32_t num, registers_t *regs) {
 
 
 void syscall_handler(registers_t *regs) {
+        // kprintf(DEBUG, "syscall: num=%d pid=%d\n", 
+        //     regs->eax, get_current_process()->pid);
     interrupt_frame = regs;
     regs->eax = dispatch(regs->eax, regs);
     interrupt_frame = NULL;

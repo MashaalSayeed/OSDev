@@ -139,9 +139,35 @@ void pmm_ref_frame(uint32_t block) {
     spinlock_release_irq(&pmm_lock, eflags);
 }
 
+void pmm_deref_frame(uint32_t block) {
+    if (block == 0 || block >= total_blocks) {
+        kprintf(WARNING, "[pmm] pmm_deref_frame: invalid block %d\n", block);
+        return;
+    }
+    uint32_t eflags;
+    spinlock_acquire_irq(&pmm_lock, &eflags);
+    if (frame_refcount[block] == 0) {
+        kprintf(WARNING, "[pmm] pmm_deref_frame: attempt to deref zero-refcount block %d\n", block);
+    } else {
+        frame_refcount[block]--;
+        if (frame_refcount[block] == 0) {
+            CLEARBIT(block);
+        }
+    }
+    spinlock_release_irq(&pmm_lock, eflags);
+}
+
 void pmm_free_block(uint32_t frame) {
     if (frame == 0 || frame >= total_blocks) {
         printf("Warning: Attempt to free invalid block, ignoring\n");
+        return;
+    }
+
+    if (frame < 256) {
+        kprintf(WARNING, "pmm_free_block: attempt to free low memory frame %x\n", frame);
+        uint32_t caller;
+        asm volatile ("mov 4(%%ebp), %0" : "=r"(caller));
+        kprintf(WARNING, "  called from %x\n", caller);
         return;
     }
 
