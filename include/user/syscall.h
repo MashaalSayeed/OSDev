@@ -31,6 +31,7 @@ void *syscall_sbrk(int increment);
 int syscall_mkdir(const char *path, int mode);
 int syscall_rmdir(const char *path);
 int syscall_unlink(const char *path);
+int syscall_rename(const char *oldpath, const char *newpath);
 int syscall_pipe(int fds[2]);
 int syscall_fstat(int fd, stat_t *buf);
 int syscall_stat(const char *path, stat_t *buf);

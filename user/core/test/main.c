@@ -884,6 +884,125 @@ u4:
     }
 }
 
+static void test_vfs_rename() {
+    printf("\n[vfs rename]\n");
+
+    // ── Test 1: rename file in same directory ───────────────────────────────
+    {
+        syscall_unlink("/home/RN_OLD.TXT");
+        syscall_unlink("/home/RN_NEW.TXT");
+
+        int fd = syscall_open("/home/RN_OLD.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); goto r2; }
+        syscall_write(fd, "rename-data", 11);
+        syscall_close(fd);
+
+        int ret = syscall_rename("/home/RN_OLD.TXT", "/home/RN_NEW.TXT");
+        CHECK("rename same-dir returns 0", ret == 0, "rename failed");
+
+        fd = syscall_open("/home/RN_OLD.TXT", O_RDONLY);
+        CHECK("old path removed after rename", fd < 0, "old path still exists");
+        if (fd >= 0) syscall_close(fd);
+
+        fd = syscall_open("/home/RN_NEW.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char buf[16] = {0};
+            int n = syscall_read(fd, buf, sizeof(buf));
+            CHECK("renamed file content preserved",
+                  n == 11 && strncmp(buf, "rename-data", 11) == 0,
+                  "content mismatch");
+            syscall_close(fd);
+        } else {
+            FAIL("renamed path exists", "new path missing");
+        }
+    }
+
+r2:
+    // ── Test 2: rename over existing target ─────────────────────────────────
+    {
+        syscall_unlink("/home/RN_SRC.TXT");
+        syscall_unlink("/home/RN_DST.TXT");
+
+        int fd = syscall_open("/home/RN_SRC.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); goto r3; }
+        syscall_write(fd, "SRC", 3);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/RN_DST.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); goto r3; }
+        syscall_write(fd, "DST", 3);
+        syscall_close(fd);
+
+        int ret = syscall_rename("/home/RN_SRC.TXT", "/home/RN_DST.TXT");
+        CHECK("rename over existing target", ret == 0, "rename failed");
+
+        fd = syscall_open("/home/RN_SRC.TXT", O_RDONLY);
+        CHECK("source removed after overwrite-rename", fd < 0, "source still exists");
+        if (fd >= 0) syscall_close(fd);
+
+        fd = syscall_open("/home/RN_DST.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char buf[8] = {0};
+            int n = syscall_read(fd, buf, sizeof(buf));
+            CHECK("target now has source content",
+                  n == 3 && strncmp(buf, "SRC", 3) == 0,
+                  "target content not replaced");
+            syscall_close(fd);
+        } else {
+            FAIL("target exists after overwrite-rename", "target missing");
+        }
+    }
+
+r3:
+    // ── Test 3: rename across directories (same fs) ─────────────────────────
+    {
+        syscall_mkdir("/home/RN_A", 0755);
+        syscall_mkdir("/home/RN_B", 0755);
+        syscall_unlink("/home/RN_A/MOVE.TXT");
+        syscall_unlink("/home/RN_B/MOVE2.TXT");
+
+        int fd = syscall_open("/home/RN_A/MOVE.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); goto r4_cleanup; }
+        syscall_write(fd, "moved", 5);
+        syscall_close(fd);
+
+        int ret = syscall_rename("/home/RN_A/MOVE.TXT", "/home/RN_B/MOVE2.TXT");
+        CHECK("cross-dir rename returns 0", ret == 0, "rename failed");
+
+        fd = syscall_open("/home/RN_A/MOVE.TXT", O_RDONLY);
+        CHECK("cross-dir source removed", fd < 0, "source still exists");
+        if (fd >= 0) syscall_close(fd);
+
+        fd = syscall_open("/home/RN_B/MOVE2.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char buf[16] = {0};
+            int n = syscall_read(fd, buf, sizeof(buf));
+            CHECK("cross-dir target content preserved",
+                  n == 5 && strncmp(buf, "moved", 5) == 0,
+                  "content mismatch");
+            syscall_close(fd);
+        } else {
+            FAIL("cross-dir target exists", "target missing");
+        }
+    }
+
+r4_cleanup:
+    // ── Test 4: rename nonexistent source fails ─────────────────────────────
+    {
+        int ret = syscall_rename("/home/NOPE.TXT", "/home/NEVER.TXT");
+        CHECK("rename nonexistent source fails", ret < 0, "expected failure");
+    }
+
+    syscall_unlink("/home/RN_OLD.TXT");
+    syscall_unlink("/home/RN_NEW.TXT");
+    syscall_unlink("/home/RN_SRC.TXT");
+    syscall_unlink("/home/RN_DST.TXT");
+    syscall_unlink("/home/RN_A/MOVE.TXT");
+    syscall_unlink("/home/RN_B/MOVE2.TXT");
+    syscall_rmdir("/home/RN_A");
+    syscall_rmdir("/home/RN_B");
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 int main()
@@ -902,7 +1021,7 @@ int main()
        // test_vfs_seek();
        test_vfs_dirs();
        test_vfs_unlink();
-       // test_vfs_rename();
+    test_vfs_rename();
        test_vfs_getdents();
 
        print_summary();
