@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include "kernel/process.h"
 #include "kernel/kheap.h"
 #include "kernel/paging.h"
@@ -5,10 +6,9 @@
 #include "libc/string.h"
 #include "kernel/elf.h"
 #include "kernel/vfs.h"
-#include <stdbool.h>
+#include "kernel/signals.h"
 #include "kernel/gdt.h"
-
-#define USER_STACK_TOP 0xB0000000
+#include "kernel/system.h"
 
 #define PUSH(stack, type, value) \
     stack -= sizeof(type); \
@@ -218,6 +218,11 @@ process_t* create_process(char *process_name, void (*entry_point)(), uint32_t fl
 
     strncpy(proc->cwd, "/home", sizeof(proc->cwd));
 
+    proc->pending_signals = 0;
+    proc->signal_mask = 0;
+    memset(proc->signal_handlers, 0, sizeof(proc->signal_handlers));
+    map_signal_trampoline(proc);
+
     proc->fds[0] = vfs_get_file(0);
     proc->fds[1] = vfs_get_file(1);
     proc->fds[2] = vfs_get_file(2);
@@ -335,6 +340,10 @@ int fork(registers_t *regs) {
     child->brk = parent->brk;
     child->mmap_base = parent->mmap_base;
     child->is_kernel_process = parent->is_kernel_process;
+    child->pending_signals = 0;
+    child->signal_mask = 0;
+    // memset(child->signal_handlers, 0, sizeof(child->signal_handlers));
+    memcpy(child->signal_handlers, parent->signal_handlers, sizeof(parent->signal_handlers));
     strncpy(child->process_name, parent->process_name, PROCESS_NAME_MAX_LEN);
     strncpy(child->cwd, parent->cwd, sizeof(parent->cwd));
 
@@ -356,6 +365,7 @@ int fork(registers_t *regs) {
 
     // Initialize child wait queue
     wait_queue_init(&child->wait_queue);
+    map_signal_trampoline(child); 
     add_process(child);
 
     // Step 9: Allocate child thread
@@ -552,10 +562,16 @@ int exec(const char *path, char **argv) {
     old_thread->kernel_stack = NULL;   // prevent kill_thread from freeing it
 
     kill_process_threads(proc);
+    proc->is_kernel_process = false;
+    proc->pending_signals = 0;
+    proc->signal_mask = 0;
+    memset(proc->signal_handlers, 0, sizeof(proc->signal_handlers));
+
     free_page_directory(proc->root_page_table);
     proc->root_page_table   = new_page_dir;
-    proc->is_kernel_process = false;
     new_page_dir = NULL;
+
+    map_signal_trampoline(proc);
 
     // ── 6. Create new main thread (maps user stack too) ───────────────────────
     thread_t *thread = create_thread(proc, (void (*)(void))elf->entry,

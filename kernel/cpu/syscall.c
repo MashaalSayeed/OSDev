@@ -13,6 +13,7 @@
 #include "drivers/pit.h"
 #include "kernel/kheap.h"
 #include "kernel/gdt.h"
+#include "kernel/signals.h"
 
 extern struct tss_entry tss_entry;
 extern thread_t *current_thread;
@@ -74,6 +75,11 @@ int sys_exit(int status) {
 
 int sys_getpid() {
     return get_current_process()->pid;
+}
+
+int sys_getppid() {
+    process_t *parent = get_current_process()->parent;
+    return parent ? parent->pid : -1;
 }
 
 int sys_waitpid(int pid, int *status, int options) {
@@ -282,6 +288,17 @@ int sys_unlink(const char *path) {
     return vfs_unlink(resolved_path);
 }
 
+int sys_rename(const char *oldpath, const char *newpath) {
+    if (!oldpath || !newpath) return -1;
+    process_t *proc = get_current_process();
+
+    char resolved_old[256], resolved_new[256];
+    if (!vfs_relative_path(proc->cwd, oldpath, resolved_old)) return -1;
+    if (!vfs_relative_path(proc->cwd, newpath, resolved_new)) return -1;
+
+    return vfs_rename(resolved_old, resolved_new);
+}
+
 // --- Memory management ---
 void *sys_brk(void *addr) {
     process_t *proc = get_current_process();
@@ -477,6 +494,29 @@ int sys_writev(int fd, const iovec_t *iov, int iovcnt) {
     return total;
 }
 
+// Signal handling syscalls (stub implementations for now)
+int sys_kill(int pid, int sig) {
+    if (sig < 0 || sig >= NSIG) return -EINVAL;
+    process_t *target = get_process(pid);
+    if (!target) return -1;
+
+    if (target->signal_handlers[sig].handler == SIG_IGN) return 0; // Ignored signal, consider it "handled"
+
+    target->pending_signals |= (1 << sig);
+    if (target->main_thread->status == SLEEPING || target->main_thread->status == WAITING) {
+        target->main_thread->status = READY;
+    }
+    return 0;
+}
+
+sighandler_t sys_signal(int sig, sighandler_t handler) {
+    if (sig < 0 || sig >= NSIG) return (sighandler_t)-1;
+    process_t *proc = get_current_process();
+    sighandler_t old_handler = proc->signal_handlers[sig].handler;
+    proc->signal_handlers[sig].handler = handler;
+    return old_handler;
+}
+
 /* --- Shared-memory syscalls --- */
 int sys_shm_create(uint32_t size) {
     return shm_create(size);
@@ -564,6 +604,10 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_SET_TID_ADDRESS: return sys_set_tid_address((int *)regs->ebx);
         case SYSCALL_IOCTL:       return sys_ioctl(regs->ebx, regs->ecx, (void *)regs->edx);
         case SYSCALL_WRITEV:      return sys_writev(regs->ebx, (const iovec_t *)regs->ecx, regs->edx);
+        case SYSCALL_SIGNAL:      return (int)sys_signal((int)regs->ebx, (sighandler_t)regs->ecx);
+        case SYSCALL_KILL:        return sys_kill((int)regs->ebx, (int)regs->ecx);
+        case SYSCALL_GETPPID:       return sys_getppid();
+        case SYSCALL_RENAME:         return sys_rename((const char *)regs->ebx, (const char *)regs->ecx);
         // case SYSCALL_INPUT_READ:  return sys_input_read((input_event_t *)regs->ebx);
         default:
             kprintf(WARNING, "Unknown syscall: %d\n", num);
@@ -573,9 +617,15 @@ static int dispatch(uint32_t num, registers_t *regs) {
 
 
 void syscall_handler(registers_t *regs) {
-        // kprintf(DEBUG, "syscall: num=%d pid=%d\n", 
-        //     regs->eax, get_current_process()->pid);
     interrupt_frame = regs;
+    if (regs->eax == SYSCALL_SIGRETURN) {
+        // Handle sigreturn directly in the handler since it needs to
+        // restore the full context from the user stack frame
+        sys_sigreturn(regs);
+        interrupt_frame = NULL;
+        return;
+    }
+
     regs->eax = dispatch(regs->eax, regs);
     interrupt_frame = NULL;
 }

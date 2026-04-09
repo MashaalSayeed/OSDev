@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <common/syscall.h>
+#include "common/signals.h"
 
 #define O_RDONLY 0
 #define O_WRONLY 1
@@ -46,3 +47,6 @@ void  syscall_yield(void);
 
 uint32_t syscall_get_ticks();
 void sleep(uint32_t ms);
+sighandler_t syscall_signal(int sig, uint32_t handler);
+int          syscall_kill(int pid, int sig);
+int syscall_getppid();

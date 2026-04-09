@@ -1,4 +1,5 @@
 #include "user/syscall.h"
+#include "common/signals.h"
 
 static inline int syscall(int number, int arg1, int arg2, int arg3) {
     int result;
@@ -6,6 +7,17 @@ static inline int syscall(int number, int arg1, int arg2, int arg3) {
         "int $0x80"
         : "=a" (result)
         : "a" (number), "b" (arg1), "c" (arg2), "d" (arg3)
+        : "memory"
+    );
+    return result;
+}
+
+static inline int syscall2(int number, int arg1, int arg2) {
+    int result;
+    __asm__ volatile (
+        "int $0x80"
+        : "=a" (result)
+        : "a" (number), "b" (arg1), "c" (arg2)
         : "memory"
     );
     return result;
@@ -175,4 +187,16 @@ void sleep(uint32_t seconds) {
 void usleep(uint32_t microseconds) {
     timespec_t req = { .tv_sec = microseconds / 1000000, .tv_nsec = (microseconds % 1000000) * 1000 };
     syscall_nanosleep(&req, NULL);
+}
+
+sighandler_t syscall_signal(int sig, uint32_t handler) {
+    return (sighandler_t)syscall2(SYSCALL_SIGNAL, sig, handler);
+}
+
+int syscall_kill(int pid, int sig) {
+    return syscall(SYSCALL_KILL, pid, sig, 0);
+}
+
+int syscall_getppid() {
+    return syscall(SYSCALL_GETPPID, 0, 0, 0);
 }

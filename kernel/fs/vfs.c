@@ -363,9 +363,45 @@ int vfs_unlink(const char *path) {
     return result;
 }
 
+int vfs_rename(const char *oldpath, const char *newpath) {
+    char *old_dirname, *old_filename;
+    char *new_dirname, *new_filename;
+
+    split_path(oldpath, &old_dirname, &old_filename);
+    split_path(newpath, &new_dirname, &new_filename);
+
+    vfs_inode_t *old_dir = vfs_traverse(old_dirname);
+    vfs_inode_t *new_dir = vfs_traverse(new_dirname);
+
+    kfree(old_dirname);
+    kfree(new_dirname);
+
+    if (!old_dir || !new_dir) {
+        kfree(old_filename);
+        kfree(new_filename);
+        return -1;
+    }
+
+    if (!old_dir->inode_ops->rename) {
+        kfree(old_filename);
+        kfree(new_filename);
+        return -1;
+    }
+
+    int ret = old_dir->inode_ops->rename(old_dir, old_filename, new_dir, new_filename);
+    kfree(old_filename);
+    kfree(new_filename);
+    return ret;
+}
+
 int vfs_write(vfs_file_t *file, const void* buf, size_t count) {
     if (!file || file->inode->mode != VFS_MODE_FILE) {
         printf("Error: Not a file\n");
+        return -1;
+    }
+
+    if (((file->flags & O_WRONLY) == 0) && ((file->flags & O_RDWR) == 0)) {
+        printf("Error: File not opened for writing\n");
         return -1;
     }
 

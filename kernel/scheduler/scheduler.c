@@ -33,12 +33,15 @@ void scheduler_init() {
 }
 
 void schedule(registers_t* context) {
-    if (!thread_list || !current_thread) return;
+    if (!thread_list || !current_thread) {
+        kprintf(DEBUG, "schedule: no threads, halting\n");
+        return;
+    }
 
     thread_t *prev_thread = current_thread;
     if (prev_thread->status == RUNNING) prev_thread->status = READY;
 
-    thread_t *next_thread = pick_next_thread(current_thread);
+    thread_t *next_thread = pick_next_thread();
     if (next_thread && next_thread != current_thread) {
         current_thread = next_thread;
         current_thread->status = RUNNING;

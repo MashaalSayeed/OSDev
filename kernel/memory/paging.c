@@ -39,6 +39,10 @@ void dumb_kmalloc_finalize() {
     temp_mem = NULL;
 }
 
+void *phys_to_virt(uint32_t phys) {
+    return (void *)(phys + LOAD_MEMORY_ADDRESS);
+}
+
 void * virtual2physical(page_directory_t * dir, void * virtual) {
     if (!paging_enabled) {
         return virtual - LOAD_MEMORY_ADDRESS;
@@ -61,6 +65,29 @@ void * virtual2physical(page_directory_t * dir, void * virtual) {
     }
 
     return (void *)((pt_entry.frame << 12) | page_frame_offset);
+}
+
+void enable_paging() {
+    uint32_t cr0;
+    asm volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= 0x80000000;
+    asm volatile("mov %0, %%cr0" :: "r"(cr0));
+
+    paging_enabled = 1;
+}
+
+void invalidate_page(uint32_t addr) {
+    asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
+}
+
+void get_cr3(uint32_t *cr3) {
+    asm volatile("mov %%cr3, %0" : "=r"(*cr3));
+}
+
+page_directory_t *get_active_page_directory() {
+    uint32_t cr3;
+    asm volatile ("mov %%cr3, %0" : "=r"(cr3));
+    return (page_directory_t *)phys_to_virt(cr3);
 }
 
 // Get a page table entry for a given virtual address
@@ -134,7 +161,6 @@ void free_page(page_table_entry_t *page) {
 }
 
 void map_page_to_frame(page_table_entry_t *page, uint32_t frame, uint32_t flags) {
-    // if (page->present) free_page(page);   // unmap existing first
     ASSERT(!page->present);
     pmm_ref_frame(frame);                 // increment refcount — shared owner
     page->frame   = frame;
@@ -163,8 +189,7 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
         }
 
         if (page->present) {
-            uint32_t new_frame = should_alloc ? 0 : (physical_start + i * PAGE_SIZE) >> 12;
-            // printf("map_memory: Page already present at %x (dir: %x)\n", virtual_addr, dir);
+            kprintf(WARNING, "map_memory: Page already present at %x (dir: %x)\n", virtual_addr, dir);
             continue;
         }
 
@@ -241,6 +266,7 @@ int copy_to_user(page_directory_t *dir, uint32_t user_vaddr,
         }
 
         // Map the physical frame into kernel temp window
+
         map_tmp(UACCESS_TMP_DST + page_offset, user_page->frame);
         memcpy((void *)(UACCESS_TMP_DST + page_offset), ksrc + offset, chunk);
         unmap_tmp(UACCESS_TMP_DST + page_offset, user_page->frame);
@@ -248,6 +274,7 @@ int copy_to_user(page_directory_t *dir, uint32_t user_vaddr,
         offset    += chunk;
         remaining -= chunk;
     }
+
     return 0;
 }
 
@@ -342,14 +369,21 @@ page_directory_t * clone_page_directory(page_directory_t *src) {
             if (!src_table->pages[j].present) continue;
 
             uint32_t virt_addr = i << 22 | j << 12;
+            if (virt_addr == SIGRETURN_TRAMPOLINE_ADDR) {
+                kprintf(DEBUG, "clone_page_directory: skipping copy of trampoline page at virt=%x\n", virt_addr);
+                continue; // Don't copy the signal trampoline page
+            }
+
+            if (i == 832) {
+                kprintf(DEBUG, "clone: copying kernel tmp window pd[832] frame=%x ref=%x\n",
+                        src->tables[832].frame, src->ref_tables[832]);
+            }
+
             uint32_t frame = copy_page_frame(src, virt_addr);
             if (!frame) {
-                kprintf(ERROR, "clone_page_directory: FAILED to copy page at virt=%x"
-            " src_frame=%x refcount=%d\n", 
-            virt_addr,
-            src->ref_tables[i] ? src->ref_tables[i]->pages[j].frame : 0,
-            src->ref_tables[i] ? 
-                100 : -1);
+                int src_frame = src->ref_tables[i] ? src->ref_tables[i]->pages[j].frame : 0;
+                // int src_refcount = src_frame ? pmm_get_refcount(src_frame) : -1;
+                kprintf(ERROR, "clone_page_directory: FAILED to copy page at virt=%x src_frame=%x\n", virt_addr, src_frame);
                 continue;
             }
 
@@ -396,23 +430,6 @@ void free_page_directory(page_directory_t *dir) {
     kfree_aligned(dir);
 }
 
-void enable_paging() {
-    uint32_t cr0;
-    asm volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000;
-    asm volatile("mov %0, %%cr0" :: "r"(cr0));
-
-    paging_enabled = 1;
-}
-
-void invalidate_page(uint32_t addr) {
-    asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
-}
-
-void get_cr3(uint32_t *cr3) {
-    asm volatile("mov %%cr3, %0" : "=r"(*cr3));
-}
-
 void paging_init() {
     temp_mem = bitmap + bitmap_size;
 
@@ -431,6 +448,8 @@ void paging_init() {
     // Setup a guard page for the kernel stack
     // free_page(get_page((uint32_t) &kernel_stack_bottom + BLOCK_SIZE, 0, kpage_dir));
 
+    get_page(UACCESS_TMP_DST, 1, kpage_dir);  // create=1 forces table allocation
+    get_page(UACCESS_TMP_SRC, 1, kpage_dir);
     
     // Switch to the new page directory
     switch_page_directory(kpage_dir);
@@ -490,10 +509,11 @@ void page_fault_handler(registers_t *regs) {
         for (;;) ;
     }
     page_fault_detected = 1;
-
-
     uint32_t faulting_address;
     asm volatile("mov %%cr2, %0" : "=r" (faulting_address) :: "memory");
+    
+        kprintf(DEBUG, "page_fault: eip=%x esp=%x cr2=%x err=%x cs=%x\n",
+                regs->eip, regs->useresp, faulting_address, regs->err_code, regs->cs);
 
     if (faulting_address >= &kernel_stack_bottom && faulting_address < &kernel_stack_bottom + BLOCK_SIZE) {
         printf("Stack overflow at %x\n", faulting_address);

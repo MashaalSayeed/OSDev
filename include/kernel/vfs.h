@@ -23,6 +23,7 @@
 #define O_RDONLY 0
 #define O_WRONLY 1
 #define O_RDWR 2
+#define O_TRUNC 32
 #define O_CREAT 64
 
 #define DEVFS_NAME_LEN 32
@@ -62,6 +63,7 @@ struct vfs_inode_operations {
     int (*mkdir)(vfs_inode_t* dir, const char* name, uint32_t mode);
     int (*rmdir)(vfs_inode_t* dir, const char* name);
     int (*readdir)(vfs_inode_t* dir, uint32_t offset, vfs_dir_entry_t *entry); // Read a directory entry)
+    int (*rename)(vfs_inode_t* olddir, const char* oldname, vfs_inode_t* newdir, const char* newname);
 };
 
 struct vfs_file_operations {
@@ -141,6 +143,7 @@ int vfs_close(vfs_file_t *file);
 int vfs_write(vfs_file_t *file, const void *buf, size_t count);
 int vfs_read(vfs_file_t *file, void *buf, size_t count);
 
+int vfs_rename(const char *oldpath, const char *newpath);
 int vfs_seek(vfs_file_t *file, uint32_t offset, int whence);
 int vfs_rmdir(const char *path);
 int vfs_getdents(int fd, void *buf, int size);

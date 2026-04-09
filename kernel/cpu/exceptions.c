@@ -17,7 +17,7 @@ void print_debug_info(registers_t *regs) {
     printf("  EIP: %x <%s>\n", regs->eip, symbol);
     printf("  CS: %x\n", regs->cs);
     printf("  EFLAGS: %x\n", regs->eflags);
-    printf("  ESP: %x\n", regs->esp);
+    printf("  USERESP: %x\n", regs->useresp);
     printf("  SS: %x\n", regs->ss);
     printf("  EAX: %x\n", regs->eax);
 }

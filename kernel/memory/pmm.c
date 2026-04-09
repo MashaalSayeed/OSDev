@@ -108,6 +108,7 @@ static uint32_t first_free_block() {
     return (uint32_t)-1;
 }
 
+// 
 uint32_t pmm_alloc_block() {
     uint32_t flags;
     spinlock_acquire_irq(&pmm_lock, &flags);

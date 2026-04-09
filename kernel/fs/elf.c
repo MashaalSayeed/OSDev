@@ -45,6 +45,7 @@ elf_header_t *load_elf(vfs_file_t *file, page_directory_t *page_dir) {
 
         // Map physical frames into the new process page dir
         map_memory(page_dir, ph.vaddr, (uint32_t)-1, ph.mem_size, 0x7);
+        kprintf(DEBUG, "alloc_page: frame=%x for virt=%x\n", get_page(ph.vaddr, 0, page_dir)->frame, ph.vaddr);
         page_table_entry_t *dbg = get_page(ph.vaddr, 0, page_dir);
         
         // Read segment data into kernel buffer

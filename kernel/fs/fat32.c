@@ -84,7 +84,7 @@ static uint32_t fat32_allocate_cluster(fat32_superblock_t *sb) {
 
     uint8_t fat_buffer[512];
     for (uint32_t i = 0; i < sector_per_fat; i++) {
-        if (sb->device->read_block(sb->device, i, fat_buffer) != 0) {
+        if (sb->device->read_block(sb->device, sb->reserved_sectors + i, fat_buffer) != 0) {
             printf("Error: Failed to read FAT sector\n");
             return -1;
         }
@@ -97,7 +97,7 @@ static uint32_t fat32_allocate_cluster(fat32_superblock_t *sb) {
 
             if (fat_entries[j] == FAT32_CLUSTER_FREE) {
                 fat_entries[j] = FAT32_CLUSTER_LAST;
-                if (sb->device->write_block(sb->device, i, fat_buffer) != 0) {
+                if (sb->device->write_block(sb->device, sb->reserved_sectors + i, fat_buffer) != 0) {
                     printf("Error: Failed to write FAT sector\n");
                     return -1;
                 }
@@ -478,6 +478,9 @@ static int fat32_unlink(vfs_inode_t *dir, const char* name) {
     return 0;
 }
 
+static int fat32_rename(vfs_inode_t* olddir, const char* oldname, vfs_inode_t* newdir, const char* newname) {
+}
+
 static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count) {
     fat32_inode_t *inode = (fat32_inode_t*)file->inode->fs_data;
     fat32_superblock_t *sb = (fat32_superblock_t*)file->inode->superblock->fs_data;
@@ -486,9 +489,35 @@ static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count) {
     uint32_t offset = file->offset;
     uint32_t written = 0;
 
-    if (fat32_get_cluster_at_offset(sb, &cluster, offset) != 0) {
-        printf("Error: Failed to get cluster at offset\n");
-        return written;
+    if ((file->flags & O_TRUNC) && offset == 0 && file->inode->size > 0) {
+        uint32_t next_cluster = fat32_get_next_cluster(sb, inode->cluster);
+        if (next_cluster != FAT32_CLUSTER_LAST &&
+            next_cluster != FAT32_CLUSTER_BAD &&
+            next_cluster != FAT32_CLUSTER_FREE) {
+            fat32_free_cluster_chain(sb, next_cluster);
+        }
+
+        fat32_set_next_cluster(sb, inode->cluster, FAT32_CLUSTER_LAST);
+        file->inode->size = 0;
+        inode->size = 0;
+
+        fat32_dir_entry_t dirent;
+        if (fat32_read_dir_entry(sb, inode, &dirent) == 0) {
+            dirent.size = 0;
+            fat32_write_dir_entry(sb, inode, &dirent);
+        }
+    }
+
+    uint32_t cluster_index = offset / sb->cluster_size;
+    for (uint32_t i = 0; i < cluster_index; i++) {
+        uint32_t next_cluster = fat32_get_next_cluster(sb, cluster);
+        if (next_cluster == FAT32_CLUSTER_LAST) {
+            next_cluster = fat32_allocate_cluster(sb);
+            if (next_cluster == (uint32_t)-1) return written;
+            if (fat32_set_next_cluster(sb, cluster, next_cluster) != 0) return written;
+            if (fat32_set_next_cluster(sb, next_cluster, FAT32_CLUSTER_LAST) != 0) return written;
+        }
+        cluster = next_cluster;
     }
 
     while (written < count && cluster != FAT32_CLUSTER_LAST) {
@@ -510,15 +539,15 @@ static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count) {
         offset += to_write;
 
         if (offset % sb->cluster_size == 0 && written < count) {
-            printf("Writing to next cluster\n");
             // Allocate new cluster if needed
             uint32_t next_cluster = fat32_get_next_cluster(sb, cluster);
             if (next_cluster == FAT32_CLUSTER_LAST) {
                 next_cluster = fat32_allocate_cluster(sb);
-                if (next_cluster == -1) break;
+                if (next_cluster == (uint32_t)-1) break;
 
                 // Link the new cluster
                 if (fat32_set_next_cluster(sb, cluster, next_cluster) != 0) break;
+                if (fat32_set_next_cluster(sb, next_cluster, FAT32_CLUSTER_LAST) != 0) break;
             }
 
             cluster = next_cluster;
@@ -666,16 +695,36 @@ static int fat32_readdir(vfs_inode_t *dir, uint32_t offset, vfs_dir_entry_t *ent
                 memset(lfn_buffer, 0, sizeof(lfn_buffer));
                 lfn_length = 0;
                 lfn_order = -1;
+
+                if (strcmp(entry->name, ".") == 0 || strcmp(entry->name, "..") == 0) {
+                    continue;
+                }
             } else {
-                // Use 8.3 filename
-                strncpy(entry->name, (char *)dir_entry->filename, 8);
-                entry->name[8] = '\0'; // Ensure null-termination
-                char *ext = entry->name + strlen(entry->name);
-                if (dir_entry->ext[0] != ' ') {
-                    if (strlen(entry->name) < sizeof(entry->name) - 1) {
-                        strncat(entry->name, ".", sizeof(entry->name) - strlen(entry->name) - 1);
-                        strncat(entry->name, (char *)dir_entry->ext, 3);
-                    }
+                // Use 8.3 filename (trim right-padding spaces)
+                char base[9];
+                char ext[4];
+                memcpy(base, dir_entry->filename, 8);
+                memcpy(ext, dir_entry->ext, 3);
+                base[8] = '\0';
+                ext[3] = '\0';
+
+                int base_len = 8;
+                while (base_len > 0 && base[base_len - 1] == ' ') base_len--;
+                base[base_len] = '\0';
+
+                int ext_len = 3;
+                while (ext_len > 0 && ext[ext_len - 1] == ' ') ext_len--;
+                ext[ext_len] = '\0';
+
+                entry->name[0] = '\0';
+                strncat(entry->name, base, sizeof(entry->name) - 1);
+                if (ext_len > 0 && strlen(entry->name) < sizeof(entry->name) - 1) {
+                    strncat(entry->name, ".", sizeof(entry->name) - strlen(entry->name) - 1);
+                    strncat(entry->name, ext, sizeof(entry->name) - strlen(entry->name) - 1);
+                }
+
+                if (strcmp(entry->name, ".") == 0 || strcmp(entry->name, "..") == 0) {
+                    continue;
                 }
             }
 

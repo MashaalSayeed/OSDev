@@ -141,30 +141,48 @@ isr_t interrupt_handlers[256];
 void isr_handler(registers_t *r) {
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];
-        if (r->int_no < 32) terminal_setcolor(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         handler(r);
-        if (r->int_no < 32) terminal_setcolor(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    } else {
-        printf("Received interrupt: %d\n", r->int_no);
+        return;
     }
 
+    // No custom handler registered, print message and halt
     if (r->int_no < 32) {
         // Handle exception
-        serial_write("Exception: \n");
-        printf("System Exception: %s\n", exception_messages[r->int_no]);
-
-        for (;;) {} // Halt
+        kprintf(ERROR, "Unhandled exception %d: %s\n",
+                r->int_no, exception_messages[r->int_no]);
+        print_debug_info(r);
+        print_stack_trace(r);
+        asm volatile ("cli; hlt");
     }
+
+    kprintf(WARNING, "Unhandled interrupt: %d\n", r->int_no);
+}
+
+static bool is_spurious_irq(uint8_t intno) {
+    if (intno == 39) {  // IRQ7
+        outb(0x20, 0x0B);  // read ISR
+        return !(inb(0x20) & 0x80);
+    }
+    if (intno == 47) {  // IRQ15
+        outb(0xA0, 0x0B);
+        if (!(inb(0xA0) & 0x80)) {
+            outb(0x20, 0x20);  // still need to EOI master
+            return true;
+        }
+    }
+    return false;
 }
 
 void irq_handler(registers_t *r) {
-    if (r->int_no >= 40) outb(0xA0, 0x20); // Send reset signal to slave
-    outb(0x20, 0x20); // Send reset signal to master
+    // if (is_spurious_irq(r->int_no)) return;
 
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];
         handler(r);
     }
+
+    if (r->int_no >= 40) outb(0xA0, 0x20); // Send reset signal to slave
+    outb(0x20, 0x20); // Send reset signal to master
 }
 
 void register_interrupt_handler(uint8_t n, isr_t handler) {

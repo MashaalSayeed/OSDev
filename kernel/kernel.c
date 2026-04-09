@@ -127,7 +127,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	process_t *test_proc = create_process("test", process_test, PROCESS_FLAG_KERNEL);
 
 	schedule_process_threads(init_proc);
-	schedule_process_threads(test_proc);
+	// schedule_process_threads(test_proc);
 
 
 	if (is_gui_enabled) {
@@ -167,17 +167,18 @@ void init_main() {
 		exec("/BIN/SHELL", NULL);
 	}
 	/* If exec fails, spin */
+	printf("Exiting from init process!\n");
+
 	for (;;) asm volatile("hlt");
 }
 
 void process_test() {
-	printf("Hello from test process!\n");
-	uint32_t i = 0;
-	for (;;) {
-		// asm volatile ("cli");
-		// printf("Hello from test process %d!\n", i);
-		asm volatile ("sti");
-		i++;
-		asm volatile("hlt");
-	}
+    printf("Hello from test process!\n");
+    for (uint32_t i = 0; i < 5; i++) {
+        printf("Test thread: tick %d\n", i);
+        // busy loop a bit so the timer has a chance to preempt
+        for (volatile uint32_t j = 0; j < 1000000; j++);
+    }
+    printf("Test thread exiting\n");
+	for (;;) asm volatile("hlt"); 
 }

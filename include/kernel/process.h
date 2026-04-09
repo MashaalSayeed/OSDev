@@ -7,6 +7,7 @@
 #include "kernel/isr.h"
 #include "kernel/paging.h"
 #include "kernel/wait_queue.h"
+#include "common/signals.h"
 
 #define PROCESS_NAME_MAX_LEN 32
 #define PATH_NAME_MAX_LEN 256
@@ -18,6 +19,7 @@
 #define PROCESS_FLAG_USER 0x1
 #define PROCESS_FLAG_KERNEL 0x2
 #define MMAP_BASE 0x40000000
+#define NSIG 32
 
 typedef enum {
     READY,
@@ -67,6 +69,10 @@ typedef struct process {
     thread_t* thread_list;
     wait_queue_t wait_queue;
     bool is_kernel_process;
+
+    sigaction_t  signal_handlers[NSIG];
+    uint32_t     pending_signals;   // bitmask, bit N = signal N pending
+    uint32_t     signal_mask;       // blocked signals (sigprocmask)
 
     struct process* parent;
     struct process* next;
