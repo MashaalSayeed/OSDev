@@ -71,6 +71,7 @@ struct vfs_file_operations {
     int (*write)(vfs_file_t* file, const void* buf, size_t count);
     int (*close)(vfs_file_t* file);
     int (*seek)(vfs_file_t* file, uint32_t offset, int whence);
+    int (*ioctl)(vfs_file_t* file, int request, void *arg);
 };
 
 typedef enum {
@@ -97,6 +98,7 @@ typedef struct vfs_device {
         struct {
             int (*read_char)(struct vfs_device *dev, char *buf, size_t count);
             int (*write_char)(struct vfs_device *dev, const char *buf, size_t count);
+            int (*ioctl)(struct vfs_device *dev, int request, void *arg);
         } char_dev;
     };
 } vfs_device_t;

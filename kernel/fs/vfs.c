@@ -6,6 +6,8 @@
 #include "kernel/printf.h"
 #include "kernel/process.h"
 #include "common/dirent.h"
+#include "common/ioctl.h"
+#include "common/signals.h"
 #include "kernel/hashtable.h"
 #include "libc/string.h"
 #include "libc/stdio.h"
@@ -28,7 +30,210 @@ struct vfs_file_operations vfs_default_file_ops = {
     .write = vfs_write,
     .close = vfs_close,
     .seek = vfs_seek,
+    .ioctl = NULL,
 };
+
+static int devfs_file_read(vfs_file_t* file, void* buf, size_t count);
+static int devfs_file_write(vfs_file_t* file, const void* buf, size_t count);
+static int devfs_file_seek(vfs_file_t* file, uint32_t offset, int whence);
+static int devfs_file_ioctl(vfs_file_t* file, int request, void *arg);
+
+static struct vfs_file_operations vfs_devfs_file_ops = {
+    .read = devfs_file_read,
+    .write = devfs_file_write,
+    .close = vfs_close,
+    .seek = devfs_file_seek,
+    .ioctl = devfs_file_ioctl,
+};
+
+static termios_linux_t g_tty_termios = {
+    .c_iflag = 0,
+    .c_oflag = 0,
+    .c_cflag = 0,
+    .c_lflag = TTY_LFLAG_ISIG | TTY_LFLAG_ICANON | TTY_LFLAG_ECHO,
+    .c_line = 0,
+    .c_cc = {
+        [VINTR] = 3,
+        [VQUIT] = 28,
+        [VERASE] = '\b',
+        [VKILL] = 21,
+        [VEOF] = 4,
+        [VTIME] = 0,
+        [VMIN] = 1,
+        [VSTART] = 17,
+        [VSTOP] = 19,
+        [VSUSP] = 26,
+        [VEOL] = '\n'
+    }
+};
+
+static winsize_linux_t g_tty_winsize = {
+    .ws_row = 25,
+    .ws_col = 80,
+    .ws_xpixel = 0,
+    .ws_ypixel = 0
+};
+
+#define TTY_LINEBUF_SIZE 512
+static char g_tty_linebuf[TTY_LINEBUF_SIZE];
+static size_t g_tty_linebuf_len = 0;
+static size_t g_tty_linebuf_pos = 0;
+
+static void tty_echo_char(char c) {
+    if (!(g_tty_termios.c_lflag & TTY_LFLAG_ECHO)) return;
+
+    if (c == '\b' || c == 0x7F) {
+        terminal_write("\b \b", 3);
+    } else {
+        terminal_write(&c, 1);
+    }
+}
+
+static int tty_handle_signal_char(char c) {
+    if (!(g_tty_termios.c_lflag & TTY_LFLAG_ISIG)) return 0;
+
+    process_t *proc = get_current_process();
+    if (!proc) return 0;
+
+    if (c == (char)g_tty_termios.c_cc[VINTR]) {
+        proc->pending_signals |= (1u << SIGINT);
+        if (g_tty_termios.c_lflag & TTY_LFLAG_ECHO) terminal_write("^C\n", 3);
+        return 1;
+    }
+
+    if (c == (char)g_tty_termios.c_cc[VSUSP]) {
+        proc->pending_signals |= (1u << SIGTSTP);
+        if (g_tty_termios.c_lflag & TTY_LFLAG_ECHO) terminal_write("^Z\n", 3);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int tty_fill_canonical_line(void) {
+    g_tty_linebuf_len = 0;
+    g_tty_linebuf_pos = 0;
+
+    while (g_tty_linebuf_len < TTY_LINEBUF_SIZE - 1) {
+        char c = kgetch();
+
+        if (tty_handle_signal_char(c)) continue;
+
+        if (c == (char)g_tty_termios.c_cc[VERASE] || c == '\b' || c == 0x7F) {
+            if (g_tty_linebuf_len > 0) {
+                g_tty_linebuf_len--;
+                tty_echo_char('\b');
+            }
+            continue;
+        }
+
+        if (c == (char)g_tty_termios.c_cc[VKILL]) {
+            while (g_tty_linebuf_len > 0) {
+                g_tty_linebuf_len--;
+                tty_echo_char('\b');
+            }
+            continue;
+        }
+
+        if (c == (char)g_tty_termios.c_cc[VEOF]) {
+            return (g_tty_linebuf_len == 0) ? 0 : (int)g_tty_linebuf_len;
+        }
+
+        g_tty_linebuf[g_tty_linebuf_len++] = c;
+        tty_echo_char(c);
+
+        if (c == '\n' || c == (char)g_tty_termios.c_cc[VEOL]) break;
+    }
+
+    g_tty_linebuf[g_tty_linebuf_len] = '\0';
+    return (int)g_tty_linebuf_len;
+}
+
+static int tty_read_common(char *buf, size_t count) {
+    if (!buf || count == 0) return -1;
+
+    if (g_tty_termios.c_lflag & TTY_LFLAG_ICANON) {
+        if (g_tty_linebuf_pos >= g_tty_linebuf_len) {
+            int line_status = tty_fill_canonical_line();
+            if (line_status <= 0) return line_status;
+        }
+
+        size_t available = g_tty_linebuf_len - g_tty_linebuf_pos;
+        size_t to_copy = (count < available) ? count : available;
+        memcpy(buf, g_tty_linebuf + g_tty_linebuf_pos, to_copy);
+        g_tty_linebuf_pos += to_copy;
+
+        if (g_tty_linebuf_pos >= g_tty_linebuf_len) {
+            g_tty_linebuf_pos = 0;
+            g_tty_linebuf_len = 0;
+        }
+
+        return (int)to_copy;
+    }
+
+    size_t bytes_read = 0;
+    int vmin = g_tty_termios.c_cc[VMIN];
+
+    if (vmin == 0) {
+        while (bytes_read < count) {
+            int ch = keyboard_try_getchar();
+            if (ch < 0) break;
+
+            char c = (char)ch;
+            if (tty_handle_signal_char(c)) continue;
+            tty_echo_char(c);
+            buf[bytes_read++] = c;
+        }
+        return (int)bytes_read;
+    }
+
+    while (bytes_read < (size_t)vmin && bytes_read < count) {
+        char c = kgetch();
+        if (tty_handle_signal_char(c)) continue;
+        tty_echo_char(c);
+        buf[bytes_read++] = c;
+    }
+
+    while (bytes_read < count) {
+        int ch = keyboard_try_getchar();
+        if (ch < 0) break;
+
+        char c = (char)ch;
+        if (tty_handle_signal_char(c)) continue;
+        tty_echo_char(c);
+        buf[bytes_read++] = c;
+    }
+
+    return (int)bytes_read;
+}
+
+static int tty_common_ioctl(int request, void *arg) {
+    if (!arg) return -1;
+
+    switch (request) {
+        case TCGETS:
+            memcpy(arg, &g_tty_termios, sizeof(g_tty_termios));
+            return 0;
+        case TCSETS:
+        case TCSETSW:
+        case TCSETSF:
+            memcpy(&g_tty_termios, arg, sizeof(g_tty_termios));
+            return 0;
+        case TIOCGWINSZ: {
+            winsize_linux_t *ws = (winsize_linux_t *)arg;
+            ws->ws_row = (uint16_t)terminal_get_height();
+            ws->ws_col = (uint16_t)terminal_get_width();
+            ws->ws_xpixel = g_tty_winsize.ws_xpixel;
+            ws->ws_ypixel = g_tty_winsize.ws_ypixel;
+            return 0;
+        }
+        case TIOCSWINSZ:
+            memcpy(&g_tty_winsize, arg, sizeof(g_tty_winsize));
+            return 0;
+        default:
+            return -1;
+    }
+}
 
 vfs_file_t* console_fds[3];
 
@@ -41,13 +246,60 @@ vfs_file_t* vfs_get_file(int fd) {
 }
 
 int console_read(vfs_file_t* file, void* buf, size_t count) {
-    return read_keyboard_buffer(buf, count);
+    return tty_read_common((char *)buf, count);
 }
 
 int console_write(vfs_file_t* file, const void* buf, size_t count) {
-    // printf("%d", count);
     terminal_write(buf, count);
     return count;
+}
+
+int console_ioctl(vfs_file_t* file, int request, void *arg) {
+    return tty_common_ioctl(request, arg);
+}
+
+static int tty0_dev_read(struct vfs_device *dev, char *buf, size_t count) {
+    return tty_read_common(buf, count);
+}
+
+static int tty0_dev_write(struct vfs_device *dev, const char *buf, size_t count) {
+    terminal_write(buf, count);
+    return count;
+}
+
+static int tty0_dev_ioctl(struct vfs_device *dev, int request, void *arg) {
+    return tty_common_ioctl(request, arg);
+}
+
+static int devfs_file_read(vfs_file_t* file, void* buf, size_t count) {
+    if (!file || !file->inode || !file->inode->fs_data || !buf) return -1;
+
+    vfs_device_t *dev = (vfs_device_t *)file->inode->fs_data;
+    if (dev->type != DEVICE_TYPE_CHAR || !dev->char_dev.read_char) return -1;
+
+    return dev->char_dev.read_char(dev, buf, count);
+}
+
+static int devfs_file_write(vfs_file_t* file, const void* buf, size_t count) {
+    if (!file || !file->inode || !file->inode->fs_data || !buf) return -1;
+
+    vfs_device_t *dev = (vfs_device_t *)file->inode->fs_data;
+    if (dev->type != DEVICE_TYPE_CHAR || !dev->char_dev.write_char) return -1;
+
+    return dev->char_dev.write_char(dev, buf, count);
+}
+
+static int devfs_file_seek(vfs_file_t* file, uint32_t offset, int whence) {
+    return -1;
+}
+
+static int devfs_file_ioctl(vfs_file_t* file, int request, void *arg) {
+    if (!file || !file->inode || !file->inode->fs_data) return -1;
+
+    vfs_device_t *dev = (vfs_device_t *)file->inode->fs_data;
+    if (dev->type != DEVICE_TYPE_CHAR || !dev->char_dev.ioctl) return -1;
+
+    return dev->char_dev.ioctl(dev, request, arg);
 }
 
 struct vfs_file_operations vfs_console_ops = {
@@ -55,6 +307,7 @@ struct vfs_file_operations vfs_console_ops = {
     .write = console_write,
     .close = vfs_close,
     .seek = NULL,
+    .ioctl = console_ioctl,
 };
 
 void console_init() {
@@ -306,7 +559,11 @@ vfs_file_t *vfs_open(const char *path, int flags) {
     file->flags = flags;
     file->ref_count = 1;
 
-    file->file_ops = &vfs_default_file_ops;
+    if (mount && strcmp(mount->path, "/DEV") == 0) {
+        file->file_ops = &vfs_devfs_file_ops;
+    } else {
+        file->file_ops = &vfs_default_file_ops;
+    }
     return file;
 }
 
@@ -554,6 +811,19 @@ void vfs_init() {
             printf("Failed to mount devfs at /DEV\n");
         else
             printf("devfs mounted at /DEV\n");
+
+        vfs_device_t tty0 = {0};
+        strncpy(tty0.name, "TTY0", DEVFS_NAME_LEN - 1);
+        tty0.name[DEVFS_NAME_LEN - 1] = '\0';
+        tty0.type = DEVICE_TYPE_CHAR;
+        tty0.char_dev.read_char = tty0_dev_read;
+        tty0.char_dev.write_char = tty0_dev_write;
+        tty0.char_dev.ioctl = tty0_dev_ioctl;
+
+        if (devfs_register_device(&tty0) != 0)
+            printf("Failed to register /DEV/TTY0\n");
+        else
+            printf("Registered /DEV/TTY0\n");
     } else {
         printf("Failed to create devfs superblock\n");
     }

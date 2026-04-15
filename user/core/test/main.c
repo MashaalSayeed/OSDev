@@ -3,6 +3,7 @@
 #include "libc/string.h"
 #include "common/signals.h"
 #include "common/dirent.h"
+#include "common/ioctl.h"
 
 sighandler_t signal(int sig, sighandler_t handler)
 {
@@ -1003,6 +1004,57 @@ r4_cleanup:
     syscall_rmdir("/home/RN_B");
 }
 
+static void test_tty_ioctl_basic() {
+    printf("\n[tty ioctl]\n");
+
+    int fd = syscall_open("/DEV/TTY0", O_RDWR);
+    CHECK("open /DEV/TTY0", fd >= 0, "open failed");
+    if (fd < 0) return;
+
+    winsize_linux_t ws = {0};
+    int ret = syscall_ioctl(fd, TIOCGWINSZ, &ws);
+    CHECK("TIOCGWINSZ succeeds", ret == 0, "ioctl failed");
+    CHECK("winsize rows/cols valid", ws.ws_row > 0 && ws.ws_col > 0, "invalid size");
+
+    termios_linux_t saved = {0};
+    ret = syscall_ioctl(fd, TCGETS, &saved);
+    CHECK("TCGETS succeeds", ret == 0, "ioctl failed");
+
+    termios_linux_t t = saved;
+    t.c_lflag ^= TTY_LFLAG_ECHO;
+    ret = syscall_ioctl(fd, TCSETS, &t);
+    CHECK("TCSETS succeeds", ret == 0, "ioctl failed");
+
+    termios_linux_t roundtrip = {0};
+    ret = syscall_ioctl(fd, TCGETS, &roundtrip);
+    CHECK("TCGETS after TCSETS", ret == 0, "ioctl failed");
+    CHECK("TCSETS roundtrip applied", roundtrip.c_lflag == t.c_lflag, "lflag not updated");
+
+    syscall_ioctl(fd, TCSETS, &saved);
+    syscall_close(fd);
+}
+
+static void test_path_syscalls_basic() {
+    printf("\n[path syscalls]\n");
+
+    char cwd[256] = {0};
+    char *ret = syscall_getcwd(cwd, sizeof(cwd));
+    CHECK("getcwd returns non-null", ret != NULL, "getcwd failed");
+    CHECK("getcwd non-empty", cwd[0] == '/', "invalid cwd");
+
+    char exe[256] = {0};
+    int n = syscall_readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    CHECK("readlink /proc/self/exe succeeds", n > 0, "readlink failed");
+    if (n > 0) {
+        exe[n] = '\0';
+        CHECK("readlink path looks executable", strncmp(exe, "/BIN/", 5) == 0,
+              "unexpected exe path");
+    }
+
+    n = syscall_readlink("/proc/nope", exe, sizeof(exe) - 1);
+    CHECK("readlink invalid path fails", n < 0, "expected failure");
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 int main()
@@ -1023,6 +1075,8 @@ int main()
        test_vfs_unlink();
     test_vfs_rename();
        test_vfs_getdents();
+         test_tty_ioctl_basic();
+    test_path_syscalls_basic();
 
        print_summary();
        return tests_failed ? 1 : 0;

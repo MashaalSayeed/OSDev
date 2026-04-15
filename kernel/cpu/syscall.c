@@ -62,7 +62,7 @@ int sys_close(int fd) {
 int sys_lseek(int fd, uint32_t offset, int whence) {
     process_t *proc = get_current_process();
     vfs_file_t* file = proc->fds[fd];
-    if (!file) return -1;
+    if (!file || !file->file_ops || !file->file_ops->seek) return -1;
 
     return file->file_ops->seek(file, offset, whence);
 }
@@ -183,6 +183,53 @@ int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
     return vfs_getdents(fd, dirp, count);
 }
 
+int sys_getdents64(int fd, void *dirp, int count) {
+    if (!dirp || count <= 0) return -1;
+
+    vfs_file_t *file = vfs_get_file(fd);
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !file) return -1;
+
+    if (file->inode->mode != VFS_MODE_DIR) return -1;
+
+    int bytes_written = 0;
+    uint32_t offset = file->offset;
+    vfs_dir_entry_t entry;
+
+    while (1) {
+        int next_offset = file->inode->inode_ops->readdir(file->inode, offset, &entry);
+        if (next_offset <= 0) break;
+
+        uint32_t name_len = 0;
+        while (name_len < sizeof(entry.name) - 1 && entry.name[name_len]) name_len++;
+
+        uint16_t reclen = (uint16_t)(sizeof(linux_dirent64_t) + name_len + 1);
+        reclen = (uint16_t)((reclen + 3) & ~3);
+
+        if (bytes_written + reclen > count) break;
+
+        uint8_t *base = (uint8_t *)dirp + bytes_written;
+        linux_dirent64_t *d = (linux_dirent64_t *)base;
+        d->d_ino = entry.inode_number;
+        d->d_off = (int64_t)next_offset;
+        d->d_reclen = reclen;
+        d->d_type = entry.type;
+
+        memcpy(d->d_name, entry.name, name_len);
+        d->d_name[name_len] = '\0';
+        if (reclen > sizeof(linux_dirent64_t) + name_len + 1) {
+            memset(base + sizeof(linux_dirent64_t) + name_len + 1,
+                   0,
+                   reclen - (sizeof(linux_dirent64_t) + name_len + 1));
+        }
+
+        bytes_written += reclen;
+        offset = (uint32_t)next_offset;
+    }
+
+    file->offset = offset;
+    return bytes_written;
+}
+
 int sys_dup(int fd) {
     // create copy of fd with lowest available fd number
     process_t *proc = get_current_process();
@@ -245,12 +292,42 @@ int sys_fcntl(int fd, int cmd, int arg) {
     }
 }
 
-char * sys_getcwd(char *buf, size_t size) {
+int sys_getcwd(char *buf, size_t size) {
     process_t *proc = get_current_process();
-    if (!buf) return NULL;
+    if (!buf || size == 0) return -1;
 
-    strncpy(buf, proc->cwd, size);
-    return buf;
+    size_t len = strlen(proc->cwd);
+    if (len + 1 > size) return -1;
+
+    if (copy_to_user(proc->root_page_table, (uint32_t)buf, proc->cwd, len + 1) < 0) {
+        return -1;
+    }
+
+    return (int)(len + 1);
+}
+
+int sys_readlink(const char *path, char *buf, size_t bufsiz) {
+    if (!path || !buf || bufsiz == 0) return -1;
+
+    process_t *proc = get_current_process();
+    char kpath[256];
+    if (strncpy_from_user(proc->root_page_table, kpath, (uint32_t)path, sizeof(kpath)) < 0) {
+        return -1;
+    }
+
+    if (strcmp(kpath, "/proc/self/exe") != 0) {
+        return -1;
+    }
+
+    const char *target = proc->process_name;
+    size_t target_len = strlen(target);
+    size_t copy_len = target_len < bufsiz ? target_len : bufsiz;
+
+    if (copy_to_user(proc->root_page_table, (uint32_t)buf, target, copy_len) < 0) {
+        return -1;
+    }
+
+    return (int)copy_len;
 }
 
 int sys_chdir(const char *path) {
@@ -460,15 +537,9 @@ void *sys_munmap(void *addr, uint32_t length) {
 }
 
 int sys_ioctl(int fd, int request, void *arg) {
-    // // For now just support TTY ioctls for demonstration
-    // process_t *proc = get_current_process();
-    // if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
-
-    // vfs_file_t *file = proc->fds[fd];
-    // if (!file->file_ops || !file->file_ops->ioctl) return -1;
-
-    // return file->file_ops->ioctl(file, request, arg);
-    return -1; // ioctl not implemented yet
+    vfs_file_t *file = vfs_get_file(fd);
+    if (!file || !file->file_ops || !file->file_ops->ioctl) return -1;
+    return file->file_ops->ioctl(file, request, arg);
 }
 
 int sys_writev(int fd, const iovec_t *iov, int iovcnt) {
@@ -570,6 +641,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_CLOSE:    return sys_close(regs->ebx);
         case SYSCALL_EXIT:     return sys_exit(regs->ebx);
         case SYSCALL_GETDENTS: return sys_getdents(regs->ebx, (linux_dirent_t *)regs->ecx, regs->edx);
+        case SYSCALL_GETDENTS64: return sys_getdents64(regs->ebx, (void *)regs->ecx, regs->edx);
         case SYSCALL_GETPID:   return sys_getpid();
         case SYSCALL_FORK:     return sys_fork();
         case SYSCALL_EXEC:     return sys_exec((const char *)regs->ebx, (char **)regs->ecx);
@@ -577,6 +649,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_BRK:      return (int)sys_brk((void *)regs->ebx);
         case SYSCALL_SBRK:     return (int)sys_sbrk(regs->ebx);
         case SYSCALL_GETCWD:   return (int)sys_getcwd((char *)regs->ebx, regs->ecx);
+        case SYSCALL_READLINK: return sys_readlink((const char *)regs->ebx, (char *)regs->ecx, regs->edx);
         case SYSCALL_CHDIR:    return sys_chdir((const char *)regs->ebx);
         case SYSCALL_DUP:      return sys_dup(regs->ebx);
         case SYSCALL_DUP2:     return sys_dup2(regs->ebx, regs->ecx);

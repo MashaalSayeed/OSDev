@@ -68,6 +68,10 @@ int syscall_getdents(int fd, void *dirp, size_t count) {
     return syscall(SYSCALL_GETDENTS, fd, (int)dirp, count);
 }
 
+int syscall_getdents64(int fd, void *dirp, size_t count) {
+    return syscall(SYSCALL_GETDENTS64, fd, (int)dirp, count);
+}
+
 int syscall_fork() {
     return syscall(SYSCALL_FORK, 0, 0, 0);
 }
@@ -102,6 +106,10 @@ int syscall_stat(const char *path, stat_t *buf) {
 
 int syscall_fcntl(int fd, int cmd, int arg) {
     return syscall(SYSCALL_FCNTL, fd, cmd, arg);
+}
+
+int syscall_ioctl(int fd, int request, void *arg) {
+    return syscall(SYSCALL_IOCTL, fd, request, (int)arg);
 }
 
 /* -----------------------------------------------------------------------
@@ -140,7 +148,12 @@ void *syscall_sbrk(int incr) {
 }
 
 char *syscall_getcwd(char *buf, size_t size) {
-    return (char *)syscall(SYSCALL_GETCWD, (int)buf, size, 0);
+    int ret = syscall(SYSCALL_GETCWD, (int)buf, size, 0);
+    return ret < 0 ? NULL : buf;
+}
+
+int syscall_readlink(const char *path, char *buf, size_t bufsiz) {
+    return syscall(SYSCALL_READLINK, (int)path, (int)buf, bufsiz);
 }
 
 int syscall_chdir(const char *path) {

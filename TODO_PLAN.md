@@ -16,12 +16,11 @@
 ## Phase 1 — Core POSIX Syscall Layer (blocks most userspace programs)
 - [x] Signals — pending_signals + signal_handlers[], sys_signal, sys_kill, trampoline
 - [x] dup2 / fcntl(F_DUPFD) — shell redirection (>, >>, 2>&1), required by musl stdio
-- [ ] ioctl + TTY as VFS node — /DEV/TTY0, TIOCGWINSZ, TCGETS/TCSETS (blocks readline, editors)
+- [x] ioctl + TTY as VFS node — /DEV/TTY0, TIOCGWINSZ, TCGETS/TCSETS (blocks readline, editors)
 - [x] rename syscall — needed for editors (save-to-temp pattern)
-- [ ] Re-enable sys_input_read — wire keyboard into /DEV/KBD as VFS node
-- [ ] getdents64 — musl uses this, not getdents; directory listing breaks without it
-- [ ] sys_getcwd — musl calls this on startup, currently probably stubbed or broken
-- [ ] sys_readlink on /proc/self/exe — musl and many programs call this at startup
+- [x] getdents64 — musl uses this, not getdents; directory listing breaks without it
+- [x] sys_getcwd — musl calls this on startup, currently probably stubbed or broken
+- [x] sys_readlink on /proc/self/exe — musl and many programs call this at startup
 
 ## Phase 2 — Shell & Process Model
 - [ ] Signals delivered on schedule() — check pending_signals before returning to userspace

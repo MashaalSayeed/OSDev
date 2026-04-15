@@ -298,7 +298,7 @@ void parse_input(char *input, char **args) {
 }
 
 int is_valid_command(char *command) {
-    char *bin_commands[] = {"HELLO", "EDITOR", "TEST", "SHELL"};
+    char *bin_commands[] = {"HELLO", "EDITOR", "TEST", "SHELL", "TTYTEST"};
     for (size_t i = 0; i < sizeof(bin_commands) / sizeof(bin_commands[0]); i++) {
         if (strcmp(command, bin_commands[i]) == 0) {
             return 1;
@@ -370,7 +370,7 @@ void execute_command(char **args) {
     snprintf(path, sizeof(path), "/BIN/%s", args[0]);
     int pid = syscall_fork();
     if (pid == 0) {
-        printf("Executing command: %s\n", path);
+        // printf("Executing command: %s\n", path);
         if (syscall_exec(path, args) < 0) {
             printf("Error: Failed to execute command\n");
             syscall_exit(1); // Exit child process
@@ -393,11 +393,8 @@ void main() {
 	printf("\n");
     while (1) {
         printf("%s$ ", cwd);
-        // fgets(buffer, sizeof(buffer), stdin);
-        // read_input(buffer);
         readline(buffer, sizeof(buffer));
 
-        // printf("Command: %s\n", buffer);
         parse_input(buffer, args);
         execute_command(args);
     }

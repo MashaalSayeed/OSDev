@@ -34,4 +34,7 @@ void terminal_write(const char* data, size_t size);
 void terminal_clear_line(int start, int end);
 void terminal_clear(void);
 
+size_t terminal_get_width(void);
+size_t terminal_get_height(void);
+
 void scroll_terminal(void);

@@ -214,6 +214,16 @@ void terminal_clear()
     terminal_set_cursor(0, 0);
 }
 
+size_t terminal_get_width(void)
+{
+    return VGA_WIDTH;
+}
+
+size_t terminal_get_height(void)
+{
+    return VGA_HEIGHT;
+}
+
 void terminal_clear_line(int start, int end)
 {
     for (size_t x = start; x < end; x++) {
