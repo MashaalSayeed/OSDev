@@ -23,11 +23,11 @@
 - [x] sys_readlink on /proc/self/exe — musl and many programs call this at startup
 
 ## Phase 2 — Shell & Process Model
-- [ ] Signals delivered on schedule() — check pending_signals before returning to userspace
-- [ ] SIGCHLD + waitpid(-1) — shell needs to reap any child, not just a specific pid
+- [x] Signals delivered on schedule() — check pending_signals before returning to userspace
+- [x] SIGCHLD + waitpid(-1) — shell needs to reap any child, not just a specific pid
 - [ ] pipe + dup2 plumbing — shell pipelines (cmd1 | cmd2)
 - [ ] /DEV/NULL and /DEV/ZERO — many programs open these unconditionally
-- [ ] environ / execve envp — pass environment to exec'd processes
+- [x] environ / execve envp — pass environment to exec'd processes
 - [ ] Session/pgrp stubs — sys_setsid, sys_getpgrp (musl calls these, can be no-ops for now)
 
 ## Phase 3 — Filesystem Hardening

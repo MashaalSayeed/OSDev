@@ -30,7 +30,7 @@ void launch_app(const char *path) {
     int pid = syscall_fork();
     if (pid == 0) {
         syscall_close(wm_fd);   /* don't leak compositor's fd to child */
-        syscall_exec(path, NULL);
+        syscall_exec(path, NULL, NULL);
         syscall_exit(1);
     }
 }

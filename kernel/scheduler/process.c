@@ -102,6 +102,26 @@ process_t* get_process(size_t pid) {
     return NULL;
 }
 
+process_t* find_child_process(process_t *parent) {
+    if (!parent) return NULL;
+    process_t *temp = process_list;
+    while (temp) {
+        if (temp->parent == parent) return temp;
+        temp = temp->next;
+    }
+    return NULL;
+}
+
+process_t* find_zombie_child(process_t *parent) {
+    if (!parent) return NULL;
+    process_t *temp = process_list;
+    while (temp) {
+        if (temp->parent == parent && temp->status == ZOMBIE) return temp;
+        temp = temp->next;
+    }
+    return NULL;
+}
+
 int proc_alloc_fd(process_t *proc, vfs_file_t *file) {
     for (int fd = 3; fd < MAX_OPEN_FILES; fd++) {
         if (proc->fds[fd] == NULL) {
@@ -300,7 +320,15 @@ void kill_process(process_t *process, int status) {
     // wake up parent if waiting
     if (!wait_queue_empty(&process->wait_queue)) {
         wait_queue_wake_all(&process->wait_queue);
-    } else if (!process->parent) {
+    }
+
+    if (process->parent) {
+        process_t *parent = process->parent;
+        if (parent->signal_handlers[SIGCHLD].handler != SIG_IGN) {
+            parent->pending_signals |= (1u << SIGCHLD);
+        }
+        wait_queue_wake_all(&parent->wait_queue);
+    } else {
         cleanup_process(process);
     }
 
@@ -433,27 +461,54 @@ int fork(registers_t *regs) {
 #define AT_NULL   0
 #define AT_PAGESZ 6
 // Returns the final user esp, or 0 on failure
-static uint32_t build_user_stack(page_directory_t *dir, char **argv, int argc) {
+static uint32_t build_user_stack(page_directory_t *dir, char **argv, int argc, char **envp, int envc) {
     uint32_t u_esp = USER_STACK_TOP;
     uint32_t zero  = 0;
 
     // ── 1. String data ────────────────────────────────────────────────────────
     uint32_t u_strings = 0;
-    uint32_t *str_addrs = NULL;  // user-space address of each argv[i] string
+    uint32_t *argv_addrs = NULL;
+    uint32_t *env_addrs = NULL;
+    size_t total_len = 0;
 
-    if (argc > 0) {
-        // Calculate total and copy strings to top of stack
-        size_t total_len = 0;
-        for (int i = 0; i < argc; i++) total_len += strlen(argv[i]) + 1;
+    for (int i = 0; i < argc; i++) total_len += strlen(argv[i]) + 1;
+    for (int i = 0; i < envc; i++) total_len += strlen(envp[i]) + 1;
 
+    if (total_len > 0) {
         char *k_strings = kmalloc(total_len);
         if (!k_strings) return 0;
 
+        if (argc > 0) {
+            argv_addrs = kmalloc(argc * sizeof(uint32_t));
+            if (!argv_addrs) {
+                kfree(k_strings);
+                return 0;
+            }
+        }
+        if (envc > 0) {
+            env_addrs = kmalloc(envc * sizeof(uint32_t));
+            if (!env_addrs) {
+                if (argv_addrs) kfree(argv_addrs);
+                kfree(k_strings);
+                return 0;
+            }
+        }
+
         char *ptr = k_strings;
+        uint32_t off = 0;
         for (int i = 0; i < argc; i++) {
             size_t len = strlen(argv[i]) + 1;
             memcpy(ptr, argv[i], len);
+            argv_addrs[i] = off;
             ptr += len;
+            off += len;
+        }
+        for (int i = 0; i < envc; i++) {
+            size_t len = strlen(envp[i]) + 1;
+            memcpy(ptr, envp[i], len);
+            env_addrs[i] = off;
+            ptr += len;
+            off += len;
         }
 
         u_esp    -= total_len;
@@ -462,14 +517,8 @@ static uint32_t build_user_stack(page_directory_t *dir, char **argv, int argc) {
         copy_to_user(dir, u_strings, k_strings, total_len);
         kfree(k_strings);
 
-        // Record user-space address of each string
-        str_addrs = kmalloc(argc * sizeof(uint32_t));
-        if (!str_addrs) return 0;
-        uint32_t off = 0;
-        for (int i = 0; i < argc; i++) {
-            str_addrs[i] = u_strings + off;
-            off += strlen(argv[i]) + 1;
-        }
+        for (int i = 0; i < argc; i++) argv_addrs[i] = u_strings + argv_addrs[i];
+        for (int i = 0; i < envc; i++) env_addrs[i] = u_strings + env_addrs[i];
     }
 
     // ── 2. Aux vector ─────────────────────────────────────────────────────────
@@ -480,23 +529,31 @@ static uint32_t build_user_stack(page_directory_t *dir, char **argv, int argc) {
     u_esp &= ~0xF;
     copy_to_user(dir, u_esp, auxv, sizeof(auxv));
 
-    // ── 3. envp: NULL (no environment) ───────────────────────────────────────
+    // ── 3. envp NULL terminator ─────────────────────────────────────────────
     u_esp -= 4;
     copy_to_user(dir, u_esp, &zero, 4);
 
-    // ── 4. argv[argc] = NULL terminator ──────────────────────────────────────
-    u_esp -= 4;
-    copy_to_user(dir, u_esp, &zero, 4);
-
-    // ── 5. argv[0..argc-1] — push in reverse so argv[0] at lowest addr ───────
-    for (int i = argc - 1; i >= 0; i--) {
+    // ── 4. envp[0..envc-1] — push in reverse ─────────────────────────────────
+    for (int i = envc - 1; i >= 0; i--) {
         u_esp -= 4;
-        uint32_t uptr = str_addrs[i];
+        uint32_t uptr = env_addrs[i];
         copy_to_user(dir, u_esp, &uptr, 4);
     }
-    if (str_addrs) kfree(str_addrs);
 
-    // ── 6. argc ───────────────────────────────────────────────────────────────
+    // ── 5. argv NULL terminator ─────────────────────────────────────────────
+    u_esp -= 4;
+    copy_to_user(dir, u_esp, &zero, 4);
+
+    // ── 6. argv[0..argc-1] — push in reverse ────────────────────────────────
+    for (int i = argc - 1; i >= 0; i--) {
+        u_esp -= 4;
+        uint32_t uptr = argv_addrs[i];
+        copy_to_user(dir, u_esp, &uptr, 4);
+    }
+    if (argv_addrs) kfree(argv_addrs);
+    if (env_addrs) kfree(env_addrs);
+
+    // ── 7. argc ───────────────────────────────────────────────────────────────
     // u_esp &= ~0xF;
     u_esp -= 4;
     copy_to_user(dir, u_esp, &argc, 4);
@@ -509,7 +566,7 @@ static uint32_t build_user_stack(page_directory_t *dir, char **argv, int argc) {
     return u_esp;
 }
 
-int exec(const char *path, char **argv) {
+int exec(const char *path, char **argv, char **envp) {
     asm volatile ("cli");
 
     process_t        *proc        = get_current_process();
@@ -527,13 +584,17 @@ int exec(const char *path, char **argv) {
         goto fail;
     }
 
-    // ── 2. Count argv (already kernel pointers from sys_exec) ────────────────
+    // ── 2. Count argv/envp (already kernel pointers from sys_exec) ───────────
     int argc = 0;
-    size_t total_len = 0;
+    int envc = 0;
     if (argv) {
         while (argv[argc]) {
-            total_len += strlen(argv[argc]) + 1;
             argc++;
+        }
+    }
+    if (envp) {
+        while (envp[envc]) {
+            envc++;
         }
     }
 
@@ -588,11 +649,12 @@ int exec(const char *path, char **argv) {
     //   [ string data        ]
     //   [ auxv: AT_PAGESZ,4096, AT_NULL,0 ]
     //   [ NULL               ]  ← end of envp
-    //   [ NULL               ]  ← end of argv (or argv ptrs if argc>0)
+    //   [ envp[0..m-1] ptrs  ]
+    //   [ NULL               ]  ← end of argv
     //   [ argv[0..n-1] ptrs  ]
     //   [ argc               ]  ← esp on entry to _start
 
-    uint32_t u_esp = build_user_stack(proc->root_page_table, argv, argc);
+    uint32_t u_esp = build_user_stack(proc->root_page_table, argv, argc, envp, envc);
     if (!u_esp) {
         kprintf(ERROR, "exec: failed to build user stack\n");
         goto fail;

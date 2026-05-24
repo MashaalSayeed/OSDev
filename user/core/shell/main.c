@@ -371,7 +371,7 @@ void execute_command(char **args) {
     int pid = syscall_fork();
     if (pid == 0) {
         // printf("Executing command: %s\n", path);
-        if (syscall_exec(path, args) < 0) {
+        if (syscall_exec(path, args, NULL) < 0) {
             printf("Error: Failed to execute command\n");
             syscall_exit(1); // Exit child process
         }

@@ -7,12 +7,12 @@
 
 sighandler_t signal(int sig, sighandler_t handler)
 {
-       return (sighandler_t)syscall_signal(sig, (uint32_t)handler);
+    return (sighandler_t)syscall_signal(sig, (uint32_t)handler);
 }
 
 int raise(int sig)
 {
-       return syscall_kill(syscall_getpid(), sig);
+    return syscall_kill(syscall_getpid(), sig);
 }
 
 // ── Test framework ────────────────────────────────────────────────────────────
@@ -21,402 +21,475 @@ static int tests_run = 0;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define PASS(name)                           \
-       do                                    \
-       {                                     \
-              printf("  [PASS] %s\n", name); \
-              tests_passed++;                \
-              tests_run++;                   \
-       } while (0)
+#define PASS(name)                     \
+    do                                 \
+    {                                  \
+        printf("  [PASS] %s\n", name); \
+        tests_passed++;                \
+        tests_run++;                   \
+    } while (0)
 
-#define FAIL(name, reason)                                \
-       do                                                 \
-       {                                                  \
-              printf("  [FAIL] %s — %s\n", name, reason); \
-              tests_failed++;                             \
-              tests_run++;                                \
-       } while (0)
+#define FAIL(name, reason)                          \
+    do                                              \
+    {                                               \
+        printf("  [FAIL] %s — %s\n", name, reason); \
+        tests_failed++;                             \
+        tests_run++;                                \
+    } while (0)
 
-#define CHECK(name, cond, reason)        \
-       do                                \
-       {                                 \
-              if (cond)                  \
-                     PASS(name);         \
-              else                       \
-                     FAIL(name, reason); \
-       } while (0)
+#define CHECK(name, cond, reason) \
+    do                            \
+    {                             \
+        if (cond)                 \
+            PASS(name);           \
+        else                      \
+            FAIL(name, reason);   \
+    } while (0)
 
 static void print_summary()
 {
-       printf("\n============================\n");
-       printf("  %d/%d passed", tests_passed, tests_run);
-       if (tests_failed)
-              printf(", %d FAILED", tests_failed);
-       printf("\n============================\n");
+    printf("\n============================\n");
+    printf("  %d/%d passed", tests_passed, tests_run);
+    if (tests_failed)
+        printf(", %d FAILED", tests_failed);
+    printf("\n============================\n");
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 static int file_exists(const char *path)
 {
-       int fd = syscall_open(path, O_RDONLY);
-       if (fd >= 0)
-       {
-              syscall_close(fd);
-              return 1;
-       }
-       return 0;
+    int fd = syscall_open(path, O_RDONLY);
+    if (fd >= 0)
+    {
+        syscall_close(fd);
+        return 1;
+    }
+    return 0;
 }
 
 static int read_file_contents(int fd, char *buf, int len)
 {
-       int n = syscall_read(fd, buf, len - 1);
-       buf[n < 0 ? 0 : n] = '\0';
-       return n;
+    int n = syscall_read(fd, buf, len - 1);
+    buf[n < 0 ? 0 : n] = '\0';
+    return n;
 }
 
 static void setup_test_files()
 {
-       int fd = syscall_open("/home/TEST.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-       if (fd >= 0)
-       {
-              syscall_write(fd, "ABCDEFGHIJKLMNOP", 16);
-              syscall_close(fd);
-       }
+    int fd = syscall_open("/home/TEST.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd >= 0)
+    {
+        syscall_write(fd, "ABCDEFGHIJKLMNOP", 16);
+        syscall_close(fd);
+    }
 }
 
 // ── Test suites ───────────────────────────────────────────────────────────────
 
 static void test_dup_basic()
 {
-       printf("\n[dup]\n");
+    printf("\n[dup]\n");
 
-       // Setup: need a readable file
-       if (!file_exists("/home/TEST.TXT"))
-       {
-              printf("  SKIP: /home/TEST.TXT not found\n");
-              return;
-       }
+    // Setup: need a readable file
+    if (!file_exists("/home/TEST.TXT"))
+    {
+        printf("  SKIP: /home/TEST.TXT not found\n");
+        return;
+    }
 
-       // Test 1: dup returns a new distinct fd
-       int fd1 = syscall_open("/home/TEST.TXT", O_RDONLY);
-       int fd2 = syscall_dup(fd1);
-       CHECK("dup returns new fd", fd2 >= 0, "dup failed");
-       CHECK("dup fd is distinct", fd2 != fd1, "returned same fd");
+    // Test 1: dup returns a new distinct fd
+    int fd1 = syscall_open("/home/TEST.TXT", O_RDONLY);
+    int fd2 = syscall_dup(fd1);
+    CHECK("dup returns new fd", fd2 >= 0, "dup failed");
+    CHECK("dup fd is distinct", fd2 != fd1, "returned same fd");
 
-       // Test 2: dup shares file offset
-       char buf1[16], buf2[16];
-       int n1 = syscall_read(fd1, buf1, 8);
-       int n2 = syscall_read(fd2, buf2, 8);
-       buf1[n1 < 0 ? 0 : n1] = '\0';
-       buf2[n2 < 0 ? 0 : n2] = '\0';
-       CHECK("dup shares offset",
-             n1 > 0 && n2 > 0 && buf1[0] != buf2[0],
-             "both reads returned same data — offset not shared");
+    // Test 2: dup shares file offset
+    char buf1[16], buf2[16];
+    int n1 = syscall_read(fd1, buf1, 8);
+    int n2 = syscall_read(fd2, buf2, 8);
+    buf1[n1 < 0 ? 0 : n1] = '\0';
+    buf2[n2 < 0 ? 0 : n2] = '\0';
+    CHECK("dup shares offset",
+          n1 > 0 && n2 > 0 && buf1[0] != buf2[0],
+          "both reads returned same data — offset not shared");
 
-       // Test 3: fd2 survives close of fd1
-       syscall_close(fd1);
-       char buf3[16];
-       int n3 = syscall_read(fd2, buf3, 4);
-       CHECK("dup survives original close", n3 >= 0, "read failed after closing fd1");
-       syscall_close(fd2);
+    // Test 3: fd2 survives close of fd1
+    syscall_close(fd1);
+    char buf3[16];
+    int n3 = syscall_read(fd2, buf3, 4);
+    CHECK("dup survives original close", n3 >= 0, "read failed after closing fd1");
+    syscall_close(fd2);
 
-       // Test 4: dup on invalid fd fails
-       int bad = syscall_dup(-1);
-       CHECK("dup invalid fd fails", bad < 0, "expected failure, got success");
+    // Test 4: dup on invalid fd fails
+    int bad = syscall_dup(-1);
+    CHECK("dup invalid fd fails", bad < 0, "expected failure, got success");
 }
 
 static void test_dup2()
 {
-       printf("\n[dup2]\n");
+    printf("\n[dup2]\n");
 
-       if (!file_exists("/home/TEST.TXT"))
-       {
-              printf("  SKIP: /home/TEST.TXT not found\n");
-              return;
-       }
+    if (!file_exists("/home/TEST.TXT"))
+    {
+        printf("  SKIP: /home/TEST.TXT not found\n");
+        return;
+    }
 
-       int fd = syscall_open("/home/TEST.TXT", O_RDONLY);
+    int fd = syscall_open("/home/TEST.TXT", O_RDONLY);
 
-       // Test 1: dup2 to specific fd number
-       int r = syscall_dup2(fd, 10);
-       CHECK("dup2 to fd 10", r == 10, "wrong fd returned");
-       CHECK("dup2 fd 10 readable", ({
-                    char b[8];
-                    syscall_read(10, b, 4) > 0;
-             }),
-             "read on dup2 fd failed");
-       syscall_close(10);
+    // Test 1: dup2 to specific fd number
+    int r = syscall_dup2(fd, 10);
+    CHECK("dup2 to fd 10", r == 10, "wrong fd returned");
+    CHECK("dup2 fd 10 readable", ({
+              char b[8];
+              syscall_read(10, b, 4) > 0;
+          }),
+          "read on dup2 fd failed");
+    syscall_close(10);
 
-       // Test 2: dup2 oldfd==newfd is a no-op
-       int r2 = syscall_dup2(fd, fd);
-       CHECK("dup2 oldfd==newfd", r2 == fd, "should return fd unchanged");
+    // Test 2: dup2 oldfd==newfd is a no-op
+    int r2 = syscall_dup2(fd, fd);
+    CHECK("dup2 oldfd==newfd", r2 == fd, "should return fd unchanged");
 
-       // Test 3: dup2 closes target fd first
-       int fd2 = syscall_open("/home/TEST.TXT", O_RDONLY);
-       int target = fd2;
-       int r3 = syscall_dup2(fd, fd2);
-       CHECK("dup2 closes target", r3 == target, "wrong fd returned");
-       syscall_close(target);
+    // Test 3: dup2 closes target fd first
+    int fd2 = syscall_open("/home/TEST.TXT", O_RDONLY);
+    int target = fd2;
+    int r3 = syscall_dup2(fd, fd2);
+    CHECK("dup2 closes target", r3 == target, "wrong fd returned");
+    syscall_close(target);
 
-       // Test 4: dup2 onto invalid newfd fails
-       int r4 = syscall_dup2(fd, -1);
-       CHECK("dup2 invalid newfd", r4 < 0, "expected failure");
+    // Test 4: dup2 onto invalid newfd fails
+    int r4 = syscall_dup2(fd, -1);
+    CHECK("dup2 invalid newfd", r4 < 0, "expected failure");
 
-       syscall_close(fd);
+    syscall_close(fd);
 }
 
 static void test_fcntl()
 {
-       printf("\n[fcntl]\n");
+    printf("\n[fcntl]\n");
 
-       if (!file_exists("/home/TEST.TXT"))
-       {
-              printf("  SKIP: /home/TEST.TXT not found\n");
-              return;
-       }
+    if (!file_exists("/home/TEST.TXT"))
+    {
+        printf("  SKIP: /home/TEST.TXT not found\n");
+        return;
+    }
 
-       int fd = syscall_open("/home/TEST.TXT", O_RDONLY);
+    int fd = syscall_open("/home/TEST.TXT", O_RDONLY);
 
-       // Test 1: F_DUPFD returns fd >= minimum
-       int r = syscall_fcntl(fd, F_DUPFD, 20);
-       CHECK("F_DUPFD >= 20", r >= 20, "returned fd below minimum");
-       CHECK("F_DUPFD readable", ({
-                    char b[8];
-                    syscall_read(r, b, 4) > 0;
-             }),
-             "read on F_DUPFD fd failed");
-       syscall_close(r);
+    // Test 1: F_DUPFD returns fd >= minimum
+    int r = syscall_fcntl(fd, F_DUPFD, 20);
+    CHECK("F_DUPFD >= 20", r >= 20, "returned fd below minimum");
+    CHECK("F_DUPFD readable", ({
+              char b[8];
+              syscall_read(r, b, 4) > 0;
+          }),
+          "read on F_DUPFD fd failed");
+    syscall_close(r);
 
-       // Test 2: F_DUPFD with min=0 returns lowest available
-       int r2 = syscall_fcntl(fd, F_DUPFD, 0);
-       CHECK("F_DUPFD min=0", r2 >= 0, "failed");
-       syscall_close(r2);
+    // Test 2: F_DUPFD with min=0 returns lowest available
+    int r2 = syscall_fcntl(fd, F_DUPFD, 0);
+    CHECK("F_DUPFD min=0", r2 >= 0, "failed");
+    syscall_close(r2);
 
-       // Test 3: F_GETFD (get fd flags)
-       int flags = syscall_fcntl(fd, F_GETFD, 0);
-       CHECK("F_GETFD succeeds", flags >= 0, "failed");
+    // Test 3: F_GETFD (get fd flags)
+    int flags = syscall_fcntl(fd, F_GETFD, 0);
+    CHECK("F_GETFD succeeds", flags >= 0, "failed");
 
-       syscall_close(fd);
+    syscall_close(fd);
 }
 
 static void test_stdout_redirect()
 {
-       printf("\n[stdout redirect]\n");
+    printf("\n[stdout redirect]\n");
 
-       const char *outpath = "/home/DUP_OUT.TXT";
-       const char *marker = "redirect_test_marker";
+    const char *outpath = "/home/DUP_OUT.TXT";
+    const char *marker = "redirect_test_marker";
 
-       int out = syscall_open(outpath, O_WRONLY | O_CREAT | O_TRUNC);
-       if (out < 0)
-       {
-              printf("  SKIP: cannot create output file\n");
-              return;
-       }
+    int out = syscall_open(outpath, O_WRONLY | O_CREAT | O_TRUNC);
+    if (out < 0)
+    {
+        printf("  SKIP: cannot create output file\n");
+        return;
+    }
 
-       int saved = syscall_dup(1);
-       syscall_dup2(out, 1);
-       syscall_close(out);
+    int saved = syscall_dup(1);
+    syscall_dup2(out, 1);
+    syscall_close(out);
 
-       printf("%s\n", marker); // goes to file
+    printf("%s\n", marker); // goes to file
 
-       syscall_dup2(saved, 1);
-       syscall_close(saved);
+    syscall_dup2(saved, 1);
+    syscall_close(saved);
 
-       // Verify file contains the marker
-       int fd = syscall_open(outpath, O_RDONLY);
-       char buf[64];
-       int n = read_file_contents(fd, buf, sizeof(buf));
-       syscall_close(fd);
+    // Verify file contains the marker
+    int fd = syscall_open(outpath, O_RDONLY);
+    char buf[64];
+    int n = read_file_contents(fd, buf, sizeof(buf));
+    syscall_close(fd);
 
-       CHECK("redirect wrote to file", n > 0, "file is empty");
-       CHECK("redirect correct content", strncmp(buf, marker, strlen(marker)) == 0,
-             "file content mismatch");
+    CHECK("redirect wrote to file", n > 0, "file is empty");
+    CHECK("redirect correct content", strncmp(buf, marker, strlen(marker)) == 0,
+          "file content mismatch");
 }
 
 static void test_refcount()
 {
-       printf("\n[fd refcount]\n");
+    printf("\n[fd refcount]\n");
 
-       if (!file_exists("/home/TEST.TXT"))
-       {
-              printf("  SKIP: /home/TEST.TXT not found\n");
-              return;
-       }
+    if (!file_exists("/home/TEST.TXT"))
+    {
+        printf("  SKIP: /home/TEST.TXT not found\n");
+        return;
+    }
 
-       int fd1 = syscall_open("/home/TEST.TXT", O_RDONLY);
-       int fd2 = syscall_dup(fd1);
-       int fd3 = syscall_dup(fd1);
+    int fd1 = syscall_open("/home/TEST.TXT", O_RDONLY);
+    int fd2 = syscall_dup(fd1);
+    int fd3 = syscall_dup(fd1);
 
-       syscall_close(fd1);
-       CHECK("file open after 1 close", ({ char b[4]; syscall_read(fd2, b, 1) >= 0; }),
-             "file closed too early");
+    syscall_close(fd1);
+    CHECK("file open after 1 close", ({ char b[4]; syscall_read(fd2, b, 1) >= 0; }),
+          "file closed too early");
 
-       syscall_close(fd2);
-       CHECK("file open after 2 closes", ({ char b[4]; syscall_read(fd3, b, 1) >= 0; }),
-             "file closed too early");
+    syscall_close(fd2);
+    CHECK("file open after 2 closes", ({ char b[4]; syscall_read(fd3, b, 1) >= 0; }),
+          "file closed too early");
 
-       syscall_close(fd3);
+    syscall_close(fd3);
 
-       // All refs gone — further close should fail
-       int ret = syscall_close(fd3);
-       CHECK("close after all refs gone", ret < 0, "expected -1, got success");
+    // All refs gone — further close should fail
+    int ret = syscall_close(fd3);
+    CHECK("close after all refs gone", ret < 0, "expected -1, got success");
 
-       // All refs gone — read should fail
-       char buf[4];
-       int r = syscall_read(fd3, buf, 1);
-       CHECK("read after all refs gone", r < 0, "expected -1, got success");
+    // All refs gone — read should fail
+    char buf[4];
+    int r = syscall_read(fd3, buf, 1);
+    CHECK("read after all refs gone", r < 0, "expected -1, got success");
 }
 
 // ── Signal tests ──────────────────────────────────────────────────────────────
 
 static volatile int sig_received = 0;
 static volatile int sig_number = 0;
+static volatile int sigchld_seen = 0;
 
 static void sigusr1_handler(int sig)
 {
-       sig_received = 1;
-       sig_number = sig;
+    sig_received = 1;
+    sig_number = sig;
 }
 
 static void sigterm_handler(int sig)
 {
-       // should not be called in our test — we re-raise after blocking
-       sig_received = 99;
+    // should not be called in our test — we re-raise after blocking
+    sig_received = 99;
+}
+
+static void sigchld_handler(int sig)
+{
+    (void)sig;
+    sigchld_seen = 1;
 }
 
 static void test_signals()
 {
-       printf("\n[signals]\n");
+    printf("\n[signals]\n");
 
-       // Test 1: basic SIGUSR1 delivery via sys_kill to self
-       sig_received = 0;
-       signal(SIGUSR1, sigusr1_handler);
-       syscall_kill(syscall_getpid(), SIGUSR1);
+    // Test 1: basic SIGUSR1 delivery via sys_kill to self
+    sig_received = 0;
+    signal(SIGUSR1, sigusr1_handler);
+    syscall_kill(syscall_getpid(), SIGUSR1);
 
-       // spin briefly — signal delivered on next kernel exit
-       for (volatile int i = 0; i < 100000 && !sig_received; i++)
-       {
-              syscall_yield(); // yield to kernel to process signal
-       }
+    // spin briefly — signal delivered on next kernel exit
+    for (volatile int i = 0; i < 100000 && !sig_received; i++)
+    {
+        syscall_yield(); // yield to kernel to process signal
+    }
 
-       CHECK("SIGUSR1 self-delivery", sig_received == 1, "handler not called");
-       CHECK("SIGUSR1 correct signum", sig_number == SIGUSR1, "wrong signal number");
+    CHECK("SIGUSR1 self-delivery", sig_received == 1, "handler not called");
+    CHECK("SIGUSR1 correct signum", sig_number == SIGUSR1, "wrong signal number");
 
-       // Test 2: SIG_IGN suppresses signal
-       sig_received = 0;
-       signal(SIGUSR1, SIG_IGN);
-       syscall_kill(syscall_getpid(), SIGUSR1);
-       for (volatile int i = 0; i < 100000; i++)
-              ;
-       CHECK("SIG_IGN suppresses", sig_received == 0, "handler called despite SIG_IGN");
+    // Test 2: SIG_IGN suppresses signal
+    sig_received = 0;
+    signal(SIGUSR1, SIG_IGN);
+    syscall_kill(syscall_getpid(), SIGUSR1);
+    for (volatile int i = 0; i < 100000; i++)
+        ;
+    CHECK("SIG_IGN suppresses", sig_received == 0, "handler called despite SIG_IGN");
 
-       // Test 3: SIG_DFL restores default — SIGUSR1 default is terminate
-       // Test in a child so we don't kill ourselves
-       signal(SIGUSR1, SIG_DFL);
-       int pid = syscall_fork();
-       if (pid == 0)
-       {
-              signal(SIGUSR1, SIG_DFL);
-              // spin — parent will kill us
-              for (volatile int i = 0; i < 10000000; i++)
-              {
-                     syscall_yield();
-              }
-              syscall_exit(0); // should not reach here
-       }
-       else
-       {
-              syscall_kill(pid, SIGUSR1);
-              int status = 0;
-              syscall_waitpid(pid, &status, 0);
-              // Child should have been killed by signal — exit code = signal number
-              CHECK("SIG_DFL terminates process", status == SIGUSR1, "wrong exit status");
-       }
+    // Test 3: SIG_DFL restores default — SIGUSR1 default is terminate
+    // Test in a child so we don't kill ourselves
+    signal(SIGUSR1, SIG_DFL);
+    int pid = syscall_fork();
+    if (pid == 0)
+    {
+        signal(SIGUSR1, SIG_DFL);
+        // spin — parent will kill us
+        for (volatile int i = 0; i < 10000000; i++)
+        {
+            syscall_yield();
+        }
+        syscall_exit(0); // should not reach here
+    }
+    else
+    {
+        syscall_kill(pid, SIGUSR1);
+        int status = 0;
+        syscall_waitpid(pid, &status, 0);
+        // Child should have been killed by signal — exit code = signal number
+        CHECK("SIG_DFL terminates process", status == SIGUSR1, "wrong exit status");
+    }
 
-       // Test 4: SIGUSR1 handler survives across fork (child gets copy)
-       sig_received = 0;
-       signal(SIGUSR1, sigusr1_handler);
-       pid = syscall_fork();
-       if (pid == 0)
-       {
-              // Child sends signal to itself
-              syscall_kill(syscall_getpid(), SIGUSR1);
-              for (volatile int i = 0; i < 100000 && !sig_received; i++)
-              {
-                     syscall_yield();
-              }
-              syscall_exit(sig_received ? 42 : 1);
-       }
-       else
-       {
-              int status = 0;
-              syscall_waitpid(pid, &status, 0);
-              CHECK("signal handler inherited by fork", status == 42, "child handler not called");
-       }
+    // Test 4: SIGUSR1 handler survives across fork (child gets copy)
+    sig_received = 0;
+    signal(SIGUSR1, sigusr1_handler);
+    pid = syscall_fork();
+    if (pid == 0)
+    {
+        // Child sends signal to itself
+        syscall_kill(syscall_getpid(), SIGUSR1);
+        for (volatile int i = 0; i < 100000 && !sig_received; i++)
+        {
+            syscall_yield();
+        }
+        syscall_exit(sig_received ? 42 : 1);
+    }
+    else
+    {
+        int status = 0;
+        syscall_waitpid(pid, &status, 0);
+        CHECK("signal handler inherited by fork", status == 42, "child handler not called");
+    }
 
-       // Test 5: signal handler reset to SIG_DFL after exec
-       // (handlers are cleared in exec — tested implicitly by test 3 working)
+    // Test 5: signal handler reset to SIG_DFL after exec
+    // (handlers are cleared in exec — tested implicitly by test 3 working)
 
-       // Test 6: parent sends SIGUSR2 to child, child handles it and exits cleanly
-       pid = syscall_fork();
-       if (pid == 0)
-       {
-              sig_received = 0;
-              signal(SIGUSR2, sigusr1_handler); // reuse handler
+    // Test 6: parent sends SIGUSR2 to child, child handles it and exits cleanly
+    pid = syscall_fork();
+    if (pid == 0)
+    {
+        sig_received = 0;
+        signal(SIGUSR2, sigusr1_handler); // reuse handler
 
-              // Tell the parent we're ready by sending SIGUSR1
-              syscall_kill(syscall_getppid(), SIGUSR1);
-              for (volatile int i = 0; i < 10000000 && !sig_received; i++)
-              {
-                     syscall_yield();
-              }
-              syscall_exit(sig_received ? 0 : 1);
-       }
-       else
-       {
-              sig_received = 0;
-              signal(SIGUSR1, sigusr1_handler);
-              // Give child time to register handler
-              for (volatile int i = 0; i < 100000 && !sig_received; i++)
-              {
-                     syscall_yield();
-              }
-              signal(SIGUSR1, SIG_DFL);
-              syscall_kill(pid, SIGUSR2);
-              int status = 0;
-              syscall_waitpid(pid, &status, 0);
-              CHECK("SIGUSR2 parent→child delivery", status == 0, "child did not receive signal");
-       }
+        // Tell the parent we're ready by sending SIGUSR1
+        syscall_kill(syscall_getppid(), SIGUSR1);
+        int got_sig = 0;
+        for (volatile int i = 0; i < 10000000; i++)
+        {
+            syscall_yield();
+            if (sig_received)
+            {
+                got_sig = 1;
+                break;
+            }
+        }
+        syscall_exit(got_sig ? 0 : 1);
+    }
+    else
+    {
+        sig_received = 0;
+        signal(SIGUSR1, sigusr1_handler);
+        // Give child time to register handler
+        int ready = 0;
+        for (volatile int i = 0; i < 100000; i++)
+        {
+            syscall_yield();
+            if (sig_received)
+            {
+                ready = 1;
+                break;
+            }
+        }
+        signal(SIGUSR1, SIG_DFL);
+        if (ready)
+        {
+            syscall_kill(pid, SIGUSR2);
+        }
+        int status = 0;
+        syscall_waitpid(pid, &status, 0);
+        CHECK("SIGUSR1 child→parent ready", ready == 1, "parent never got SIGUSR1");
+        CHECK("SIGUSR2 parent→child delivery", status == 0, "child did not receive signal");
+    }
 
-       // Restore clean state
-       signal(SIGUSR1, SIG_DFL);
-       signal(SIGUSR2, SIG_DFL);
+    // Restore clean state
+    signal(SIGUSR1, SIG_DFL);
+    signal(SIGUSR2, SIG_DFL);
 }
 
+static void test_waitpid_any()
+{
+    printf("\n[waitpid(-1)]\n");
 
-static void test_vfs_basic() {
+    sigchld_seen = 0;
+    signal(SIGCHLD, sigchld_handler);
+
+    int pid1 = syscall_fork();
+    if (pid1 == 0)
+    {
+        syscall_exit(11);
+    }
+
+    int pid2 = syscall_fork();
+    if (pid2 == 0)
+    {
+        syscall_exit(22);
+    }
+
+    int status1 = 0;
+    int status2 = 0;
+    int got1 = syscall_waitpid(-1, &status1, 0);
+    int got2 = syscall_waitpid(-1, &status2, 0);
+
+    int ok_pid1 = (got1 == pid1 || got2 == pid1);
+    int ok_pid2 = (got1 == pid2 || got2 == pid2);
+
+    int ok_status1 = ((got1 == pid1 && status1 == 11) || (got2 == pid1 && status2 == 11));
+    int ok_status2 = ((got1 == pid2 && status1 == 22) || (got2 == pid2 && status2 == 22));
+
+    CHECK("waitpid(-1) reaps pid1", ok_pid1, "pid1 not reaped");
+    CHECK("waitpid(-1) reaps pid2", ok_pid2, "pid2 not reaped");
+    CHECK("waitpid(-1) status pid1", ok_status1, "wrong status for pid1");
+    CHECK("waitpid(-1) status pid2", ok_status2, "wrong status for pid2");
+
+    for (volatile int i = 0; i < 100000 && !sigchld_seen; i++)
+    {
+        syscall_yield();
+    }
+    CHECK("SIGCHLD delivered", sigchld_seen != 0, "SIGCHLD not observed");
+
+    signal(SIGCHLD, SIG_DFL);
+}
+
+static void test_vfs_basic()
+{
     printf("\n[vfs basic]\n");
 
     // ── Test 1: create and open file ─────────────────────────────────────────
     {
         int fd = syscall_open("/home/VFS_A.TXT", O_WRONLY | O_CREAT | O_TRUNC);
         CHECK("create file", fd >= 0, "open failed");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
         syscall_unlink("/home/VFS_A.TXT");
     }
 
     // ── Test 2: write and read back ───────────────────────────────────────────
     {
         int fd = syscall_open("/home/VFS_B.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP: cannot create\n"); goto t3; }
+        if (fd < 0)
+        {
+            printf("  SKIP: cannot create\n");
+            goto t3;
+        }
         int n = syscall_write(fd, "hello world", 11);
         CHECK("write returns count", n == 11, "wrong count");
         syscall_close(fd);
 
         fd = syscall_open("/home/VFS_B.TXT", O_RDONLY);
         CHECK("open after write", fd >= 0, "open failed");
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             char buf[16] = {0};
             n = syscall_read(fd, buf, sizeof(buf));
             CHECK("read back content", n == 11 && strncmp(buf, "hello world", 11) == 0,
@@ -431,7 +504,8 @@ t3:
     {
         int fd = syscall_open("/home/NOEXIST.TXT", O_RDONLY);
         CHECK("open nonexistent fails", fd < 0, "expected failure");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
     }
 
     // ── Test 4: O_CREAT creates file ─────────────────────────────────────────
@@ -440,19 +514,25 @@ t3:
         syscall_unlink("/home/VFSCREAT.TXT");
         int fd = syscall_open("/home/VFSCREAT.TXT", O_WRONLY | O_CREAT);
         CHECK("O_CREAT creates", fd >= 0, "failed to create");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
 
         // Should now exist
         fd = syscall_open("/home/VFSCREAT.TXT", O_RDONLY);
         CHECK("created file is readable", fd >= 0, "file not found");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
         syscall_unlink("/home/VFSCREAT.TXT");
     }
 
     // ── Test 5: O_TRUNC clears content ───────────────────────────────────────
     {
         int fd = syscall_open("/home/VFSTRUNC.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto t6; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto t6;
+        }
         syscall_write(fd, "original content here", 21);
         syscall_close(fd);
 
@@ -472,7 +552,11 @@ t6:
     // ── Test 6: close and reopen preserves data ───────────────────────────────
     {
         int fd = syscall_open("/home/VFSPERS.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); return; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            return;
+        }
         syscall_write(fd, "persistent", 10);
         syscall_close(fd);
 
@@ -486,13 +570,18 @@ t6:
     }
 }
 
-static void test_vfs_readwrite() {
+static void test_vfs_readwrite()
+{
     printf("\n[vfs read/write]\n");
 
     // ── Test 1: sequential writes ─────────────────────────────────────────────
     {
         int fd = syscall_open("/home/VFS_SEQ.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto rw2; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto rw2;
+        }
         syscall_write(fd, "AAA", 3);
         syscall_write(fd, "BBB", 3);
         syscall_write(fd, "CCC", 3);
@@ -511,7 +600,11 @@ rw2:
     // ── Test 2: partial read ──────────────────────────────────────────────────
     {
         int fd = syscall_open("/home/VFS_PART.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto rw3; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto rw3;
+        }
         syscall_write(fd, "ABCDEFGHIJ", 10);
         syscall_close(fd);
 
@@ -534,7 +627,11 @@ rw3:
     // ── Test 3: read past EOF ─────────────────────────────────────────────────
     {
         int fd = syscall_open("/home/VFS_EOF.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto rw4; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto rw4;
+        }
         syscall_write(fd, "SHORT", 5);
         syscall_close(fd);
 
@@ -550,18 +647,25 @@ rw4:
     // ── Test 4: large file (multi-cluster) ───────────────────────────────────
     {
         int fd = syscall_open("/home/VFSLARGE.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto rw5; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto rw5;
+        }
 
         // Write 8KB — should span multiple clusters (cluster size is typically 4KB)
         char pattern[512];
 
         int total_written = 0;
-        for (int chunk = 0; chunk < 16; chunk++) {
-            for (int i = 0; i < 512; i++) {
+        for (int chunk = 0; chunk < 16; chunk++)
+        {
+            for (int i = 0; i < 512; i++)
+            {
                 pattern[i] = 'A' + ((chunk * 512 + i) % 26);
             }
             int n = syscall_write(fd, pattern, 512);
-            if (n > 0) total_written += n;
+            if (n > 0)
+                total_written += n;
         }
         syscall_close(fd);
         CHECK("large file write", total_written == 8192, "wrong total written");
@@ -570,11 +674,15 @@ rw4:
         char rbuf[512];
         int total_read = 0;
         int correct = 1;
-        while (1) {
+        while (1)
+        {
             int n = syscall_read(fd, rbuf, sizeof(rbuf));
-            if (n <= 0) break;
-            for (int i = 0; i < n; i++) {
-                if (rbuf[i] != 'A' + ((total_read + i) % 26)) {
+            if (n <= 0)
+                break;
+            for (int i = 0; i < n; i++)
+            {
+                if (rbuf[i] != 'A' + ((total_read + i) % 26))
+                {
                     correct = 0;
                     break;
                 }
@@ -591,7 +699,11 @@ rw5:
     // ── Test 5: write to read-only fd fails ──────────────────────────────────
     {
         int fd = syscall_open("/home/VFSRDONL.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto rw6; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto rw6;
+        }
         syscall_write(fd, "data", 4);
         syscall_close(fd);
 
@@ -606,7 +718,11 @@ rw6:
     // ── Test 6: empty file read returns 0 ────────────────────────────────────
     {
         int fd = syscall_open("/home/VFSEMPTY.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); return; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            return;
+        }
         syscall_close(fd);
 
         fd = syscall_open("/home/VFSEMPTY.TXT", O_RDONLY);
@@ -682,23 +798,37 @@ rw6:
 //     syscall_unlink("/home/VFS_SEEK.TXT");
 // }
 
-static void test_vfs_getdents() {
+static void test_vfs_getdents()
+{
     printf("\n[vfs getdents]\n");
 
     // Setup — create a dir with known files
     syscall_mkdir("/home/DENTS_DIR", 0755);
     int fd = syscall_open("/home/DENTS_DIR/A.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-    if (fd >= 0) { syscall_write(fd, "a", 1); syscall_close(fd); }
+    if (fd >= 0)
+    {
+        syscall_write(fd, "a", 1);
+        syscall_close(fd);
+    }
     fd = syscall_open("/home/DENTS_DIR/B.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-    if (fd >= 0) { syscall_write(fd, "b", 1); syscall_close(fd); }
+    if (fd >= 0)
+    {
+        syscall_write(fd, "b", 1);
+        syscall_close(fd);
+    }
     fd = syscall_open("/home/DENTS_DIR/C.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-    if (fd >= 0) { syscall_write(fd, "c", 1); syscall_close(fd); }
+    if (fd >= 0)
+    {
+        syscall_write(fd, "c", 1);
+        syscall_close(fd);
+    }
 
     // ── Test 1: getdents returns entries ─────────────────────────────────────
     {
         fd = syscall_open("/home/DENTS_DIR", O_RDONLY);
         CHECK("open dir for getdents", fd >= 0, "open failed");
-        if (fd < 0) goto dents_cleanup;
+        if (fd < 0)
+            goto dents_cleanup;
 
         char buf[1024];
         int n = syscall_getdents(fd, buf, sizeof(buf));
@@ -709,7 +839,8 @@ static void test_vfs_getdents() {
     // ── Test 2: getdents finds our files ─────────────────────────────────────
     {
         fd = syscall_open("/home/DENTS_DIR", O_RDONLY);
-        if (fd < 0) goto dents_cleanup;
+        if (fd < 0)
+            goto dents_cleanup;
 
         char buf[1024];
         int n = syscall_getdents(fd, buf, sizeof(buf));
@@ -717,16 +848,21 @@ static void test_vfs_getdents() {
 
         int found_a = 0, found_b = 0, found_c = 0;
         int offset = 0;
-        while (offset < n) {
-              linux_dirent_t *d = (struct linux_dirent *)(buf + offset);
+        while (offset < n)
+        {
+            linux_dirent_t *d = (struct linux_dirent *)(buf + offset);
             if (strncmp(d->d_name, "A.TXT", 5) == 0 ||
-                strncmp(d->d_name, "A     TXT", 8) == 0) found_a = 1;
+                strncmp(d->d_name, "A     TXT", 8) == 0)
+                found_a = 1;
             if (strncmp(d->d_name, "B.TXT", 5) == 0 ||
-                strncmp(d->d_name, "B     TXT", 8) == 0) found_b = 1;
+                strncmp(d->d_name, "B     TXT", 8) == 0)
+                found_b = 1;
             if (strncmp(d->d_name, "C.TXT", 5) == 0 ||
-                strncmp(d->d_name, "C     TXT", 8) == 0) found_c = 1;
+                strncmp(d->d_name, "C     TXT", 8) == 0)
+                found_c = 1;
             offset += d->d_reclen;
-            if (d->d_reclen == 0) break;
+            if (d->d_reclen == 0)
+                break;
         }
         CHECK("getdents finds A.TXT", found_a, "A.TXT not found");
         CHECK("getdents finds B.TXT", found_b, "B.TXT not found");
@@ -736,7 +872,8 @@ static void test_vfs_getdents() {
     // ── Test 3: getdents on file fails ───────────────────────────────────────
     {
         fd = syscall_open("/home/DENTS_DIR/A.TXT", O_RDONLY);
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             char buf[256];
             int n = syscall_getdents(fd, buf, sizeof(buf));
             CHECK("getdents on file fails", n < 0, "expected failure");
@@ -751,7 +888,8 @@ dents_cleanup:
     syscall_rmdir("/home/DENTS_DIR");
 }
 
-static void test_vfs_dirs() {
+static void test_vfs_dirs()
+{
     printf("\n[vfs directories]\n");
 
     // ── Test 1: mkdir and open ────────────────────────────────────────────────
@@ -762,14 +900,16 @@ static void test_vfs_dirs() {
         // Create file inside
         int fd = syscall_open("/home/TESTDIR/FILE.TXT", O_WRONLY | O_CREAT | O_TRUNC);
         CHECK("create file in subdir", fd >= 0, "failed");
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             syscall_write(fd, "in subdir", 9);
             syscall_close(fd);
         }
 
         // Read it back
         fd = syscall_open("/home/TESTDIR/FILE.TXT", O_RDONLY);
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             char buf[16] = {0};
             int n = syscall_read(fd, buf, sizeof(buf));
             CHECK("file in subdir readable",
@@ -786,7 +926,8 @@ static void test_vfs_dirs() {
         int fd = syscall_open("/home/TESTDIR/NESTED/DEEP.TXT",
                               O_WRONLY | O_CREAT | O_TRUNC);
         CHECK("file in nested dir", fd >= 0, "failed");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
     }
 
     // ── Test 3: rmdir fails on non-empty dir ──────────────────────────────────
@@ -810,17 +951,23 @@ static void test_vfs_dirs() {
     {
         int fd = syscall_open("/home/TESTDIR", O_RDONLY);
         CHECK("open deleted dir fails", fd < 0, "expected failure");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
     }
 }
 
-static void test_vfs_unlink() {
+static void test_vfs_unlink()
+{
     printf("\n[vfs unlink]\n");
 
     // ── Test 1: basic unlink ──────────────────────────────────────────────────
     {
         int fd = syscall_open("/home/UNL_A.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto u2; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto u2;
+        }
         syscall_write(fd, "data", 4);
         syscall_close(fd);
 
@@ -829,7 +976,8 @@ static void test_vfs_unlink() {
 
         fd = syscall_open("/home/UNL_A.TXT", O_RDONLY);
         CHECK("unlinked file gone", fd < 0, "file still exists");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
     }
 
 u2:
@@ -842,7 +990,11 @@ u2:
     // ── Test 3: can recreate after unlink ────────────────────────────────────
     {
         int fd = syscall_open("/home/UNL_B.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto u4; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto u4;
+        }
         syscall_write(fd, "first", 5);
         syscall_close(fd);
 
@@ -850,13 +1002,15 @@ u2:
 
         fd = syscall_open("/home/UNL_B.TXT", O_WRONLY | O_CREAT | O_TRUNC);
         CHECK("recreate after unlink", fd >= 0, "failed to recreate");
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             syscall_write(fd, "second", 6);
             syscall_close(fd);
         }
 
         fd = syscall_open("/home/UNL_B.TXT", O_RDONLY);
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             char buf[16] = {0};
             int n = syscall_read(fd, buf, sizeof(buf));
             CHECK("recreated file has new content",
@@ -870,12 +1024,16 @@ u4:
     // ── Test 4: open fd survives unlink ──────────────────────────────────────
     {
         int fd = syscall_open("/home/UNL_C.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); return; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            return;
+        }
         syscall_write(fd, "alive", 5);
         syscall_close(fd);
 
         int rfd = syscall_open("/home/UNL_C.TXT", O_RDONLY);
-        syscall_unlink("/home/UNL_C.TXT");  // unlink while open
+        syscall_unlink("/home/UNL_C.TXT"); // unlink while open
 
         // fd should still be readable (Unix semantics)
         char buf[8] = {0};
@@ -885,7 +1043,8 @@ u4:
     }
 }
 
-static void test_vfs_rename() {
+static void test_vfs_rename()
+{
     printf("\n[vfs rename]\n");
 
     // ── Test 1: rename file in same directory ───────────────────────────────
@@ -894,7 +1053,11 @@ static void test_vfs_rename() {
         syscall_unlink("/home/RN_NEW.TXT");
 
         int fd = syscall_open("/home/RN_OLD.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto r2; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto r2;
+        }
         syscall_write(fd, "rename-data", 11);
         syscall_close(fd);
 
@@ -903,17 +1066,21 @@ static void test_vfs_rename() {
 
         fd = syscall_open("/home/RN_OLD.TXT", O_RDONLY);
         CHECK("old path removed after rename", fd < 0, "old path still exists");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
 
         fd = syscall_open("/home/RN_NEW.TXT", O_RDONLY);
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             char buf[16] = {0};
             int n = syscall_read(fd, buf, sizeof(buf));
             CHECK("renamed file content preserved",
                   n == 11 && strncmp(buf, "rename-data", 11) == 0,
                   "content mismatch");
             syscall_close(fd);
-        } else {
+        }
+        else
+        {
             FAIL("renamed path exists", "new path missing");
         }
     }
@@ -925,12 +1092,20 @@ r2:
         syscall_unlink("/home/RN_DST.TXT");
 
         int fd = syscall_open("/home/RN_SRC.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto r3; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto r3;
+        }
         syscall_write(fd, "SRC", 3);
         syscall_close(fd);
 
         fd = syscall_open("/home/RN_DST.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto r3; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto r3;
+        }
         syscall_write(fd, "DST", 3);
         syscall_close(fd);
 
@@ -939,17 +1114,21 @@ r2:
 
         fd = syscall_open("/home/RN_SRC.TXT", O_RDONLY);
         CHECK("source removed after overwrite-rename", fd < 0, "source still exists");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
 
         fd = syscall_open("/home/RN_DST.TXT", O_RDONLY);
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             char buf[8] = {0};
             int n = syscall_read(fd, buf, sizeof(buf));
             CHECK("target now has source content",
                   n == 3 && strncmp(buf, "SRC", 3) == 0,
                   "target content not replaced");
             syscall_close(fd);
-        } else {
+        }
+        else
+        {
             FAIL("target exists after overwrite-rename", "target missing");
         }
     }
@@ -963,7 +1142,11 @@ r3:
         syscall_unlink("/home/RN_B/MOVE2.TXT");
 
         int fd = syscall_open("/home/RN_A/MOVE.TXT", O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd < 0) { printf("  SKIP\n"); goto r4_cleanup; }
+        if (fd < 0)
+        {
+            printf("  SKIP\n");
+            goto r4_cleanup;
+        }
         syscall_write(fd, "moved", 5);
         syscall_close(fd);
 
@@ -972,17 +1155,21 @@ r3:
 
         fd = syscall_open("/home/RN_A/MOVE.TXT", O_RDONLY);
         CHECK("cross-dir source removed", fd < 0, "source still exists");
-        if (fd >= 0) syscall_close(fd);
+        if (fd >= 0)
+            syscall_close(fd);
 
         fd = syscall_open("/home/RN_B/MOVE2.TXT", O_RDONLY);
-        if (fd >= 0) {
+        if (fd >= 0)
+        {
             char buf[16] = {0};
             int n = syscall_read(fd, buf, sizeof(buf));
             CHECK("cross-dir target content preserved",
                   n == 5 && strncmp(buf, "moved", 5) == 0,
                   "content mismatch");
             syscall_close(fd);
-        } else {
+        }
+        else
+        {
             FAIL("cross-dir target exists", "target missing");
         }
     }
@@ -1004,12 +1191,14 @@ r4_cleanup:
     syscall_rmdir("/home/RN_B");
 }
 
-static void test_tty_ioctl_basic() {
+static void test_tty_ioctl_basic()
+{
     printf("\n[tty ioctl]\n");
 
     int fd = syscall_open("/DEV/TTY0", O_RDWR);
     CHECK("open /DEV/TTY0", fd >= 0, "open failed");
-    if (fd < 0) return;
+    if (fd < 0)
+        return;
 
     winsize_linux_t ws = {0};
     int ret = syscall_ioctl(fd, TIOCGWINSZ, &ws);
@@ -1034,7 +1223,8 @@ static void test_tty_ioctl_basic() {
     syscall_close(fd);
 }
 
-static void test_path_syscalls_basic() {
+static void test_path_syscalls_basic()
+{
     printf("\n[path syscalls]\n");
 
     char cwd[256] = {0};
@@ -1045,7 +1235,8 @@ static void test_path_syscalls_basic() {
     char exe[256] = {0};
     int n = syscall_readlink("/proc/self/exe", exe, sizeof(exe) - 1);
     CHECK("readlink /proc/self/exe succeeds", n > 0, "readlink failed");
-    if (n > 0) {
+    if (n > 0)
+    {
         exe[n] = '\0';
         CHECK("readlink path looks executable", strncmp(exe, "/BIN/", 5) == 0,
               "unexpected exe path");
@@ -1059,25 +1250,26 @@ static void test_path_syscalls_basic() {
 
 int main()
 {
-       setup_test_files();
+    setup_test_files();
 
-       // test_dup_basic();
-       // test_dup2();
-       // test_fcntl();
-       // test_stdout_redirect();
-       // test_refcount();
-       // test_signals();
+    test_dup_basic();
+    test_dup2();
+    test_fcntl();
+    test_stdout_redirect();
+    test_refcount();
+    test_signals();
+    test_waitpid_any();
 
-       test_vfs_basic();
-       test_vfs_readwrite();
-       // test_vfs_seek();
-       test_vfs_dirs();
-       test_vfs_unlink();
+    test_vfs_basic();
+    test_vfs_readwrite();
+    // test_vfs_seek();
+    test_vfs_dirs();
+    test_vfs_unlink();
     test_vfs_rename();
-       test_vfs_getdents();
-         test_tty_ioctl_basic();
+    test_vfs_getdents();
+    test_tty_ioctl_basic();
     test_path_syscalls_basic();
 
-       print_summary();
-       return tests_failed ? 1 : 0;
+    print_summary();
+    return tests_failed ? 1 : 0;
 }

@@ -20,7 +20,7 @@ void syscall_exit(int status);
 int syscall_getdents(int fd, void *dirp, size_t count);
 int syscall_getdents64(int fd, void *dirp, size_t count);
 int syscall_fork();
-int syscall_exec(const char *path, char **args);
+int syscall_exec(const char *path, char **args, char **envp);
 int syscall_dup(int fd);
 int syscall_dup2(int oldfd, int newfd);
 int syscall_fcntl(int fd, int cmd, int arg);

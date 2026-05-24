@@ -161,10 +161,10 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 void init_main() {
 	printf("Hello from init process!\n");
 	if (is_gui_enabled) {
-		exec("/BIN/DESKTOP", NULL);
+		exec("/BIN/DESKTOP", NULL, NULL);
 	} else {
-		// exec("/BIN/HELLO", NULL);
-		exec("/BIN/SHELL", NULL);
+		// exec("/BIN/HELLO", NULL, NULL);
+		exec("/BIN/SHELL", NULL, NULL);
 	}
 	/* If exec fails, spin */
 	printf("Exiting from init process!\n");

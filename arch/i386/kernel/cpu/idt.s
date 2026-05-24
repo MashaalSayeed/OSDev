@@ -98,11 +98,10 @@ isr_common_stub:
     PUSH esp   ; Push the stack pointer
     CALL isr_handler
 
-    ; ADD esp, 4        ; ← add this
-    ; PUSH esp          ; ← add this
-    ; CALL do_signal    ; ← add this
-
-    ADD esp, 4 ; Remove stack pointer
+    ADD esp, 4        ; Remove stack pointer
+    PUSH esp          ; Push registers_t* for signal handler
+    CALL do_signal
+    ADD esp, 4
     POP eax
     MOV ds, ax
     MOV es, ax

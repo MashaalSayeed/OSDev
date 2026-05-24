@@ -76,8 +76,8 @@ int syscall_fork() {
     return syscall(SYSCALL_FORK, 0, 0, 0);
 }
 
-int syscall_exec(const char *path, char **args) {
-    return syscall(SYSCALL_EXEC, (uintptr_t)path, (uintptr_t)args, 0);
+int syscall_exec(const char *path, char **args, char **envp) {
+    return syscall(SYSCALL_EXEC, (uintptr_t)path, (uintptr_t)args, (uintptr_t)envp);
 }
 
 int syscall_dup(int fd) {

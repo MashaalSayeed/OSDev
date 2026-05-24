@@ -24,12 +24,6 @@ void idle_process() {
 
 void scheduler_init() {
     pit_init(100);
-    // init_process = create_process("init", idle_process, PROCESS_FLAG_KERNEL);
-    // init_process->status = INIT;
-    // add_process(init_process);
-    // thread_context_t* ctx = &init_process->main_thread->context;
-    // thread_t* main_thread = init_process->main_thread;
-    // jmp_to_kernel_thread(&main_thread->context);
 }
 
 void schedule(registers_t* context) {

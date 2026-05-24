@@ -19,6 +19,39 @@ extern struct tss_entry tss_entry;
 extern thread_t *current_thread;
 static registers_t *interrupt_frame;
 
+static char **copy_user_str_array(process_t *proc, char **u_arr, int *out_count) {
+    if (out_count) *out_count = 0;
+    if (!u_arr) return NULL;
+
+    int count = 0;
+    while (1) {
+        uint32_t uptr = 0;
+        copy_from_user(proc->root_page_table, &uptr, (uint32_t)(u_arr + count), sizeof(uint32_t));
+        if (!uptr) break;
+        count++;
+        if (count > 256) return NULL;
+    }
+
+    char **k_arr = kmalloc((count + 1) * sizeof(char *));
+    if (!k_arr) return NULL;
+
+    for (int i = 0; i < count; i++) {
+        uint32_t uptr = 0;
+        copy_from_user(proc->root_page_table, &uptr, (uint32_t)(u_arr + i), sizeof(uint32_t));
+        char *s = kmalloc(256);
+        if (!s) {
+            for (int j = 0; j < i; j++) kfree(k_arr[j]);
+            kfree(k_arr);
+            return NULL;
+        }
+        strncpy_from_user(proc->root_page_table, s, uptr, 256);
+        k_arr[i] = s;
+    }
+    k_arr[count] = NULL;
+    if (out_count) *out_count = count;
+    return k_arr;
+}
+
 // --- File operations ---
 int sys_read(int fd, void *buffer, size_t size) {
     if (!buffer) return -1;
@@ -83,8 +116,24 @@ int sys_getppid() {
 }
 
 int sys_waitpid(int pid, int *status, int options) {
-    process_t *child = get_process(pid);
     process_t *proc = current_thread->owner;
+    if (pid == -1) {
+        if (!find_child_process(proc)) return -1;
+
+        process_t *child = find_zombie_child(proc);
+        while (!child) {
+            wait_queue_sleep(&proc->wait_queue);
+            if (!find_child_process(proc)) return -1;
+            child = find_zombie_child(proc);
+        }
+
+        if (status) *status = child->exit_code;
+        int child_pid = child->pid;
+        cleanup_process(child);
+        return child_pid;
+    }
+
+    process_t *child = get_process(pid);
     if (!child || child->parent != proc) return -1;
 
     // wait_queue_sleep returns when any waker calls wait_queue_wake. 
@@ -110,7 +159,7 @@ int sys_fork() {
     return fork(interrupt_frame);
 }
 
-int sys_exec(const char *path, char **argv) {
+int sys_exec(const char *path, char **argv, char **envp) {
     process_t *proc = get_current_process();
     kprintf(DEBUG, "sys_exec: called by pid=%d\n", get_current_process()->pid);
     char k_path[256];
@@ -119,35 +168,34 @@ int sys_exec(const char *path, char **argv) {
         return -1;
     }
 
+    int argc = 0;
+    int envc = 0;
     char **k_argv = NULL;
+    char **k_envp = NULL;
     if (argv) {
-        // Count argc
-        int argc = 0;
-        while (1) {
-            uint32_t uptr = 0;
-            copy_from_user(proc->root_page_table, &uptr,
-                           (uint32_t)(argv + argc), sizeof(uint32_t));
-            if (!uptr) break;
-            argc++;
-        }
-
-        kprintf(DEBUG, "sys_exec: argc=%d\n", argc);
-        k_argv = kmalloc((argc + 1) * sizeof(char *));
-        for (int i = 0; i < argc; i++) {
-            uint32_t uptr = 0;
-            copy_from_user(proc->root_page_table, &uptr,
-                           (uint32_t)(argv + i), sizeof(uint32_t));
-            char *s = kmalloc(256);
-            strncpy_from_user(proc->root_page_table, s, uptr, 256);
-            k_argv[i] = s;
-        }
-        k_argv[argc] = NULL;
+        k_argv = copy_user_str_array(proc, argv, &argc);
+        if (!k_argv) return -1;
     }
+    if (envp) {
+        k_envp = copy_user_str_array(proc, envp, &envc);
+        if (!k_envp) {
+            if (k_argv) {
+                for (int i = 0; k_argv[i]; i++) kfree(k_argv[i]);
+                kfree(k_argv);
+            }
+            return -1;
+        }
+    }
+    kprintf(DEBUG, "sys_exec: argc=%d envc=%d\n", argc, envc);
 
-    int ret = exec(k_path, k_argv);
+    int ret = exec(k_path, k_argv, k_envp);
     if (k_argv) {
         for (int i = 0; k_argv[i]; i++) kfree(k_argv[i]);
         kfree(k_argv);
+    }
+    if (k_envp) {
+        for (int i = 0; k_envp[i]; i++) kfree(k_envp[i]);
+        kfree(k_envp);
     }
 
     return ret;
@@ -644,7 +692,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_GETDENTS64: return sys_getdents64(regs->ebx, (void *)regs->ecx, regs->edx);
         case SYSCALL_GETPID:   return sys_getpid();
         case SYSCALL_FORK:     return sys_fork();
-        case SYSCALL_EXEC:     return sys_exec((const char *)regs->ebx, (char **)regs->ecx);
+        case SYSCALL_EXEC:     return sys_exec((const char *)regs->ebx, (char **)regs->ecx, (char **)regs->edx);
         case SYSCALL_WAITPID:  return sys_waitpid(regs->ebx, (int *)regs->ecx, regs->edx);
         case SYSCALL_BRK:      return (int)sys_brk((void *)regs->ebx);
         case SYSCALL_SBRK:     return (int)sys_sbrk(regs->ebx);

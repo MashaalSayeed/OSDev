@@ -91,6 +91,8 @@ void cleanup_process(process_t *proc);
 
 process_t* get_current_process();
 process_t* get_process(size_t pid);
+process_t* find_child_process(process_t *parent);
+process_t* find_zombie_child(process_t *parent);
 
 thread_t* get_current_thread();
 thread_t* get_thread(size_t tid);
@@ -107,4 +109,4 @@ void print_thread_list();
 
 void *sbrk(process_t *proc, int incr);
 int fork(registers_t *regs);
-int exec(const char *path, char **argv);
+int exec(const char *path, char **argv, char **envp);
