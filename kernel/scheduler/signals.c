@@ -9,6 +9,20 @@
 
 extern page_directory_t* kpage_dir;
 void map_signal_trampoline(process_t *proc) {
+    if (!proc) {
+        kprintf(ERROR, "map_signal_trampoline: NULL process\n");
+        return;
+    }
+    if (proc->is_kernel_process) {
+        // Kernel threads never return to user mode, so no trampoline needed.
+        return;
+    }
+    if (!proc->root_page_table) {
+        kprintf(ERROR, "map_signal_trampoline: NULL page dir for pid=%d (proc=%x, kpage_dir=%x)\n",
+                proc->pid, (uint32_t)proc, (uint32_t)kpage_dir);
+        return;
+    }
+
     uint32_t frame = pmm_alloc_block();
     if (!frame) {
         kprintf(ERROR, "map_signal_trampoline: failed to allocate frame\n");

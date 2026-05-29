@@ -129,6 +129,10 @@ uint32_t pmm_alloc_block() {
     return block;
 }
 
+uint32_t pmm_get_total_blocks(void) {
+    return total_blocks;
+}
+
 void pmm_ref_frame(uint32_t block) {
     if (block == 0 || block >= total_blocks) {
         kprintf(WARNING, "[pmm] pmm_ref_frame: invalid block %d\n", block);

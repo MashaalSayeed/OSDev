@@ -50,7 +50,7 @@ void *syscall_fb_map(uint32_t *out_width, uint32_t *out_height, uint32_t *out_pi
 void  syscall_yield(void);
 
 uint32_t syscall_get_ticks();
-void sleep(uint32_t ms);
+void t_sleep(uint32_t ms);
 sighandler_t syscall_signal(int sig, uint32_t handler);
 int          syscall_kill(int pid, int sig);
 int syscall_getppid();

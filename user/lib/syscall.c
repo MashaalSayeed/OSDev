@@ -196,7 +196,7 @@ void *syscall_munmap(void *addr, size_t length) {
     return (void *)syscall(SYSCALL_MUNMAP, (int)addr, length, 0);
 }
 
-void sleep(uint32_t seconds) {
+void t_sleep(uint32_t seconds) {
     timespec_t req = { .tv_sec = seconds, .tv_nsec = 0 };
     syscall_nanosleep(&req, NULL);
 }

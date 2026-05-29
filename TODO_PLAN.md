@@ -25,10 +25,10 @@
 ## Phase 2 — Shell & Process Model
 - [x] Signals delivered on schedule() — check pending_signals before returning to userspace
 - [x] SIGCHLD + waitpid(-1) — shell needs to reap any child, not just a specific pid
-- [ ] pipe + dup2 plumbing — shell pipelines (cmd1 | cmd2)
-- [ ] /DEV/NULL and /DEV/ZERO — many programs open these unconditionally
+- [x] pipe + dup2 plumbing — shell pipelines (cmd1 | cmd2)
+- [x] /DEV/NULL and /DEV/ZERO — many programs open these unconditionally
 - [x] environ / execve envp — pass environment to exec'd processes
-- [ ] Session/pgrp stubs — sys_setsid, sys_getpgrp (musl calls these, can be no-ops for now)
+- [x] Session/pgrp stubs — sys_setsid, sys_getpgrp (musl calls these, can be no-ops for now)
 
 ## Phase 3 — Filesystem Hardening
 - [ ] FAT32 rename — fat32_rename, required by editors and installers

@@ -430,7 +430,11 @@ void *sys_brk(void *addr) {
     if (!addr || addr < proc->heap_start) return proc->brk;
 
     void *heap_limit = proc->heap_start + PROCESS_MAX_HEAP_SIZE;
-    if (addr > heap_limit) return proc->brk;
+    if (addr > heap_limit) {
+        kprintf(WARNING, "sys_brk: addr=%x > heap_limit=%x (heap_start=%x brk=%x)\n",
+                addr, heap_limit, proc->heap_start, proc->brk);
+        return proc->brk;
+    }
 
     void *new_brk = (void *)PAGE_ALIGN_UP((uintptr_t)addr);
     void *old_brk = proc->brk;
@@ -439,6 +443,7 @@ void *sys_brk(void *addr) {
         for (void *p = old_brk; p < new_brk; p += PAGE_SIZE) {
             page_table_entry_t *page = get_page((uintptr_t)p, 1, proc->root_page_table);
             if (!page || !alloc_page(page, 0x7)) {
+                kprintf(ERROR, "sys_brk: alloc failed at %x (page=%x)\n", p, page);
                 // FIX: partial allocation — roll back everything we mapped
                 // so far to keep the heap in a consistent state
                 for (void *rb = old_brk; rb < p; rb += PAGE_SIZE) {
@@ -468,7 +473,10 @@ void *sys_sbrk(int incr) {
     void *result = sys_brk(proc->brk + incr);
 
     // sbrk returns old brk on success, -1 on failure
-    if (result == old_brk && incr != 0) return (void *)-1;
+    if (result == old_brk && incr != 0) {
+        kprintf(WARNING, "sys_sbrk: failed incr=%d brk=%x\n", incr, old_brk);
+        return (void *)-1;
+    }
     return old_brk;
 }
 

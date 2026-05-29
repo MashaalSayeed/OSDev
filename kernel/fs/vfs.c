@@ -271,6 +271,32 @@ static int tty0_dev_ioctl(struct vfs_device *dev, int request, void *arg) {
     return tty_common_ioctl(request, arg);
 }
 
+static int null_dev_read(struct vfs_device *dev, char *buf, size_t count) {
+    (void)dev;
+    (void)buf;
+    (void)count;
+    return 0;
+}
+
+static int null_dev_write(struct vfs_device *dev, const char *buf, size_t count) {
+    (void)dev;
+    (void)buf;
+    return (int)count;
+}
+
+static int zero_dev_read(struct vfs_device *dev, char *buf, size_t count) {
+    (void)dev;
+    if (!buf || count == 0) return 0;
+    memset(buf, 0, count);
+    return (int)count;
+}
+
+static int zero_dev_write(struct vfs_device *dev, const char *buf, size_t count) {
+    (void)dev;
+    (void)buf;
+    return (int)count;
+}
+
 static int devfs_file_read(vfs_file_t* file, void* buf, size_t count) {
     if (!file || !file->inode || !file->inode->fs_data || !buf) return -1;
 
@@ -824,6 +850,30 @@ void vfs_init() {
             printf("Failed to register /DEV/TTY0\n");
         else
             printf("Registered /DEV/TTY0\n");
+
+        vfs_device_t dev_null = {0};
+        strncpy(dev_null.name, "NULL", DEVFS_NAME_LEN - 1);
+        dev_null.name[DEVFS_NAME_LEN - 1] = '\0';
+        dev_null.type = DEVICE_TYPE_CHAR;
+        dev_null.char_dev.read_char = null_dev_read;
+        dev_null.char_dev.write_char = null_dev_write;
+
+        if (devfs_register_device(&dev_null) != 0)
+            printf("Failed to register /DEV/NULL\n");
+        else
+            printf("Registered /DEV/NULL\n");
+
+        vfs_device_t dev_zero = {0};
+        strncpy(dev_zero.name, "ZERO", DEVFS_NAME_LEN - 1);
+        dev_zero.name[DEVFS_NAME_LEN - 1] = '\0';
+        dev_zero.type = DEVICE_TYPE_CHAR;
+        dev_zero.char_dev.read_char = zero_dev_read;
+        dev_zero.char_dev.write_char = zero_dev_write;
+
+        if (devfs_register_device(&dev_zero) != 0)
+            printf("Failed to register /DEV/ZERO\n");
+        else
+            printf("Registered /DEV/ZERO\n");
     } else {
         printf("Failed to create devfs superblock\n");
     }

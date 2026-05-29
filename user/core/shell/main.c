@@ -219,7 +219,7 @@ void sleep_command(char **args) {
         return;
     }
     uint32_t ms = 10;//(uint32_t)atoi(args[1]);
-    sleep(ms);
+    t_sleep(ms);
 }
 
 void test_mmap_command(char **args) {

@@ -94,6 +94,11 @@ page_directory_t *get_active_page_directory() {
 // If 'make' is true, create the page table if it doesn't exist
 // Returns NULL if the page table entry cannot be created
 page_table_entry_t *get_page(uint32_t virtual, int make, page_directory_t *dir) {
+    if (!dir) {
+        kprintf(ERROR, "get_page: NULL dir for vaddr=%x (caller=%x)\n",
+                virtual, (uint32_t)__builtin_return_address(0));
+        return NULL;
+    }
     uint32_t pd_index = virtual >> 22;
     uint32_t pt_index = (virtual >> 12) & 0x3FF;
 
@@ -162,7 +167,9 @@ void free_page(page_table_entry_t *page) {
 
 void map_page_to_frame(page_table_entry_t *page, uint32_t frame, uint32_t flags) {
     ASSERT(!page->present);
-    pmm_ref_frame(frame);                 // increment refcount — shared owner
+    if (frame < pmm_get_total_blocks()) {
+        pmm_ref_frame(frame);                 // increment refcount — shared owner
+    }
     page->frame   = frame;
     page->present = 1;
     page->rw      = (flags & PAGE_RW)   ? 1 : 0;
