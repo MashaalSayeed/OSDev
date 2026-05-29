@@ -29,7 +29,7 @@ int main(void) {
 
     /* ---- Allocate backbuffer ---- */
     uint32_t bb_bytes = fb_width * fb_height * 4;
-    backbuffer = (uint32_t *)syscall_sbrk((int)bb_bytes);
+    backbuffer = (uint32_t *)syscall_mmap(NULL, bb_bytes, 0, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     printf("[compositor] backbuffer=%x bytes=%u\n", (uint32_t)backbuffer, bb_bytes);
     if (!backbuffer || (uintptr_t)backbuffer == (uintptr_t)-1) {
         printf("[compositor] ERROR: backbuffer alloc failed\n");
@@ -51,7 +51,7 @@ int main(void) {
     printf("[compositor] Registered (pid=%d)\n", syscall_getpid());
 
     /* ---- Auto-launch the default application ---- */
-    launch_app("/BIN/NOTEPAD");
+    launch_app("/BIN/GUITEST");
 
     /* ---- Initial full-screen paint ---- */
     composite_all();

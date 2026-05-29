@@ -160,8 +160,10 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 
 void init_main() {
 	printf("Hello from init process!\n");
+	char *args[] = { "GUITEST", "fb", NULL };
 	if (is_gui_enabled) {
-		exec("/BIN/DESKTOP", NULL, NULL);
+		// exec("/BIN/DESKTOP", NULL, NULL);
+		exec("/BIN/GUITEST", args, NULL);
 	} else {
 		// exec("/BIN/HELLO", NULL, NULL);
 		exec("/BIN/SHELL", NULL, NULL);

@@ -8,7 +8,7 @@ extern exit
 section .text
 _start:
     mov ebx, [esp]  ; argc
-    lea ecx, [esp + 12] ; argv points to the next item on the stack
+    lea ecx, [esp + 4] ; argv points to the next item on the stack
     push ecx             ; push argv for main
     push ebx             ; push argc for main
     

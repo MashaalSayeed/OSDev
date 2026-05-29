@@ -247,7 +247,10 @@ static page_table_entry_t *map_tmp(uint32_t vaddr, uint32_t frame) {
 static void unmap_tmp(uint32_t vaddr, uint32_t frame) {
     page_table_entry_t *page = get_page(vaddr, 0, kpage_dir);
     if (!page || !page->present) return;
-    pmm_free_block(frame);   // decrement refcount from map_page_to_frame
+    if (frame != 0 && frame < pmm_get_total_blocks()) {
+        // Clears: Attempt to free invalid block warning spam
+        pmm_free_block(frame);   // decrement refcount from map_page_to_frame
+    }
     page->present = 0;
     page->frame   = 0;
     invalidate_page(vaddr);

@@ -6,6 +6,11 @@
 #include "kernel/io.h"
 #include "kernel/system.h"
 #include "kernel/printf.h"
+#include "kernel/wm_dev.h"
+#include <stdbool.h>
+#include <stdbool.h>
+
+extern bool is_gui_enabled;
 
 #define KEYBOARD_DATA_PORT 0x60
 
@@ -112,39 +117,50 @@ void keyboard_callback(registers_t *regs) {
         return;
     }
 
+    uint32_t key = 0;
+
     switch (scancode) {
         case 0x48: // Up arrow
             buffer_push('\033');
             buffer_push('[');
             buffer_push('A'); // Up
+            key = '\033';
             break;
         case 0x50: // Down arrow
             buffer_push('\033');
             buffer_push('[');
             buffer_push('B'); // Down
-            break;
+            key = '\033';
             break;
         case 0x4B: // Left arrow
             buffer_push('\033');
             buffer_push('[');
             buffer_push('D'); // Left
+            key = '\033';
             break;
         case 0x4D: // Right arrow
             buffer_push('\033');
             buffer_push('[');
             buffer_push('C'); // Right
+            key = '\033';
             break;
         default:
             // if (scancode >= 128) return;
-            char c = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
-            if (c && c != UNKNOWN) {
+            key = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
+            char c = (char)key;
+            if (key != 0 && key != UNKNOWN) {
                 if (ctrl_on && keyboard_map[scancode] >= 'a' && keyboard_map[scancode] <= 'z') {
                     c = c & 0x1F; // Convert to control character
+                    key = (uint32_t)c;
                 }
 
                 buffer_push(c);
             }
             break;
+    }
+
+    if (is_gui_enabled && key != 0 && key != UNKNOWN) {
+        wm_dev_push_input_event(WM_EVENT_KEY, 0, 0, key, 0);
     }
 
     // terminal_putchar(c);

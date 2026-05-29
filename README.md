@@ -131,4 +131,4 @@ Thank me later 😊
 
 ## Known Issues
 
-None
+1. Running /BIN/TEST hangs randomly - needs to be run multiple times

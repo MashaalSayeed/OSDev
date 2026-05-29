@@ -4,6 +4,7 @@
 
 #include "user/wm.h"
 #include "user/syscall.h"
+#include "user/stdio.h"
 #include "libc/string.h"
 
 static int wm_fd = -1;
@@ -14,7 +15,10 @@ static int wm_fd = -1;
 
 int wm_connect(void) {
     wm_fd = syscall_open("/DEV/WM", O_RDWR);
-    if (wm_fd < 0) return -1;
+    if (wm_fd < 0) {
+        printf("[wm] connect failed: open /DEV/WM\n");
+        return -1;
+    }
 
     /* Tell the compositor a new client has arrived */
     wm_request_t req;
@@ -24,9 +28,20 @@ int wm_connect(void) {
 
     /* Wait for WM_RESP_OK */
     wm_response_t resp;
-    int n = syscall_read(wm_fd, (char *)&resp, sizeof(resp));
-    if (n != (int)sizeof(wm_response_t) || resp.type != WM_RESP_OK)
-        return -1;
+    while (1) {
+        int n = syscall_read(wm_fd, (char *)&resp, sizeof(resp));
+        if (n == (int)sizeof(wm_response_t)) {
+            printf("[wm] connect resp type=%u status=%d\n",
+                   (unsigned)resp.type, resp.status);
+            if (resp.type == WM_RESP_OK)
+                break;
+            if (resp.type == WM_RESP_ERROR) {
+                printf("[wm] connect failed: status=%d\n", resp.status);
+                return -1;
+            }
+        }
+        syscall_yield();
+    }
 
     return 0;
 }
@@ -61,9 +76,18 @@ uint32_t wm_create_window(int x, int y, int w, int h,
 
     /* Read the compositor's response (contains shm_id for the pixel buffer) */
     wm_response_t resp;
-    int n = syscall_read(wm_fd, (char *)&resp, sizeof(resp));
-    if (n != (int)sizeof(wm_response_t) || resp.type != WM_RESP_OK)
-        return 0;
+    while (1) {
+        int n = syscall_read(wm_fd, (char *)&resp, sizeof(resp));
+        if (n == (int)sizeof(wm_response_t)) {
+            printf("[wm] create resp type=%u status=%d shm=%d\n",
+                   (unsigned)resp.type, resp.status, resp.shm_id);
+            if (resp.type == WM_RESP_OK)
+                break;
+            if (resp.type == WM_RESP_ERROR)
+                return 0;
+        }
+        syscall_yield();
+    }
     if (resp.shm_id < 0)
         return 0;
 

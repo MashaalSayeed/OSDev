@@ -10,6 +10,7 @@
 #include "windows.h"
 #include "input.h"
 #include "wm_comm.h"
+#include "user/stdio.h"
 
 /* -----------------------------------------------------------------------
  * Send a response frame back to a client process
@@ -50,6 +51,10 @@ void handle_request(uint32_t client_pid, const wm_request_t *req) {
         return;
     }
 
+    if (req->type == WM_REQ_CONNECT) {
+        printf("[compositor] WM_REQ_CONNECT from pid=%d\n", client_pid);
+    }
+
     switch ((wm_req_type_t)req->type) {
 
     /* ---- Client handshake ---- */
@@ -57,6 +62,7 @@ void handle_request(uint32_t client_pid, const wm_request_t *req) {
         resp.type   = WM_RESP_OK;
         resp.status = 0;
         send_response(client_pid, &resp);
+        printf("[compositor] WM_RESP_OK to pid=%d\n", client_pid);
         break;
 
     /* ---- Create a new window ---- */
@@ -151,6 +157,8 @@ void handle_request(uint32_t client_pid, const wm_request_t *req) {
         break;
 
     default:
+        printf("[compositor] WM unknown req type=%u from pid=%d\n",
+               (unsigned)req->type, client_pid);
         resp.type = WM_RESP_ERROR; resp.status = -1;
         send_response(client_pid, &resp);
         break;

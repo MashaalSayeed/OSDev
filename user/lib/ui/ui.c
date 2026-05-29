@@ -12,7 +12,7 @@
 
 /* -----------------------------------------------------------------------
  * Embedded 8 × 8 bitmap font  (ASCII 32–126, 95 glyphs)
- * Each entry is 8 bytes, one per row, MSB = leftmost pixel.
+ * Each entry is 8 bytes, one per row, bit 0 = leftmost pixel.
  * --------------------------------------------------------------------- */
 static const uint8_t font_8x8[95][8] = {
     /* 0x20 ' ' */ {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},
@@ -148,7 +148,7 @@ void ui_draw_char(uint32_t *pixels, int pitch, int cw, int ch,
         for (int col = 0; col < UI_FONT_W; col++) {
             int px = x + col;
             if (px < 0 || px >= cw) continue;
-            int set = (bits >> (7 - col)) & 1;
+            int set = (bits >> col) & 1;
             if (set)
                 pixels[py * pitch + px] = fg;
             else if (!transparent_bg)
