@@ -133,6 +133,7 @@ static int handle_event(const wm_event_t *evt) {
     }
 
     if (evt->type == WM_EVENT_KEY) {
+        if (evt->button == 0) return 1;
         uint32_t key = evt->key;
         if (key == 'q' || key == 'Q' || key == 0x1B) return 0;
         if (key == 'r' || key == 'R') {

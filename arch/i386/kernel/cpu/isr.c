@@ -174,7 +174,7 @@ static bool is_spurious_irq(uint8_t intno) {
 }
 
 void irq_handler(registers_t *r) {
-    // if (is_spurious_irq(r->int_no)) return;
+    if (is_spurious_irq(r->int_no)) return;
 
     if (interrupt_handlers[r->int_no] != 0) {
         isr_t handler = interrupt_handlers[r->int_no];

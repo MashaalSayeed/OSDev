@@ -100,6 +100,49 @@ int sys_lseek(int fd, uint32_t offset, int whence) {
     return file->file_ops->seek(file, offset, whence);
 }
 
+int sys_llseek(int fd, uint32_t offset_high, uint32_t offset_low, uint64_t *result, int whence) {
+    uint64_t offset = ((uint64_t)offset_high << 32) | offset_low;
+    int seek_result = sys_lseek(fd, (uint32_t)offset, whence);
+    if (seek_result < 0) return seek_result;
+
+    if (result) {
+        uint64_t user_result = (uint64_t)(uint32_t)seek_result;
+        process_t *proc = get_current_process();
+        if (copy_to_user(proc->root_page_table, (uint32_t)result, &user_result, sizeof(user_result)) < 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int sys_readv(int fd, const iovec_t *iov, int iovcnt) {
+    if (!iov || iovcnt < 0) return -1;
+
+    process_t *proc = get_current_process();
+    int total = 0;
+
+    for (int i = 0; i < iovcnt; i++) {
+        iovec_t kiov;
+        if (copy_from_user(proc->root_page_table, &kiov, (uint32_t)(iov + i), sizeof(kiov)) < 0) {
+            return -1;
+        }
+
+        if (!kiov.iov_base || kiov.iov_len == 0) {
+            continue;
+        }
+
+        int bytes = sys_read(fd, kiov.iov_base, kiov.iov_len);
+        if (bytes < 0) return bytes;
+        total += bytes;
+        if ((size_t)bytes < kiov.iov_len) {
+            break;
+        }
+    }
+
+    return total;
+}
+
 // --- Process management ---
 int sys_exit(int status) {
     kill_process(get_current_process(), status);
@@ -204,15 +247,29 @@ int sys_exec(const char *path, char **argv, char **envp) {
 int sys_set_thread_area(user_desc_t *desc) {
     if (!desc) return -1;
 
-    // musl passes entry_number = -1 to request allocation
-    if (desc->entry_number == -1) {
-        desc->entry_number = 6; // We only have one TLS segment, so just use that
+    process_t *proc = get_current_process();
+    user_desc_t kdesc;
+    if (copy_from_user(proc->root_page_table, &kdesc, (uint32_t)desc, sizeof(kdesc)) < 0) {
+        return -1;
     }
 
-    gdt_set_tls(desc->base_addr, desc->limit);
+    // musl passes entry_number = -1 to request allocation
+    if (kdesc.entry_number == -1) {
+        kdesc.entry_number = GDT_TLS;
+    }
+    if (kdesc.entry_number != GDT_TLS) {
+        return -1;
+    }
+
+    gdt_set_tls(kdesc.base_addr, kdesc.limit);
     uint16_t selector = (GDT_TLS << 3) | 3;
     asm volatile("mov %0, %%gs" :: "r"(selector));
     current_thread->gs = selector;
+
+    if (copy_to_user(proc->root_page_table, (uint32_t)desc, &kdesc, sizeof(kdesc)) < 0) {
+        return -1;
+    }
+
     return 0;
 }
 
@@ -512,7 +569,7 @@ int sys_fstat(int fd, stat_t *st) {
 }
 
 int sys_get_ticks() {
-    return pit_get_ticks() * 10; // Convert ticks to milliseconds (assuming 100 Hz)
+    return pit_get_ticks();
 }
 
 int sys_nanosleep(const timespec_t *req, timespec_t *rem) {
@@ -714,6 +771,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_RMDIR:    return sys_rmdir((const char *)regs->ebx);
         case SYSCALL_UNLINK:   return sys_unlink((const char *)regs->ebx);
         case SYSCALL_LSEEK:    return sys_lseek(regs->ebx, regs->ecx, regs->edx);
+        case SYSCALL__LLSEEK:  return sys_llseek(regs->ebx, regs->ecx, regs->edx, (uint64_t *)regs->esi, regs->edi);
         case SYSCALL_PIPE:     return sys_pipe((int *)regs->ebx);
         case SYSCALL_FSTAT:    return sys_fstat((int)regs->ebx, (stat_t *)regs->ecx);
         case SYSCALL_STAT:     return sys_stat((const char *)regs->ebx, (stat_t *)regs->ecx);
@@ -732,6 +790,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_SET_THREAD_AREA: return sys_set_thread_area((user_desc_t *)regs->ebx);
         case SYSCALL_SET_TID_ADDRESS: return sys_set_tid_address((int *)regs->ebx);
         case SYSCALL_IOCTL:       return sys_ioctl(regs->ebx, regs->ecx, (void *)regs->edx);
+        case SYSCALL_READV:       return sys_readv(regs->ebx, (const iovec_t *)regs->ecx, regs->edx);
         case SYSCALL_WRITEV:      return sys_writev(regs->ebx, (const iovec_t *)regs->ecx, regs->edx);
         case SYSCALL_SIGNAL:      return (int)sys_signal((int)regs->ebx, (sighandler_t)regs->ecx);
         case SYSCALL_KILL:        return sys_kill((int)regs->ebx, (int)regs->ecx);

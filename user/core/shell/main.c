@@ -218,8 +218,18 @@ void sleep_command(char **args) {
         printf("Usage: sleep <milliseconds>\n");
         return;
     }
-    uint32_t ms = 10;//(uint32_t)atoi(args[1]);
+    uint32_t ms = 5;//(uint32_t)atoi(args[1]);
     t_sleep(ms);
+}
+
+void test_tick_command(char **args) {
+    uint32_t start = syscall_get_ticks();
+    printf("Current ticks: %d\n", start);
+    printf("Sleeping for 1000 ticks...\n");
+    while (syscall_get_ticks() < start + 1000) {
+        syscall_yield();
+    }
+    printf("Woke up at ticks: %d\n", syscall_get_ticks());
 }
 
 void test_mmap_command(char **args) {
@@ -260,6 +270,7 @@ void help_command(char **args) {
     printf("    write <file> - Write to a file\n");
     printf("    history - Display command history\n");
     printf("    help - Display this help message\n");
+    printf("    test_tick - Test tick timer functionality\n");
     printf("    exit - Exit the shell\n");
 }
 
@@ -278,11 +289,13 @@ command_t commands[] = {
     {"write", write_command},
     {"history", history_command},
     {"help", help_command},
+    {"sleep", sleep_command},
     {"test_heap", test_heap_command},
     {"test_pipe", test_pipe_command},
     {"test_shm", test_shm_command},
     {"test_fork", test_fork_command},
     {"test_mmap", test_mmap_command},
+    {"test_tick", test_tick_command},
     {"sleep", sleep_command},
     {NULL, NULL}
 };

@@ -8,7 +8,6 @@
 #include "kernel/printf.h"
 #include "kernel/wm_dev.h"
 #include <stdbool.h>
-#include <stdbool.h>
 
 extern bool is_gui_enabled;
 
@@ -91,76 +90,87 @@ static void buffer_push(char c) {
     }
 }
 
+static uint32_t keyboard_wm_key(unsigned char scancode) {
+    switch (scancode) {
+        case 0x48: return 0x48; // Up arrow
+        case 0x50: return 0x50; // Down arrow
+        case 0x4B: return 0x4B; // Left arrow
+        case 0x4D: return 0x4D; // Right arrow
+        case 42:   return 42;   // Left shift
+        case 54:   return 54;   // Right shift
+        case 29:   return 29;   // Ctrl
+        case 56:   return 56;   // Alt
+        case 58:   return 58;   // Caps lock
+        default: {
+            uint32_t key = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
+            if (key == UNKNOWN || key == 0) return 0;
+            if (ctrl_on && keyboard_map[scancode] >= 'a' && keyboard_map[scancode] <= 'z') {
+                key = key & 0x1F;
+            }
+            return key;
+        }
+    }
+}
+
 void keyboard_callback(registers_t *regs) {
     unsigned char scancode = inb(KEYBOARD_DATA_PORT);
+    int pressed = 1;
     
     if (scancode & 0x80) {
+        pressed = 0;
         // Key released
         scancode &= 0x7F;
         if (scancode == 42 || scancode == 54) shift_on = 0;
         if (scancode == 29 || scancode == 56) ctrl_on = 0;
-        return;
     }
+    else {
+        if (scancode == 42 || scancode == 54) {
+            shift_on = 1;
+        }
 
-    if (scancode == 42 || scancode == 54) {
-        shift_on = 1;
-        return;
-    }
+        if (scancode == 29 || scancode == 56) {
+            ctrl_on = 1;
+        }
 
-    if (scancode == 29 || scancode == 56) {
-        ctrl_on = 1;
-        return;
-    }
+        if (scancode == 58) {
+            caps_lock = !caps_lock;
+        }
 
-    if (scancode == 58) {
-        caps_lock = !caps_lock;
-        return;
-    }
-
-    uint32_t key = 0;
-
-    switch (scancode) {
-        case 0x48: // Up arrow
-            buffer_push('\033');
-            buffer_push('[');
-            buffer_push('A'); // Up
-            key = '\033';
-            break;
-        case 0x50: // Down arrow
-            buffer_push('\033');
-            buffer_push('[');
-            buffer_push('B'); // Down
-            key = '\033';
-            break;
-        case 0x4B: // Left arrow
-            buffer_push('\033');
-            buffer_push('[');
-            buffer_push('D'); // Left
-            key = '\033';
-            break;
-        case 0x4D: // Right arrow
-            buffer_push('\033');
-            buffer_push('[');
-            buffer_push('C'); // Right
-            key = '\033';
-            break;
-        default:
-            // if (scancode >= 128) return;
-            key = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
-            char c = (char)key;
-            if (key != 0 && key != UNKNOWN) {
-                if (ctrl_on && keyboard_map[scancode] >= 'a' && keyboard_map[scancode] <= 'z') {
-                    c = c & 0x1F; // Convert to control character
-                    key = (uint32_t)c;
+        switch (scancode) {
+            case 0x48: // Up arrow
+                buffer_push('\033');
+                buffer_push('[');
+                buffer_push('A'); // Up
+                break;
+            case 0x50: // Down arrow
+                buffer_push('\033');
+                buffer_push('[');
+                buffer_push('B'); // Down
+                break;
+            case 0x4B: // Left arrow
+                buffer_push('\033');
+                buffer_push('[');
+                buffer_push('D'); // Left
+                break;
+            case 0x4D: // Right arrow
+                buffer_push('\033');
+                buffer_push('[');
+                buffer_push('C'); // Right
+                break;
+            default: {
+                uint32_t key = keyboard_wm_key(scancode);
+                if (key != 0 && key != UNKNOWN) {
+                    char c = (char)key;
+                    buffer_push(c);
                 }
-
-                buffer_push(c);
+                break;
             }
-            break;
+        }
     }
 
+    uint32_t key = keyboard_wm_key(scancode);
     if (is_gui_enabled && key != 0 && key != UNKNOWN) {
-        wm_dev_push_input_event(WM_EVENT_KEY, 0, 0, key, 0);
+        wm_dev_push_input_event(WM_EVENT_KEY, 0, 0, key, pressed ? 1 : 0);
     }
 
     // terminal_putchar(c);

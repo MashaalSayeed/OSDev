@@ -2,6 +2,7 @@
 #include "drivers/pit.h"
 #include "drivers/tty.h"
 #include "kernel/io.h"
+#include "kernel/isr.h"
 #include "kernel/system.h"
 
 #define SCHEDULER_FREQ 100 // 100 Hz or 10 ms per tick
@@ -21,13 +22,10 @@ uint32_t pit_get_ticks() {
 }
 
 void sleep(uint32_t ms) {
-    if (!scheduler_enabled) return;
-
-	uint32_t start = tick;
-	while ((uint32_t)(tick - start) < ms / 10) {
-        // Busy wait
-        asm volatile("hlt"); // Halt the CPU to save power
-    }
+    uint32_t ticks_needed = (ms * timer_freq) / 1000; // correct for any freq
+    uint32_t start = tick;
+    while ((uint32_t)(tick - start) < ticks_needed)
+        asm volatile("hlt");
 }
 
 void pit_init(uint32_t freq) {

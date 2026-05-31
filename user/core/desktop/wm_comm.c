@@ -27,11 +27,11 @@ void send_response(uint32_t target_pid, wm_response_t *resp) {
  * Launch a user-space application as a forked child
  * --------------------------------------------------------------------- */
 
-void launch_app(const char *path) {
+void launch_app(const char *path, char *const argv[], char *const envp[]) {
     int pid = syscall_fork();
     if (pid == 0) {
         syscall_close(wm_fd);   /* don't leak compositor's fd to child */
-        syscall_exec(path, NULL, NULL);
+        syscall_exec(path, argv, envp);
         syscall_exit(1);
     }
 }

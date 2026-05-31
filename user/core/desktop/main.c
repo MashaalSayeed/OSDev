@@ -51,7 +51,13 @@ int main(void) {
     printf("[compositor] Registered (pid=%d)\n", syscall_getpid());
 
     /* ---- Auto-launch the default application ---- */
-    launch_app("/BIN/GUITEST");
+    char *const argv[] = {
+        "DOOM",
+        "-iwad", "/HOME/DOOM.WAD",
+        "-nosound", "-nogui",
+        NULL
+    };
+    launch_app("/BIN/DOOM", argv, NULL);
 
     /* ---- Initial full-screen paint ---- */
     composite_all();

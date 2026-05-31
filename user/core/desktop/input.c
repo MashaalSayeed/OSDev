@@ -13,6 +13,20 @@
 #include "wm_comm.h"
 #include "input.h"
 
+static uint32_t pointer_capture_win_id = 0;
+
+static void send_mouse_event_to_window(comp_window_t *w, uint32_t btn, int sx, int sy) {
+    wm_response_t ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type       = WM_RESP_EVENT;
+    ev.win_id     = w->id;
+    ev.event_type = WM_EVENT_MOUSE;
+    ev.event_x    = sx - w->x;
+    ev.event_y    = sy - (w->y + TITLE_H);
+    ev.event_btn  = btn;
+    send_response(w->owner_pid, &ev);
+}
+
 /* -----------------------------------------------------------------------
  * Taskbar hit-testing helpers (private)
  * --------------------------------------------------------------------- */
@@ -78,7 +92,7 @@ void handle_input(const wm_request_t *req) {
                 if (wi >= 0)
                     focused_win_id = windows[wi].id;
                 else if (taskbar_launch_hit(cursor_x, cursor_y))
-                    launch_app("/BIN/NOTEPAD");
+                    launch_app("/BIN/NOTEPAD", NULL, NULL);
             } else {
                 int idx = hit_test_idx(cursor_x, cursor_y);
                 if (idx >= 0) {
@@ -96,27 +110,33 @@ void handle_input(const wm_request_t *req) {
                         syscall_shm_unmap(w->shm_id);
                         syscall_shm_destroy(w->shm_id);
                         if (focused_win_id == w->id) focused_win_id = 0;
+                        if (pointer_capture_win_id == w->id) pointer_capture_win_id = 0;
                         w->active = 0;
                     } else if (in_title_bar(w, cursor_x, cursor_y)) {
                         /* Begin title-bar drag */
                         drag_win_idx = idx;
                         drag_ox = cursor_x - w->x;
                         drag_oy = cursor_y - w->y;
+                        pointer_capture_win_id = 0;
                     } else {
-                        /* Forward click into client-area */
-                        wm_response_t ev;
-                        memset(&ev, 0, sizeof(ev));
-                        ev.type       = WM_RESP_EVENT;
-                        ev.win_id     = w->id;
-                        ev.event_type = WM_EVENT_MOUSE;
-                        ev.event_x    = cursor_x - w->x;
-                        ev.event_y    = cursor_y - (w->y + TITLE_H);
-                        ev.event_btn  = btn;
-                        send_response(w->owner_pid, &ev);
+                        pointer_capture_win_id = w->id;
+                        send_mouse_event_to_window(w, btn, cursor_x, cursor_y);
                     }
                 }
             }
+        } else if (pointer_capture_win_id) {
+            /* Keep sending button/move updates to the pressed window until release. */
+            comp_window_t *cw = find_window(pointer_capture_win_id);
+            if (cw && cw->active) {
+                send_mouse_event_to_window(cw, btn, cursor_x, cursor_y);
+            } else {
+                pointer_capture_win_id = 0;
+            }
         }
+
+        if (lmb_up)
+            pointer_capture_win_id = 0;
+
         prev_btn = btn;
 
     } else if (etype == WM_EVENT_KEY) {
@@ -130,6 +150,7 @@ void handle_input(const wm_request_t *req) {
                 ev.win_id     = fw->id;
                 ev.event_type = WM_EVENT_KEY;
                 ev.event_key  = (uint32_t)req->w;
+                ev.event_btn  = btn;
                 send_response(fw->owner_pid, &ev);
             }
         }

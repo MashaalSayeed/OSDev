@@ -12,7 +12,7 @@
 void send_response(uint32_t target_pid, wm_response_t *resp);
 
 /* Fork + exec a user-space app; closes the compositor's wm_fd in the child. */
-void launch_app(const char *path);
+void launch_app(const char *path, char *const argv[], char *const envp[]);
 
 /* Dispatch one request frame (may be an input injection or a client request). */
 void handle_request(uint32_t client_pid, const wm_request_t *req);

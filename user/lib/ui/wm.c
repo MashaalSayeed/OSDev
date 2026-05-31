@@ -31,8 +31,8 @@ int wm_connect(void) {
     while (1) {
         int n = syscall_read(wm_fd, (char *)&resp, sizeof(resp));
         if (n == (int)sizeof(wm_response_t)) {
-            printf("[wm] connect resp type=%u status=%d\n",
-                   (unsigned)resp.type, resp.status);
+            printf("[wm] connect resp type=%d status=%d\n",
+                   (int)resp.type, resp.status);
             if (resp.type == WM_RESP_OK)
                 break;
             if (resp.type == WM_RESP_ERROR) {
@@ -79,8 +79,8 @@ uint32_t wm_create_window(int x, int y, int w, int h,
     while (1) {
         int n = syscall_read(wm_fd, (char *)&resp, sizeof(resp));
         if (n == (int)sizeof(wm_response_t)) {
-            printf("[wm] create resp type=%u status=%d shm=%d\n",
-                   (unsigned)resp.type, resp.status, resp.shm_id);
+            printf("[wm] create resp type=%d status=%d shm=%d\n",
+                   (int)resp.type, resp.status, resp.shm_id);
             if (resp.type == WM_RESP_OK)
                 break;
             if (resp.type == WM_RESP_ERROR)

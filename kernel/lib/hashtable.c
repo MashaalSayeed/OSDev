@@ -91,7 +91,7 @@ void hash_print(hash_table_t *table) {
     for (uint32_t i = 0; i < HASH_TABLE_SIZE; i++) {
         hash_node_t *node = table->nodes[i];
         while (node) {
-            printf("Key: %s, Value: %p\n", node->key, node->value);
+            printf("Key: %s, Value: %x\n", node->key, node->value);
             node = node->next;
         }
     }

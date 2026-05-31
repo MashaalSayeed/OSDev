@@ -247,6 +247,7 @@ static int handle_event(const wm_event_t *evt)
         return 0;   /* signal exit */
 
     if (evt->type == WM_EVENT_KEY) {
+        if (evt->button == 0) return 1;
         uint32_t key = evt->key;
 
         if (key == 0x1B) {

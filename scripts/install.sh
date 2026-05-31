@@ -59,6 +59,12 @@ for f in "$RESOURCES_DIR"/*; do
     mcopy -i "$DISK_IMAGE" "$f" "::RES/$name"
 done
 
+# Doom looks for its IWAD in the current directory first, so mirror doom.wad into /HOME.
+if [ -f "$RESOURCES_DIR/doom.wad" ]; then
+    echo "Copying $RESOURCES_DIR/doom.wad -> ::HOME/DOOM.WAD"
+    mcopy -i "$DISK_IMAGE" "$RESOURCES_DIR/doom.wad" "::HOME/DOOM.WAD"
+fi
+
 # Copy home files if any
 if [ -d "./home" ]; then
     for f in ./home/*; do
