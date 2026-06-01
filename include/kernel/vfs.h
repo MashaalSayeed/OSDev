@@ -107,6 +107,8 @@ typedef struct block_device {
     char name[32];      // The name of the block device
     int (*read_block)(struct block_device *dev, uint32_t block, void *buf);
     int (*write_block)(struct block_device *dev, uint32_t block, const void *buf);
+    int (*read_blocks)(struct block_device *dev, uint32_t block, uint32_t count, void *buf);
+    int (*write_blocks)(struct block_device *dev, uint32_t block, uint32_t count, const void *buf);
     void *device_data;  // Device-specific data (e.g., file descriptor or memory pointer)
 } block_device_t;
 

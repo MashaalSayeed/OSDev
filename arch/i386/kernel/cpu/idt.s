@@ -2,7 +2,6 @@ global idt_flush
 idt_flush:
     MOV eax, [esp+4]
     LIDT [eax]
-    STI
     RET
 
 %macro ISR_NOERRCODE 1
@@ -16,7 +15,6 @@ idt_flush:
 %macro ISR_ERRCODE 1
     global isr%1
     isr%1:
-        CLI
         ; Error code is pushed by the CPU
         PUSH LONG %1
         JMP isr_common_stub
@@ -25,7 +23,6 @@ idt_flush:
 %macro IRQ 2
     global irq%1
     irq%1:
-        CLI
         PUSH LONG 0
         PUSH LONG %2
         JMP irq_common_stub

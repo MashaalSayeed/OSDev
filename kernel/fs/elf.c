@@ -45,7 +45,6 @@ elf_header_t *load_elf(vfs_file_t *file, page_directory_t *page_dir) {
 
         // Map physical frames into the new process page dir
         map_memory(page_dir, ph.vaddr, (uint32_t)-1, ph.mem_size, 0x7);
-        kprintf(DEBUG, "alloc_page: frame=%x for virt=%x\n", get_page(ph.vaddr, 0, page_dir)->frame, ph.vaddr);
         page_table_entry_t *dbg = get_page(ph.vaddr, 0, page_dir);
         
         // Read segment data into kernel buffer
@@ -119,8 +118,6 @@ elf_t elf_from_multiboot(struct multiboot_tag_elf_sections * elf_sec) {
 const char *elf_lookup_symbol(uint32_t addr, elf_t *elf) {
     if (!paging_enabled || !elf) return NULL;
 
-    // elf_symbol_t *symtab = (elf_symbol_t *)SYMTAB_VIRT_ADDR;
-    // const char *strtab = (const char *)STRTAB_VIRT_ADDR;
     elf_symbol_t *symtab = elf->symtab;
     const char *strtab = elf->strtab;
 

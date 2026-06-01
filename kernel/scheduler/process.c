@@ -191,13 +191,15 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     PUSH(stack, uint32_t, 0x23); // gs
 
     // Set up thread context
-    if (!proc->is_kernel_process) {
+    if (proc != NULL && !proc->is_kernel_process) {
         thread->user_esp = (uintptr_t)alloc_user_stack(thread);
     }
 
     thread->esp = (uintptr_t)stack;
     thread->ebp = (uintptr_t)stack;
     thread->eip = (uintptr_t)entry_point;
+
+    if (proc == NULL) return thread; // For kernel threads that don't belong to a process
 
     // Add to process's thread list
     if (!proc->thread_list) {

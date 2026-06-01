@@ -96,11 +96,11 @@ static uint32_t keyboard_wm_key(unsigned char scancode) {
         case 0x50: return 0x50; // Down arrow
         case 0x4B: return 0x4B; // Left arrow
         case 0x4D: return 0x4D; // Right arrow
-        case 42:   return 42;   // Left shift
-        case 54:   return 54;   // Right shift
-        case 29:   return 29;   // Ctrl
-        case 56:   return 56;   // Alt
-        case 58:   return 58;   // Caps lock
+        case 42:   return 0;    // Left shift (modifier only)
+        case 54:   return 0;    // Right shift (modifier only)
+        case 29:   return 0;    // Ctrl (modifier only)
+        case 56:   return 0;    // Alt (modifier only)
+        case 58:   return 0;    // Caps lock (modifier only)
         default: {
             uint32_t key = (shift_on || caps_lock) ? keyboard_map_shift[scancode] : keyboard_map[scancode];
             if (key == UNKNOWN || key == 0) return 0;
@@ -110,6 +110,38 @@ static uint32_t keyboard_wm_key(unsigned char scancode) {
             return key;
         }
     }
+}
+
+static uint32_t keyboard_text_key(unsigned char scancode) {
+    if (scancode == 42 || scancode == 54 || scancode == 29 || scancode == 56 || scancode == 58) {
+        return 0;
+    }
+
+    uint32_t base = keyboard_map[scancode];
+    if (base == UNKNOWN || base == 0) {
+        return 0;
+    }
+
+    if (base >= 'a' && base <= 'z') {
+        if (ctrl_on) {
+            return base & 0x1F;
+        }
+
+        if (shift_on ^ caps_lock) {
+            return keyboard_map_shift[scancode];
+        }
+
+        return base;
+    }
+
+    if (shift_on) {
+        uint32_t shifted = keyboard_map_shift[scancode];
+        if (shifted != UNKNOWN && shifted != 0 && shifted <= 0x7F) {
+            return shifted;
+        }
+    }
+
+    return (base <= 0x7F) ? base : 0;
 }
 
 void keyboard_callback(registers_t *regs) {
@@ -158,8 +190,8 @@ void keyboard_callback(registers_t *regs) {
                 buffer_push('C'); // Right
                 break;
             default: {
-                uint32_t key = keyboard_wm_key(scancode);
-                if (key != 0 && key != UNKNOWN) {
+                uint32_t key = keyboard_text_key(scancode);
+                if (key != 0) {
                     char c = (char)key;
                     buffer_push(c);
                 }

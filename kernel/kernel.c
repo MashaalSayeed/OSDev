@@ -124,11 +124,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	printf("kernel page dir: %x\n", kpage_dir);
 
 	process_t *init_proc = create_process("init", init_main, PROCESS_FLAG_KERNEL);
-	process_t *test_proc = create_process("test", process_test, PROCESS_FLAG_KERNEL);
-
 	schedule_process_threads(init_proc);
-	// schedule_process_threads(test_proc);
-
 
 	if (is_gui_enabled) {
 		/*

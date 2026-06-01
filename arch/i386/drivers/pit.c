@@ -14,7 +14,6 @@ bool scheduler_enabled = false;
 void pit_handler(registers_t *regs) {
     // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second or 10 ms per tick)
     tick++;
-    schedule(regs);
 }
 
 uint32_t pit_get_ticks() {

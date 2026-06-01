@@ -283,6 +283,15 @@ int sys_mprotect(void *addr, size_t len, int prot) {
     return 0; // TODO: implement
 }
 
+int sys_clock_gettime(int clk_id, timespec_t *ts) {
+    if (!ts) return -1;
+    
+    uint32_t ticks = pit_get_ticks();    // raw 100Hz ticks
+    ts->tv_sec  = ticks / 100;
+    ts->tv_nsec = (ticks % 100) * 10000000; // remainder ticks → ns
+    return 0;
+}
+
 // --- Directory and file system ---
 int sys_getdents(int fd, linux_dirent_t *dirp, int count) {
     return vfs_getdents(fd, dirp, count);
@@ -581,13 +590,17 @@ int sys_nanosleep(const timespec_t *req, timespec_t *rem) {
 
     if (ticks_needed == 0) return 0;  // sub-10ms sleep, just return
 
-    current_thread->wakeup_tick = pit_get_ticks() + ticks_needed;
+    uint32_t wakeup_tick = pit_get_ticks() + ticks_needed;
+    current_thread->wakeup_tick = wakeup_tick;
     current_thread->status = SLEEPING;
 
-    // Yield — pick_next_thread will skip us until wakeup_tick is reached
-    schedule(NULL);
+    // Yield until the timer reaches the requested wakeup tick.
+    // The scheduler wakes SLEEPING threads on timer interrupts, but we keep
+    // looping here so an early return or spurious wake does not break sleep.
+    while ((int32_t)(pit_get_ticks() - wakeup_tick) < 0) {
+        schedule(interrupt_frame);
+    }
 
-    // If we get here, we were woken up (either by tick or a signal later)
     if (rem) {
         rem->tv_sec  = 0;
         rem->tv_nsec = 0;
@@ -796,6 +809,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_KILL:        return sys_kill((int)regs->ebx, (int)regs->ecx);
         case SYSCALL_GETPPID:       return sys_getppid();
         case SYSCALL_RENAME:         return sys_rename((const char *)regs->ebx, (const char *)regs->ecx);
+        case SYSCALL_CLOCK_GETTIME:     return sys_clock_gettime((int)regs->ebx, (timespec_t *)regs->ecx);
         // case SYSCALL_INPUT_READ:  return sys_input_read((input_event_t *)regs->ebx);
         default:
             kprintf(WARNING, "Unknown syscall: %d\n", num);

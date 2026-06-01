@@ -50,6 +50,7 @@
 #define SYSCALL_KILL 37
 #define SYSCALL_SIGNAL 48
 #define SYSCALL_SIGRETURN 119
+#define SYSCALL_CLOCK_GETTIME 265
 
 /* --- Shared-memory & framebuffer (user-space compositor) --- */
 #define SYSCALL_SHM_CREATE  29
@@ -81,11 +82,6 @@ typedef struct {
 } stat_t;
 
 typedef struct {
-    uint32_t tv_sec;
-    uint32_t tv_nsec;
-} timespec_t;
-
-typedef struct {
     int entry_number;    // -1 = allocate new
     uint32_t base_addr;
     uint32_t limit;
@@ -101,3 +97,8 @@ typedef struct {
     void *iov_base;
     size_t iov_len;
 } iovec_t;
+
+typedef struct {
+    long   tv_sec;  // Seconds
+    long   tv_nsec; // Nanoseconds
+} timespec_t;

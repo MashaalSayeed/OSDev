@@ -137,80 +137,12 @@ void write_command(char ** args) {
     syscall_close(fd);
 }
 
-void test_fork_command(char **args) {
-    for (int i = 0; i < 3; i++) {
-        int pid = syscall_fork();
-        if (pid < 0) {
-            printf("Error: fork failed\n");
-        } else if (pid == 0) {
-            // Child process
-            printf("Hello from child process! PID: %d\n", syscall_getpid());
-            syscall_exit(0);
-        } else {
-            // Parent process
-            printf("Hello from parent process! PID: %d, child PID: %d\n", syscall_getpid(), pid);
-            syscall_waitpid(pid, NULL, 0);
-        }
+int atoi(const char *str) {
+    int result = 0;
+    for (size_t i = 0; str[i] >= '0' && str[i] <= '9'; i++) {
+        result = result * 10 + (str[i] - '0');
     }
-}
-
-void test_heap_command(char **args) {
-    void *ptr = malloc(1024); // Allocate 1KB
-    if (ptr == (void *)-1) {
-        printf("Error: Failed to allocate memory\n");
-    } else {
-        printf("Allocated 1KB at %x\n", ptr);
-        *(int *)ptr = 42; // Write to allocated memory
-        printf("Wrote %d to allocated memory\n", *(int *)ptr);
-        free(ptr); // Free the allocated memory
-        printf("Freed allocated memory\n");
-    }
-}
-
-void test_pipe_command(char **args) {
-    int fds[2];
-    if (syscall_pipe(fds) < 0) {
-        printf("Error: Failed to create pipe\n");
-        return;
-    }
-
-    const char *message = "Hello through the pipe!";
-    syscall_write(fds[1], message, strlen(message));
-
-    char buffer[256];
-    int bytes_read = syscall_read(fds[0], buffer, sizeof(buffer) - 1);
-    if (bytes_read < 0) {
-        printf("Error: Failed to read from pipe\n");
-        return;
-    }
-    buffer[bytes_read] = '\0'; // Null-terminate the string
-
-    printf("Read from pipe: %s\n", buffer);
-
-    syscall_close(fds[0]);
-    syscall_close(fds[1]);
-}
-
-void test_shm_command(char **args) {
-    int shm_id = syscall_shm_create(4096); // Create a shared memory segment of 4KB
-    if (shm_id < 0) {
-        printf("Error: Failed to create shared memory\n");
-        return;
-    }
-
-    void *shm_ptr = syscall_shm_map(shm_id);
-    if (!shm_ptr) {
-        printf("Error: Failed to map shared memory\n");
-        return;
-    }
-
-    printf("Shared memory created with ID %d and mapped at %x\n", shm_id, shm_ptr);
-    strcpy((char *)shm_ptr, "Hello from shared memory!");
-    printf("Wrote to shared memory: %s\n", (char *)shm_ptr);
-
-    syscall_shm_unmap(shm_id);
-    syscall_shm_destroy(shm_id);
-    printf("Unmapped and destroyed shared memory\n");
+    return result;
 }
 
 void sleep_command(char **args) {
@@ -218,37 +150,11 @@ void sleep_command(char **args) {
         printf("Usage: sleep <milliseconds>\n");
         return;
     }
-    uint32_t ms = 5;//(uint32_t)atoi(args[1]);
+    uint32_t ms = (uint32_t)atoi(args[1]);
+    // uint32_t ms = 1000;
+    printf("Sleeping for %d milliseconds...\n", ms);
     t_sleep(ms);
-}
-
-void test_tick_command(char **args) {
-    uint32_t start = syscall_get_ticks();
-    printf("Current ticks: %d\n", start);
-    printf("Sleeping for 1000 ticks...\n");
-    while (syscall_get_ticks() < start + 1000) {
-        syscall_yield();
-    }
-    printf("Woke up at ticks: %d\n", syscall_get_ticks());
-}
-
-void test_mmap_command(char **args) {
-    void *p = syscall_mmap(NULL, 4096, 0, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
-    if (p == (void*)-1) { printf("mmap failed\n"); return; }
-
-    // Should be zeroed
-    char *bytes = p;
-    for (int i = 0; i < 4096; i++) {
-        if (bytes[i] != 0) { printf("not zeroed at %d\n", i); return; }
-    }
-
-    // Should be writable
-    bytes[0] = 42;
-    bytes[4095] = 99;
-    printf("mmap ok, [0]=%d [4095]=%d\n", bytes[0], bytes[4095]);
-
-    syscall_munmap(p, 4096);
-    printf("munmap ok\n");
+    printf("Awake!\n");
 }
 
 void help_command(char **args) {
@@ -263,14 +169,9 @@ void help_command(char **args) {
     printf("    pwd - Print working directory\n");
     printf("    cd <dir> - Change directory\n");
     printf("    clear - Clear the screen\n");
-    printf("    test_heap - Test heap memory allocation\n");
-    printf("    test_fork - Test fork functionality\n");
-    printf("    test_pipe - Test pipe functionality\n");
-    printf("    test_shm - Test shared memory functionality\n");
     printf("    write <file> - Write to a file\n");
     printf("    history - Display command history\n");
     printf("    help - Display this help message\n");
-    printf("    test_tick - Test tick timer functionality\n");
     printf("    exit - Exit the shell\n");
 }
 
@@ -290,13 +191,6 @@ command_t commands[] = {
     {"history", history_command},
     {"help", help_command},
     {"sleep", sleep_command},
-    {"test_heap", test_heap_command},
-    {"test_pipe", test_pipe_command},
-    {"test_shm", test_shm_command},
-    {"test_fork", test_fork_command},
-    {"test_mmap", test_mmap_command},
-    {"test_tick", test_tick_command},
-    {"sleep", sleep_command},
     {NULL, NULL}
 };
 
@@ -311,7 +205,7 @@ void parse_input(char *input, char **args) {
 }
 
 int is_valid_command(char *command) {
-    char *bin_commands[] = {"HELLO", "EDITOR", "TEST", "SHELL", "TTYTEST"};
+    char *bin_commands[] = {"HELLO", "EDITOR", "TEST", "SHELL"};
     for (size_t i = 0; i < sizeof(bin_commands) / sizeof(bin_commands[0]); i++) {
         if (strcmp(command, bin_commands[i]) == 0) {
             return 1;
