@@ -60,6 +60,7 @@ typedef struct page_directory {
 extern page_directory_t * initial_page_dir;
 extern const uint32_t _kernel_start;
 
+bool is_paging_enabled();
 void paging_init();
 void switch_page_directory(page_directory_t *dir);
 void enable_paging();
@@ -86,9 +87,9 @@ uint32_t copy_page_frame(page_directory_t *src_dir, uint32_t src_vaddr);
 void map_page_to_frame(page_table_entry_t *page, uint32_t frame, uint32_t flags);
 void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags);
 void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags);
+void kmap_elf_region(uint32_t addr, uint32_t size, uint32_t flags);
 
 void debug_page_mapping(page_directory_t *dir, uint32_t virtual_address);
 void dump_page_directory(page_directory_t *dir);
-void page_fault_handler(registers_t *regs);
 page_directory_t * clone_page_directory(page_directory_t *src);
 void free_page_directory(page_directory_t *dir);

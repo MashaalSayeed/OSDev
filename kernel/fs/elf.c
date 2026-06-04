@@ -6,7 +6,6 @@
 #include "kernel/printf.h"
 #include "kernel/multiboot.h"
 
-extern int paging_enabled;
 extern page_directory_t *kpage_dir;
 
 int is_valid_elf(elf_header_t *header) {
@@ -116,7 +115,8 @@ elf_t elf_from_multiboot(struct multiboot_tag_elf_sections * elf_sec) {
 }
 
 const char *elf_lookup_symbol(uint32_t addr, elf_t *elf) {
-    if (!paging_enabled || !elf) return NULL;
+    if (!is_paging_enabled() || !elf) return NULL;
+    if (!elf->symtab || !elf->strtab || !elf->symtabsz || !elf->strtabsz) return NULL;
 
     elf_symbol_t *symtab = elf->symtab;
     const char *strtab = elf->strtab;

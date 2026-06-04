@@ -17,9 +17,11 @@ uint32_t kpage_dir_phys;
 extern uint8_t *bitmap;
 extern uint32_t bitmap_size;
 extern uint8_t kernel_stack_bottom;
+bool paging_enabled = false;
 
-int page_fault_detected = 0;
-int paging_enabled = 0;
+bool is_paging_enabled() {
+    return paging_enabled;
+}
 
 void * dumb_kmalloc(uint32_t size, uint32_t align) {
     void *ret = temp_mem;
@@ -73,7 +75,7 @@ void enable_paging() {
     cr0 |= 0x80000000;
     asm volatile("mov %0, %%cr0" :: "r"(cr0));
 
-    paging_enabled = 1;
+    paging_enabled = true;
 }
 
 void invalidate_page(uint32_t addr) {
@@ -216,6 +218,12 @@ void map_memory(page_directory_t *dir, uint32_t virtual_start, uint32_t physical
 
 void kmap_memory(uint32_t virtual_start, uint32_t physical_start, uint32_t size, uint32_t flags) {
     map_memory(kpage_dir, virtual_start, physical_start, size, flags);
+}
+
+void kmap_elf_region(uint32_t addr, uint32_t size, uint32_t flags) {
+    if (!addr || !size) return;
+    uint32_t start = addr & ~0xFFF;
+    kmap_memory(start, start, size + (addr - start), flags);
 }
 
 void switch_page_directory(page_directory_t *dir) {
@@ -448,8 +456,6 @@ void paging_init() {
     kpage_dir_phys = (uint32_t)kpage_dir - LOAD_MEMORY_ADDRESS;
     memset(kpage_dir, 0, sizeof(page_directory_t));
 
-    register_interrupt_handler(14, page_fault_handler);
-
     // Map the first 4MB of memory to the first 4MB of physical memory
     // 768 - 1024 is reserved for the kernel stack and other kernel data
     kmap_memory(LOAD_MEMORY_ADDRESS, 0, 4 * 0x100000, PAGE_PRESENT | PAGE_RW);
@@ -507,63 +513,4 @@ void dump_page_directory(page_directory_t *dir) {
         // }
     }
     printf("=====================================\n");
-}
-
-void page_fault_handler(registers_t *regs) {
-    if (!paging_enabled) {
-        printf("Page fault occurred but paging is not enabled!\n");
-        for (;;) ;
-    }
-    if (page_fault_detected) {
-        printf("Nested page fault detected! Halting system.\n");
-        for (;;) ;
-    }
-    page_fault_detected = 1;
-    uint32_t faulting_address;
-    asm volatile("mov %%cr2, %0" : "=r" (faulting_address) :: "memory");
-    
-        kprintf(DEBUG, "page_fault: eip=%x esp=%x cr2=%x err=%x cs=%x\n",
-                regs->eip, regs->useresp, faulting_address, regs->err_code, regs->cs);
-
-    if (faulting_address >= &kernel_stack_bottom && faulting_address < &kernel_stack_bottom + BLOCK_SIZE) {
-        printf("Stack overflow at %x\n", faulting_address);
-        for (;;) ;
-    }
-
-    uint32_t cr3;
-    get_cr3(&cr3);
-
-    printf("Page fault at %x\n", faulting_address);
-    printf("Error code: %x\n", regs->err_code);
-    printf("Page Directory: %x (kernel: %s)\n", cr3, cr3 == kpage_dir_phys ? "yes" : "no");
-    print_debug_info(regs);
-    
-    process_t *proc = get_current_process();
-    if (proc) printf("PID: %d\n", proc->pid);
-
-    uint32_t present = regs->err_code & PF_ERR_PRESENT;
-    uint32_t rw = regs->err_code & PF_ERR_RW;
-    uint32_t user = regs->err_code & PF_ERR_USER;
-    uint32_t reserved = regs->err_code & PF_ERR_RESERVED;
-    uint32_t inst_fetch = regs->err_code & PF_ERR_INST;
-
-    printf("Possible causes: [ ");
-    if(!present) printf("Page not present ");
-    if(rw) printf("Page is read only ");
-    if(user) printf("User-mode access ");
-    if(reserved) printf("Overwrote reserved bits ");
-    if(inst_fetch) printf("Instruction fetch ");
-    printf("]\n");
-
-    print_stack_trace(regs);
-
-    if (user && proc) {
-        printf("Killing process %d due to page fault\n", proc->pid);
-        page_fault_detected = 0;   // reset before kill_process calls schedule
-        kill_process(proc, -1);
-        // unreachable if schedule() switches away
-    }
-
-    page_fault_detected = 0;  // reset so nested detection still works
-    for (;;);
 }

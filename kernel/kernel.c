@@ -100,7 +100,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	init_keyboard();
 
 	// Allocate 1096MB of memory
-	printf("Allocating %xMB of memory\n", MAX_MEMORY / (1024 * 1024));
+	printf("Allocating %dMB of memory\n", MAX_MEMORY / (1024 * 1024));
 	pmm_init(mbd, MAX_MEMORY);
 
 	paging_init();
@@ -113,18 +113,14 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	// acpi_init();
 	printf("\n");
 
-
-	// TODO: Load kernel ELF file at higher virtual address
-	kmap_memory((uint32_t)kernel_elf.symtab, (uint32_t)kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
-	kmap_memory((uint32_t)kernel_elf.strtab, (uint32_t)kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
+	kmap_elf_region((uint32_t)kernel_elf.symtab, kernel_elf.symtabsz, 0x7);
+	kmap_elf_region((uint32_t)kernel_elf.strtab, kernel_elf.strtabsz, 0x7);
 
 	vfs_init();
-	scheduler_init();
-
-	printf("kernel page dir: %x\n", kpage_dir);
-
+	
 	process_t *init_proc = create_process("init", init_main, PROCESS_FLAG_KERNEL);
 	schedule_process_threads(init_proc);
+	scheduler_init();
 
 	if (is_gui_enabled) {
 		/*

@@ -1,14 +1,15 @@
 #pragma once
 
 #include <stdint.h>
+#include "kernel/wait_queue.h"
 
 #define ATA_VENDOR_ID 0x8086
 #define ATA_DEVICE_ID 0x7010
 
 #define ATA_PRIMARY_BASE_PORT 0x1F0
+#define ATA_PRIMARY_CTRL_PORT 0x3F6
 #define ATA_SECONDARY_BASE_PORT 0x170
-#define ATA_PRIMARY_CONTROL_PORT 0x3F6
-#define ATA_SECONDARY_CONTROL_PORT 0x376
+#define ATA_SECONDARY_CTRL_PORT 0x376
 
 #define ATA_TYPE_ATA 0
 #define ATA_TYPE_ATAPI 1
@@ -23,6 +24,7 @@
 #define ATA_REG_DEVICE 0x06
 #define ATA_REG_STATUS 0x07
 #define ATA_REG_COMMAND 0x07
+#define ATA_REG_ALT_STATUS 0x206
 
 #define ATA_CMD_IDENTIFY  0xEC
 #define ATA_CMD_READ      0x20
@@ -95,5 +97,15 @@ typedef struct {
     uint16_t integrity_word;           // Word 255: Integrity word
 } __attribute__((packed)) ata_identify_t;
 
+typedef struct {
+    uint16_t    io_base;
+    uint16_t    ctrl_base;
+    uint8_t     irq;
+ 
+    wait_queue_t wait_queue;    // threads blocked waiting for IRQ
+    volatile int irq_fired;     // set by ISR, cleared before issuing command
+    volatile int last_status;   // STATUS register captured in ISR
+    volatile int last_error;    // ERROR register captured on error
+} ata_channel_t;
 
 void ata_init();

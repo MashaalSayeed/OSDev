@@ -76,25 +76,6 @@ int ata_identify(uint16_t io_base, uint8_t drive) {
     return ATA_SUCCESS;
 }
 
-int ata_read_sector(uint16_t io_base, uint8_t drive, uint32_t lba, void *buffer) {
-    outb(io_base + ATA_REG_DEVICE, 0xE0 | (drive << 4) | ((lba >> 24) & 0x0F));
-    outb(io_base + ATA_REG_SECCOUNT, 1);
-    outb(io_base + ATA_REG_LBA_LOW, lba & 0xFF);
-    outb(io_base + ATA_REG_LBA_MID, (lba >> 8) & 0xFF);
-    outb(io_base + ATA_REG_LBA_HIGH, (lba >> 16) & 0xFF);
-    outb(io_base + ATA_REG_COMMAND, ATA_CMD_READ);
-
-    if (ata_wait_busy(io_base)) return ATA_ERR_BUSY;
-    if (ata_wait_drq(io_base)) return ATA_ERR_DRQ;
-
-    for (int i = 0; i < 256; i++) {
-        ((uint16_t*)buffer)[i] = inw(io_base + ATA_REG_DATA);
-    }
-
-    if (inb(io_base + ATA_REG_STATUS) & ATA_STATUS_ERR) return ATA_ERR_READ;
-    return ATA_SUCCESS;
-}
-
 int ata_read_sectors(uint16_t io_base, uint8_t drive, uint32_t lba, uint32_t count, void *buffer) {
     if (count == 0) return ATA_SUCCESS;
     if (count > 255) return ATA_ERR_READ;
@@ -117,27 +98,6 @@ int ata_read_sectors(uint16_t io_base, uint8_t drive, uint32_t lba, uint32_t cou
     }
 
     if (inb(io_base + ATA_REG_STATUS) & ATA_STATUS_ERR) return ATA_ERR_READ;
-    return ATA_SUCCESS;
-}
-
-int ata_write_sector(uint16_t io_base, uint8_t drive, uint32_t lba, void *buffer) {
-    outb(io_base + ATA_REG_DEVICE, 0xE0 | (drive << 4) | ((lba >> 24) & 0x0F));
-    outb(io_base + ATA_REG_SECCOUNT, 1);
-    outb(io_base + ATA_REG_LBA_LOW, lba & 0xFF);
-    outb(io_base + ATA_REG_LBA_MID, (lba >> 8) & 0xFF);
-    outb(io_base + ATA_REG_LBA_HIGH, (lba >> 16) & 0xFF);
-    outb(io_base + ATA_REG_COMMAND, ATA_CMD_WRITE);
-
-    if (ata_wait_busy(io_base)) return ATA_ERR_BUSY;
-    if (ata_wait_drq(io_base)) return ATA_ERR_DRQ;
-
-    for (int i = 0; i < 256; i++) {
-        outw(io_base + ATA_REG_DATA, ((uint16_t*)buffer)[i]);
-    }
-
-    outb(io_base + ATA_REG_COMMAND, ATA_CMD_FLUSH);
-    if (ata_wait_busy(io_base)) return ATA_ERR_BUSY;
-
     return ATA_SUCCESS;
 }
 
@@ -168,16 +128,8 @@ int ata_write_sectors(uint16_t io_base, uint8_t drive, uint32_t lba, uint32_t co
     return ATA_SUCCESS;
 }
 
-int ata_read_block(block_device_t *dev, uint32_t block, void *buf) {
-    return ata_read_sector((uint16_t)dev->device_data, ATA_MASTER, block, buf);
-}
-
 int ata_read_blocks(block_device_t *dev, uint32_t block, uint32_t count, void *buf) {
     return ata_read_sectors((uint16_t)dev->device_data, ATA_MASTER, block, count, buf);
-}
-
-int ata_write_block(block_device_t *dev, uint32_t block, const void *buf) {
-    return ata_write_sector((uint16_t)dev->device_data, ATA_MASTER, block, buf);
 }
 
 int ata_write_blocks(block_device_t *dev, uint32_t block, uint32_t count, const void *buf) {
@@ -186,8 +138,6 @@ int ata_write_blocks(block_device_t *dev, uint32_t block, uint32_t count, const 
 
 block_device_t ata = {
     .name = "/dev/sda1",
-    .read_block = ata_read_block,
-    .write_block = ata_write_block,
     .read_blocks = ata_read_blocks,
     .write_blocks = ata_write_blocks,
     .device_data = (void *)ATA_PRIMARY_BASE_PORT

@@ -63,6 +63,7 @@ static wm_conn_t  wm_conns[WM_MAX_CLIENTS];
 static wm_frame_t inbox[WM_INBOX_SLOTS];
 static uint32_t   inbox_head = 0;
 static uint32_t   inbox_tail = 0;
+static int        inbox_full_warned = 0;
 
 /* Protects compositor_pid, wm_conns and inbox/resprings */
 static spinlock_t wm_lock;
@@ -289,6 +290,12 @@ void wm_dev_push_input_event(wm_event_type_t type,
     spinlock_acquire_irq(&wm_lock, &flags);
     int rc = inbox_push(0, &req);
     spinlock_release_irq(&wm_lock, flags);
-    if (rc < 0)
-        kprintf(WARNING, "wm_dev: input inbox full\n");
+    if (rc < 0) {
+        if (!inbox_full_warned) {
+            inbox_full_warned = 1;
+            kprintf(WARNING, "wm_dev: input inbox full\n");
+        }
+    } else {
+        inbox_full_warned = 0;
+    }
 }
