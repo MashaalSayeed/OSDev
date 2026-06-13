@@ -2,24 +2,21 @@
 USER_CS equ 0x1B
 USER_DS equ 0x23
 
-; thread_t struct offsets
-THREAD_EIP      equ 4
-THREAD_USER_ESP equ 16
-THREAD_GS       equ 20
-
-; void switch_context(thread_t* context)
+; void switch_context(uintptr_t entry_point, uintptr_t user_esp, uint32_t gs)
 global switch_context
 switch_context:
-    mov eax, [esp+4]    ; eax = thread_t*
+    ; Load arguments into registers before we modify the stack pointer
+    mov eax, [esp+4]    ; eax = entry_point
+    mov ebx, [esp+8]    ; ebx = user_esp
+    movzx ecx, word [esp+12] ; ecx = gs
 
     ; Load user data segments
-    mov cx, USER_DS
-    mov ds, cx
-    mov es, cx
-    mov fs, cx
+    mov dx, USER_DS
+    mov ds, dx
+    mov es, dx
+    mov fs, dx
 
-    ; Restore gs from thread->gs, default to USER_DS if 0
-    movzx ecx, word [eax+THREAD_GS]
+    ; Restore gs, default to USER_DS if 0
     test ecx, ecx
     jnz .set_gs
     mov ecx, USER_DS
@@ -28,10 +25,10 @@ switch_context:
 
     ; Set up the stack for IRET to transition to user space
     push dword USER_DS                      ; SS
-    push dword [eax+THREAD_USER_ESP]        ; USER ESP
+    push ebx                                ; USER ESP
     push dword 0x202                        ; EFLAGS (Interrupts enabled, IOPL=0)
     push dword USER_CS                      ; CS
-    push dword [eax+THREAD_EIP]             ; EIP
+    push eax                                ; EIP
     
     iret
 

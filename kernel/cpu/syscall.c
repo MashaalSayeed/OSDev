@@ -264,7 +264,11 @@ int sys_set_thread_area(user_desc_t *desc) {
     gdt_set_tls(kdesc.base_addr, kdesc.limit);
     uint16_t selector = (GDT_TLS << 3) | 3;
     asm volatile("mov %0, %%gs" :: "r"(selector));
-    current_thread->gs = selector;
+    // Persist the new GS selector into the live interrupt frame so it is
+    // restored by IRET when we return to userspace.  thread_t no longer
+    // carries a 'gs' field; the interrupt frame IS the authoritative copy.
+    if (interrupt_frame)
+        interrupt_frame->gs = selector;
 
     if (copy_to_user(proc->root_page_table, (uint32_t)desc, &kdesc, sizeof(kdesc)) < 0) {
         return -1;

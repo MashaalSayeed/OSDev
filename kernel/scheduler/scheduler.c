@@ -69,24 +69,12 @@ void schedule(registers_t* context) {
     }
 }
 
-__attribute__((naked))
-static void jmp_to_kernel_thread_context(thread_t *thread) {
-    __asm__ volatile (
-        "mov 4(%esp), %eax\n"
-
-        "mov 8(%eax), %esp\n" // ESP
-        "mov 12(%eax), %ebp\n" // EBP
-        "mov 4(%eax), %ecx\n" // EIP
-        "sti\n"
-
-        "jmp *%ecx"
-    );
-}
-
 void jmp_to_kernel_thread(thread_t *thread) {
     printf("Switching to kernel thread: %s (TID: %d) %x\n", thread->thread_name, thread->tid, thread->owner);
     tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
-    jmp_to_kernel_thread_context(thread);
+    uint32_t dummy;
+    asm volatile("sti");
+    switch_task((uintptr_t *)&dummy, thread->esp);
 }
 
 process_t* get_current_process() {

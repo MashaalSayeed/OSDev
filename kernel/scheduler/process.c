@@ -19,7 +19,7 @@
 extern page_directory_t* kpage_dir;
 extern uint32_t kpage_dir_phys;
 extern thread_t* current_thread;
-extern void switch_context(thread_t* context);
+extern void switch_context(uintptr_t entry_point, uintptr_t user_esp, uint32_t gs);
 extern void switch_task(uintptr_t* prev, uintptr_t next);
 extern struct tss_entry tss_entry;
 
@@ -192,12 +192,10 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
 
     // Set up thread context
     if (proc != NULL && !proc->is_kernel_process) {
-        thread->user_esp = (uintptr_t)alloc_user_stack(thread);
+        alloc_user_stack(thread);
     }
 
     thread->esp = (uintptr_t)stack;
-    thread->ebp = (uintptr_t)stack;
-    thread->eip = (uintptr_t)entry_point;
 
     if (proc == NULL) return thread; // For kernel threads that don't belong to a process
 
@@ -444,10 +442,9 @@ int fork(registers_t *regs) {
     *(--sp) = regs->ebp;
     *(--sp) = regs->esi;
     *(--sp) = regs->edi;
-    *(--sp) = parent_thread->gs;     // matches your switch_task
+    *(--sp) = regs->gs;     // matches your switch_task
 
     child_thread->esp = (uintptr_t)sp;
-    child_thread->ebp = parent_thread->ebp + offset;
     
     registers_t *child_regs = (registers_t *)((uintptr_t)regs + offset);
     child_regs->eax = 0;           // child sees fork() == 0
@@ -663,7 +660,7 @@ int exec(const char *path, char **argv, char **envp) {
     }
 
     // ── 9. Launch ─────────────────────────────────────────────────────────────
-    thread->user_esp = u_esp;
+    uintptr_t entry = elf->entry;
     proc->status     = READY;
     kfree(elf);
     elf = NULL;
@@ -676,7 +673,7 @@ int exec(const char *path, char **argv, char **envp) {
     // Free old thread and kernel stack — last thing before iret
     kfree(old_thread);
     kfree_aligned(old_stack);
-    switch_context(thread);   // iret — never returns
+    switch_context(entry, u_esp, USER_DS);   // iret — never returns
     return -1;
 
 fail:
