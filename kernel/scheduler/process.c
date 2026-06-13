@@ -436,15 +436,15 @@ int fork(registers_t *regs) {
     uintptr_t *sp = (uintptr_t *)((uintptr_t)regs + offset);
     
     *(--sp) = (uintptr_t)fork_trampoline;  // ret addr
-    *(--sp) = parent_thread->gs;     // matches your switch_task
-    *(--sp) = regs->edi;
-    *(--sp) = regs->esi;
-    *(--sp) = regs->ebp;
-    *(--sp) = 0;            // esp dummy for popad
-    *(--sp) = regs->ebx;
-    *(--sp) = regs->edx;
+    *(--sp) = regs->eax;    // eax
     *(--sp) = regs->ecx;
-    *(--sp) = regs->eax;    // eax (will be overwritten anyway)
+    *(--sp) = regs->edx;
+    *(--sp) = regs->ebx;
+    *(--sp) = 0;            // esp dummy for popad
+    *(--sp) = regs->ebp;
+    *(--sp) = regs->esi;
+    *(--sp) = regs->edi;
+    *(--sp) = parent_thread->gs;     // matches your switch_task
 
     child_thread->esp = (uintptr_t)sp;
     child_thread->ebp = parent_thread->ebp + offset;

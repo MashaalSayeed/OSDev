@@ -25,8 +25,9 @@ static page_directory_t *thread_page_directory(thread_t *thread) {
 }
 
 void idle_thread(void) {
+    asm volatile ("sti");
     while (1) {
-        asm volatile ("sti; hlt");
+        asm volatile ("hlt");
     }
 }
 

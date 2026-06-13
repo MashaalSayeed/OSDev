@@ -26,6 +26,7 @@ void print_debug_info(registers_t *regs) {
     printf("  USERESP: %x\n", regs->useresp);
     printf("  SS: %x\n", regs->ss);
     printf("  EAX: %x\n", regs->eax);
+    printf("  DS: %x, ES: %x, FS: %x, GS: %x\n", regs->ds, regs->es, regs->fs, regs->gs);
 }
 
 void print_stack_trace(registers_t *regs) {

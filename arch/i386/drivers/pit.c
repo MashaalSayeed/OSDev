@@ -4,6 +4,7 @@
 #include "kernel/io.h"
 #include "kernel/isr.h"
 #include "kernel/system.h"
+#include "kernel/printf.h"
 
 #define SCHEDULER_FREQ 100 // 100 Hz or 10 ms per tick
 

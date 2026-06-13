@@ -79,11 +79,11 @@ extern void irq15();
 extern void isr128();
 extern void isr177();
 
-typedef struct {
-   uint32_t ds; /* Data segment selector */
-   uint32_t edi, esi, ebp, useless, ebx, edx, ecx, eax; /* Pushed by pusha. */
-   uint32_t int_no, err_code; /* Interrupt number and error code (if applicable) */
-   uint32_t eip, cs, eflags, useresp, ss; /* Pushed by the processor automatically */
+typedef struct registers {
+    uint32_t ds, es, fs, gs;
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+    uint32_t int_no, err_code;
+    uint32_t eip, cs, eflags, useresp, ss;
 } __attribute__((packed)) registers_t;
 
 typedef void (*isr_t)(registers_t*);
