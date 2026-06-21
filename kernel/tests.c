@@ -168,3 +168,13 @@ void test_shell() {
 	process_t* process = create_process("shell", &shell, PROCESS_FLAG_USER);
 	schedule_process_threads(process);
 }
+
+void run_tests() {
+	// test_divide_by_zero();
+	// test_heap();
+	// test_printf();
+	// test_string();
+	// test_scheduler();
+	// test_fork();
+	// test_shell();
+}

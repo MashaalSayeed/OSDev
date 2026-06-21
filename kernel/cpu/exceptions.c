@@ -145,6 +145,8 @@ void page_fault_handler(registers_t *regs) {
         printf("Killing process %d due to page fault\n", proc->pid);
         page_fault_detected = 0;   // reset before kill_process calls schedule
         kill_process(proc, -1);
+        schedule(regs);
+        return;
         // unreachable if schedule() switches away
     }
 

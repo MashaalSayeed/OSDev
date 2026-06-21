@@ -74,8 +74,8 @@ void print_time() {
 }
 
 void init_main();
-void process_test();
-
+void process_test1();
+void process_test2();
 
 void kernel_main(uint32_t magic, struct multiboot_tag* mbd) 
 {
@@ -119,7 +119,11 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 	vfs_init();
 	
 	process_t *init_proc = create_process("init", init_main, PROCESS_FLAG_KERNEL);
+	// process_t *test_proc = create_process("test1", process_test1, PROCESS_FLAG_KERNEL);
+	// process_t *test_proc2 = create_process("test2", process_test2, PROCESS_FLAG_KERNEL);
+
 	schedule_process_threads(init_proc);
+	// schedule_process_threads(test_proc2);
 	scheduler_init();
 
 	if (is_gui_enabled) {
@@ -145,6 +149,7 @@ void kernel_main(uint32_t magic, struct multiboot_tag* mbd)
 		jmp_to_kernel_thread(init_proc->main_thread);
 	}
 
+	asm volatile("sti");
 	for (;;) {
 		asm volatile("hlt");
 	}
@@ -165,13 +170,25 @@ void init_main() {
 	for (;;) asm volatile("hlt");
 }
 
-void process_test() {
+void process_test1() {
     printf("Hello from test process!\n");
-    for (uint32_t i = 0; i < 5; i++) {
-        printf("Test thread: tick %d\n", i);
+    for (uint32_t i = 0; ; i++) {
+        printf("Test 1 thread: tick %d\n", i);
         // busy loop a bit so the timer has a chance to preempt
         for (volatile uint32_t j = 0; j < 1000000; j++);
     }
     printf("Test thread exiting\n");
 	for (;;) asm volatile("hlt"); 
 }
+
+
+// void process_test2() {
+//     printf("Hello from test process!\n");
+//     for (uint32_t i = 0;; i++) {
+//         printf("Test 2 thread: tick %d\n", i);
+//         // busy loop a bit so the timer has a chance to preempt
+//         for (volatile uint32_t j = 0; j < 1000000; j++);
+//     }
+//     printf("Test thread exiting\n");
+// 	for (;;) asm volatile("hlt"); 
+// }

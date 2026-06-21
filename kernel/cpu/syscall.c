@@ -17,7 +17,7 @@
 
 extern struct tss_entry tss_entry;
 extern thread_t *current_thread;
-static registers_t *interrupt_frame;
+registers_t *interrupt_frame;
 
 static char **copy_user_str_array(process_t *proc, char **u_arr, int *out_count) {
     if (out_count) *out_count = 0;
@@ -146,7 +146,8 @@ int sys_readv(int fd, const iovec_t *iov, int iovcnt) {
 // --- Process management ---
 int sys_exit(int status) {
     kill_process(get_current_process(), status);
-    return 0; // Should never return
+    schedule(interrupt_frame);
+    return 0;
 }
 
 int sys_getpid() {

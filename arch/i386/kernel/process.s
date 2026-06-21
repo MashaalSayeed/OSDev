@@ -67,3 +67,15 @@ global read_eip
 read_eip:
 	pop eax
 	jmp eax
+
+; Trampoline for new kernel threads.
+; When a thread is first scheduled it is entered via switch_task's `ret`,
+; which bypasses IRET and therefore never restores EFLAGS.  Because the timer
+; IRQ that triggered the context switch ran with IF=0, the new thread would
+; start with interrupts permanently disabled.  This stub re-enables them
+; before jumping to the real entry point (which is already on the stack as
+; the next return address).
+global kernel_thread_trampoline
+kernel_thread_trampoline:
+    sti
+    ret

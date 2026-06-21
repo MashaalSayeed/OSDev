@@ -19,7 +19,7 @@ LIBC_DIR = libc
 ISO_DIR = iso
 
 # Compiler and linker flags
-CFLAGS = -ffreestanding -O2 -Wall -Wextra -O0 -I$(CURDIR)/include -std=gnu99
+CFLAGS = -ffreestanding -Wall -Wextra -O0 -I$(CURDIR)/include -std=gnu99
 # Keep debug symbols by default. Set KEEP_DEBUG=0 to build without -g.
 KEEP_DEBUG ?= 1
 ifeq ($(KEEP_DEBUG),1)
@@ -131,10 +131,17 @@ debug: $(ISO_IMAGE)
 		-drive file=$(DISK_IMAGE),format=raw \
 		-serial file:$(LOG_FILE) \
 		-boot d \
-		-vga std &
-
-	sleep 1
-	$(GDB) -ex "target remote localhost:1234" -ex "symbol-file $(KERNEL_BIN_ARCH)"
+		-vga std & \
+	QEMU_PID=$$!; \
+	sleep 1; \
+	$(GDB) \
+		-ex "target remote localhost:1234" \
+		-ex "set confirm off" \
+		-ex "symbol-file $(KERNEL_BIN_ARCH)" \
+		-ex "add-symbol-file $(BUILD_DIR)/user/bin/shell" 
+		-ex "set confirm on"; \
+	echo "GDB exited. Killing QEMU (PID: $$QEMU_PID)..."; \
+	kill -9 $$QEMU_PID 2>/dev/null || true
 
 clean:
 	rm -rf $(BUILD_DIR) $(KERNEL_BIN_ARCH) $(ISO_IMAGE) $(KERNEL_BIN) $(LOG_FILE)

@@ -21,6 +21,7 @@ extern uint32_t kpage_dir_phys;
 extern thread_t* current_thread;
 extern void switch_context(uintptr_t entry_point, uintptr_t user_esp, uint32_t gs);
 extern void switch_task(uintptr_t* prev, uintptr_t next);
+extern void kernel_thread_trampoline(void);
 extern struct tss_entry tss_entry;
 
 extern uintptr_t read_eip();
@@ -184,7 +185,13 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     // Set up thread stack for context switch
     void *stack = alloc_kernel_stack(thread);
 
+    // Stack layout consumed by switch_task on first entry:
+    //   pop gs        <- 0x23
+    //   popad         <- 8 zeros
+    //   ret           <- lands in kernel_thread_trampoline (sti; ret)
+    //   ret (tramp)   <- lands in entry_point
     PUSH(stack, uint32_t, (uintptr_t)entry_point);
+    PUSH(stack, uint32_t, (uintptr_t)kernel_thread_trampoline);
     for (int i = 0; i < 8; i++) {
         PUSH(stack, uint32_t, 0); // Clear registers
     }

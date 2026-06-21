@@ -13,8 +13,7 @@ extern page_directory_t* kpage_dir;
 
 thread_t *thread_list = NULL;
 thread_t *current_thread = NULL;
-
-bool scheduler_started = false;
+thread_t *idle_thread_ptr = NULL;
 
 static page_directory_t *thread_page_directory(thread_t *thread) {
     if (!thread || !thread->owner) {
@@ -33,7 +32,8 @@ void idle_thread(void) {
 
 void scheduler_init() {
     pit_init(100);
-    // add_thread(create_thread(NULL, idle_thread, "idle"));
+    idle_thread_ptr = create_thread(NULL, idle_thread, "idle");
+    add_thread(idle_thread_ptr);
 }
 
 void schedule(registers_t* context) {
@@ -65,6 +65,7 @@ void schedule(registers_t* context) {
         // pick_next_thread() returned NULL, meaning every thread is WAITING or TERMINATED.
         // In this case, we can halt the cpu and wait for the next timer interrupt to wake us up. 
         // This can happen if all threads are waiting for some event (e.g. I/O) to complete.
+        kprintf(ERROR, "schedule: no ready threads, halting\n");
         asm volatile ("sti; nop; hlt");
     }
 }
@@ -98,33 +99,60 @@ thread_t* get_thread(size_t tid) {
 }
 
 void add_thread(thread_t *thread) {
+    if (!thread) return;
+
+    if (thread_list) {
+        thread_t *temp = thread_list;
+        do {
+            if (temp == thread) {
+                return; // Already in the list, avoid duplicate insertion
+            }
+            temp = temp->next_global;
+        } while (temp != thread_list);
+    }
+
     if (!thread_list) {
         thread_list = thread;
-        current_thread = thread;
+        thread->next_global = thread;
     } else {
         thread_t *temp = thread_list;
         while (temp->next_global != thread_list) {
             temp = temp->next_global;
         }
         temp->next_global = thread;
+        thread->next_global = thread_list;
     }
 
-    // Circular linked list
-    thread->next_global = thread_list;
-    if (current_thread == NULL) current_thread = thread;
+    if (current_thread == NULL) {
+        current_thread = thread;
+    }
 }
 
 void remove_thread(thread_t *thread) {
     if (!thread_list || !thread) return;
 
+    // Check if the thread is actually in the list first to avoid infinite loops/corruption
+    bool found = false;
+    thread_t *temp = thread_list;
+    do {
+        if (temp == thread) {
+            found = true;
+            break;
+        }
+        temp = temp->next_global;
+    } while (temp != thread_list);
+
+    if (!found) return; // Thread not in the list, nothing to do
+
     if (thread_list == thread) {
         if (thread->next_global == thread_list) {
             // Only one thread in the list
             thread_list = NULL;
-            current_thread = NULL;
+            if (current_thread == thread) {
+                current_thread = NULL;
+            }
             return;
         }
-
         thread_list = thread->next_global;
     }
 
@@ -132,7 +160,6 @@ void remove_thread(thread_t *thread) {
     while (prev->next_global != thread) {
         prev = prev->next_global;
     }
-
     prev->next_global = thread->next_global;
 }
 
@@ -146,29 +173,6 @@ void schedule_process_threads(process_t *process) {
     }
 }
 
-// thread_t *pick_next_thread() {
-//     if (!current_thread) return NULL;
-
-//     uint32_t ticks = pit_get_ticks();
-
-//     thread_t *next = current_thread->next_global;
-//     while (next && next != current_thread) {
-//         // Wake up sleeping threads whose wakeup time has arrived
-//         if (next->status == SLEEPING && next->wakeup_tick <= ticks) {
-//             next->status = READY;
-//         }
-
-//         if (next->status == READY) return next;
-//         next = next->next_global;
-//     }
-
-//     if (current_thread->status == SLEEPING && current_thread->wakeup_tick <= ticks) {
-//         current_thread->status = READY;
-//     }
-
-//     return current_thread->status == READY ? current_thread : NULL;
-// }
-
 thread_t *pick_next_thread() {
     if (!thread_list) return NULL;
 
@@ -180,7 +184,6 @@ thread_t *pick_next_thread() {
         start = thread_list;
     } else {
         start = current_thread->next_global;
-        if (!start) start = thread_list;  // wrap around
     }
 
     // Scan all threads starting from start, wrapping once
@@ -189,15 +192,17 @@ thread_t *pick_next_thread() {
         if (t->status == SLEEPING && t->wakeup_tick <= ticks) {
             t->status = READY;
         }
-        if (t->status == READY) return t;
+        // Skip the idle thread during normal search so it is only picked as fallback
+        if (t->status == READY && t != idle_thread_ptr) {
+            return t;
+        }
 
         t = t->next_global;
-        if (!t) t = thread_list;  // wrap
     } while (t != start);
 
-    // No other ready thread — can current_thread run?
-    if (current_thread && current_thread->status == READY) {
-        return current_thread;
+    // If no other thread is ready, run the idle thread
+    if (idle_thread_ptr && idle_thread_ptr->status == READY) {
+        return idle_thread_ptr;
     }
 
     return NULL;

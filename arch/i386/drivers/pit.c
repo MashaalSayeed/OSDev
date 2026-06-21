@@ -10,22 +10,33 @@
 
 static volatile uint32_t tick = 0;
 uint32_t timer_freq = 100;
-bool scheduler_enabled = false;
 
 void pit_handler(registers_t *regs) {
+    // Send EOI to the PIC *first*, before any scheduling.
+    // schedule() → switch_task() can divert execution to a new thread via
+    // a bare `ret` without ever returning here, so the EOI in irq_handler
+    // would never be sent — causing the PIC to stop delivering IRQ0.
+    outb(0x20, 0x20);
+
     // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second or 10 ms per tick)
     tick++;
+    if (tick % (timer_freq / 10) == 0) { // every 100 ms
+        kprintf(DEBUG, "pit_handler: tick=%d\n", tick);
+        schedule(regs);
+    }
 }
 
 uint32_t pit_get_ticks() {
     return tick;
 }
 
+extern thread_t* current_thread;
+
 void sleep(uint32_t ms) {
-    uint32_t ticks_needed = (ms * timer_freq) / 1000; // correct for any freq
-    uint32_t start = tick;
-    while ((uint32_t)(tick - start) < ticks_needed)
-        asm volatile("hlt");
+    uint32_t ticks_needed = (ms * timer_freq) / 1000;
+    current_thread->wakeup_tick = tick + ticks_needed;
+    current_thread->status = SLEEPING;
+    schedule(NULL);
 }
 
 void pit_init(uint32_t freq) {
@@ -38,5 +49,4 @@ void pit_init(uint32_t freq) {
     outb(0x43, 0x36); // Command port
     outb(0x40, divisor & 0xFF); // Low byte
     outb(0x40, (divisor >> 8) & 0xFF); // High byte
-    scheduler_enabled = true;
 }
