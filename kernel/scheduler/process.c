@@ -9,6 +9,7 @@
 #include "kernel/signals.h"
 #include "kernel/gdt.h"
 #include "kernel/system.h"
+#include "drivers/pit.h"
 
 #define PUSH(stack, type, value) \
     stack -= sizeof(type); \
@@ -178,6 +179,7 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     thread->tid = allocate_tid();
     thread->owner = proc;
     thread->status = READY;
+    thread->time_slice_remaining = timer_freq >= 10 ? timer_freq / 10 : 1;
     
     strncpy(thread->thread_name, thread_name, PROCESS_NAME_MAX_LEN);
     thread->thread_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
@@ -416,6 +418,7 @@ int fork(registers_t *regs) {
     child_thread->tid = allocate_tid();
     child_thread->owner = child;
     child_thread->status = READY;
+    child_thread->time_slice_remaining = timer_freq >= 10 ? timer_freq / 10 : 1;
     child_thread->next = NULL;
     child_thread->next_global = NULL;
     child->main_thread = child_thread;

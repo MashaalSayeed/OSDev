@@ -31,7 +31,7 @@
 - [x] Session/pgrp stubs — sys_setsid, sys_getpgrp (musl calls these, can be no-ops for now)
 
 ## Phase 3 — Filesystem Hardening
-- [ ] FAT32 rename — fat32_rename, required by editors and installers
+- [x] FAT32 rename — fat32_rename, required by editors and installers
 - [ ] FAT32 truncate — ftruncate syscall + fat32_truncate
 - [ ] /PROC virtual filesystem — /PROC/<pid>/status, /PROC/self/exe (unblocks readlink)
 - [ ] /TMP backed by ramfs — mount at /TMP in vfs_init
@@ -66,3 +66,6 @@
 - [ ] /PROC/<pid>/maps — needed for musl's dynamic linker and sanitizers
 - [ ] Versioned disk image — bump zdisk.img to 256 MB
 - [ ] sysinfo integration test — user/core/sysinfo as boot-time smoke test
+
+
+- [ ] Each process has a schedule_ticks instead of calling schedule every (100 ms)

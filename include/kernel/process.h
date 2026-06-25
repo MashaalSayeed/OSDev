@@ -36,6 +36,7 @@ typedef struct thread {
 
     process_status_t status;
     uint32_t wakeup_tick; 
+    uint32_t time_slice_remaining;
 
     char thread_name[PROCESS_NAME_MAX_LEN];
     void *kernel_stack; // ESP saved when context switching

@@ -35,7 +35,6 @@ void scheduler_init() {
     idle_thread_ptr = create_thread(NULL, idle_thread, "idle");
     add_thread(idle_thread_ptr);
 }
-
 void schedule(registers_t* context) {
     if (!thread_list || !current_thread) {
         kprintf(DEBUG, "schedule: no threads, halting\n");
@@ -46,9 +45,12 @@ void schedule(registers_t* context) {
     if (prev_thread->status == RUNNING) prev_thread->status = READY;
 
     thread_t *next_thread = pick_next_thread();
+    uint32_t time_slice = timer_freq >= 10 ? timer_freq / 10 : 1; // Time slice in ticks (default 10% of timer_freq or every 10 ticks, minimum 1 tick)
+
     if (next_thread && next_thread != current_thread) {
         current_thread = next_thread;
         current_thread->status = RUNNING;
+        current_thread->time_slice_remaining = time_slice;
 
         // Restore context and switch page directory
         page_directory_t *prev_pd = thread_page_directory(prev_thread);
@@ -61,6 +63,7 @@ void schedule(registers_t* context) {
         switch_task(&prev_thread->esp, current_thread->esp);
     } else if (next_thread == current_thread) {
         current_thread->status = RUNNING;
+        current_thread->time_slice_remaining = time_slice;
     } else {
         // pick_next_thread() returned NULL, meaning every thread is WAITING or TERMINATED.
         // In this case, we can halt the cpu and wait for the next timer interrupt to wake us up. 
@@ -72,6 +75,8 @@ void schedule(registers_t* context) {
 
 void jmp_to_kernel_thread(thread_t *thread) {
     printf("Switching to kernel thread: %s (TID: %d) %x\n", thread->thread_name, thread->tid, thread->owner);
+    thread->status = RUNNING;
+    thread->time_slice_remaining = timer_freq >= 10 ? timer_freq / 10 : 1;
     tss_entry.esp0 = (uint32_t)thread->kernel_stack + PROCESS_STACK_SIZE;
     uint32_t dummy;
     asm volatile("sti");

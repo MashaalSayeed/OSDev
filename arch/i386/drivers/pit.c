@@ -10,6 +10,7 @@
 
 static volatile uint32_t tick = 0;
 uint32_t timer_freq = 100;
+extern thread_t* current_thread;
 
 void pit_handler(registers_t *regs) {
     // Send EOI to the PIC *first*, before any scheduling.
@@ -18,19 +19,21 @@ void pit_handler(registers_t *regs) {
     // would never be sent — causing the PIC to stop delivering IRQ0.
     outb(0x20, 0x20);
 
-    // Called timer_freq Hz times per second (default 100 Hz or 100 ticks per second or 10 ms per tick)
     tick++;
-    if (tick % (timer_freq / 10) == 0) { // every 100 ms
-        kprintf(DEBUG, "pit_handler: tick=%d\n", tick);
-        schedule(regs);
+
+    if (current_thread) {
+        if (current_thread->time_slice_remaining > 0) {
+            current_thread->time_slice_remaining--;
+        }
+        if (current_thread->time_slice_remaining == 0) {
+            schedule(regs);
+        }
     }
 }
 
 uint32_t pit_get_ticks() {
     return tick;
 }
-
-extern thread_t* current_thread;
 
 void sleep(uint32_t ms) {
     uint32_t ticks_needed = (ms * timer_freq) / 1000;
