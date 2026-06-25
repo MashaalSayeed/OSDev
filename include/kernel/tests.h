@@ -9,3 +9,4 @@ void test_printf();
 void test_scheduler();
 void test_fork();
 void test_shell();
+void run_tests();

@@ -9,6 +9,7 @@
 #include "kernel/signals.h"
 #include "kernel/gdt.h"
 #include "kernel/system.h"
+#include "drivers/pit.h"
 
 #define PUSH(stack, type, value) \
     stack -= sizeof(type); \
@@ -19,8 +20,9 @@
 extern page_directory_t* kpage_dir;
 extern uint32_t kpage_dir_phys;
 extern thread_t* current_thread;
-extern void switch_context(thread_t* context);
+extern void switch_context(uintptr_t entry_point, uintptr_t user_esp, uint32_t gs);
 extern void switch_task(uintptr_t* prev, uintptr_t next);
+extern void kernel_thread_trampoline(void);
 extern struct tss_entry tss_entry;
 
 extern uintptr_t read_eip();
@@ -177,6 +179,7 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     thread->tid = allocate_tid();
     thread->owner = proc;
     thread->status = READY;
+    thread->time_slice_remaining = timer_freq >= 10 ? timer_freq / 10 : 1;
     
     strncpy(thread->thread_name, thread_name, PROCESS_NAME_MAX_LEN);
     thread->thread_name[PROCESS_NAME_MAX_LEN - 1] = '\0';
@@ -184,7 +187,13 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
     // Set up thread stack for context switch
     void *stack = alloc_kernel_stack(thread);
 
+    // Stack layout consumed by switch_task on first entry:
+    //   pop gs        <- 0x23
+    //   popad         <- 8 zeros
+    //   ret           <- lands in kernel_thread_trampoline (sti; ret)
+    //   ret (tramp)   <- lands in entry_point
     PUSH(stack, uint32_t, (uintptr_t)entry_point);
+    PUSH(stack, uint32_t, (uintptr_t)kernel_thread_trampoline);
     for (int i = 0; i < 8; i++) {
         PUSH(stack, uint32_t, 0); // Clear registers
     }
@@ -192,12 +201,10 @@ thread_t* create_thread(process_t *proc, void (*entry_point)(), const char *thre
 
     // Set up thread context
     if (proc != NULL && !proc->is_kernel_process) {
-        thread->user_esp = (uintptr_t)alloc_user_stack(thread);
+        alloc_user_stack(thread);
     }
 
     thread->esp = (uintptr_t)stack;
-    thread->ebp = (uintptr_t)stack;
-    thread->eip = (uintptr_t)entry_point;
 
     if (proc == NULL) return thread; // For kernel threads that don't belong to a process
 
@@ -411,6 +418,7 @@ int fork(registers_t *regs) {
     child_thread->tid = allocate_tid();
     child_thread->owner = child;
     child_thread->status = READY;
+    child_thread->time_slice_remaining = timer_freq >= 10 ? timer_freq / 10 : 1;
     child_thread->next = NULL;
     child_thread->next_global = NULL;
     child->main_thread = child_thread;
@@ -436,18 +444,17 @@ int fork(registers_t *regs) {
     uintptr_t *sp = (uintptr_t *)((uintptr_t)regs + offset);
     
     *(--sp) = (uintptr_t)fork_trampoline;  // ret addr
-    *(--sp) = parent_thread->gs;     // matches your switch_task
-    *(--sp) = regs->edi;
-    *(--sp) = regs->esi;
-    *(--sp) = regs->ebp;
-    *(--sp) = 0;            // esp dummy for popad
-    *(--sp) = regs->ebx;
-    *(--sp) = regs->edx;
+    *(--sp) = regs->eax;    // eax
     *(--sp) = regs->ecx;
-    *(--sp) = regs->eax;    // eax (will be overwritten anyway)
+    *(--sp) = regs->edx;
+    *(--sp) = regs->ebx;
+    *(--sp) = 0;            // esp dummy for popad
+    *(--sp) = regs->ebp;
+    *(--sp) = regs->esi;
+    *(--sp) = regs->edi;
+    *(--sp) = regs->gs;     // matches your switch_task
 
     child_thread->esp = (uintptr_t)sp;
-    child_thread->ebp = parent_thread->ebp + offset;
     
     registers_t *child_regs = (registers_t *)((uintptr_t)regs + offset);
     child_regs->eax = 0;           // child sees fork() == 0
@@ -663,7 +670,7 @@ int exec(const char *path, char **argv, char **envp) {
     }
 
     // ── 9. Launch ─────────────────────────────────────────────────────────────
-    thread->user_esp = u_esp;
+    uintptr_t entry = elf->entry;
     proc->status     = READY;
     kfree(elf);
     elf = NULL;
@@ -676,7 +683,7 @@ int exec(const char *path, char **argv, char **envp) {
     // Free old thread and kernel stack — last thing before iret
     kfree(old_thread);
     kfree_aligned(old_stack);
-    switch_context(thread);   // iret — never returns
+    switch_context(entry, u_esp, USER_DS);   // iret — never returns
     return -1;
 
 fail:

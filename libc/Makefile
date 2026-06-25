@@ -4,7 +4,7 @@ CC=i686-elf-gcc
 AR=i686-elf-ar
 RANLIB=i686-elf-ranlib
 
-CFLAGS?=-ffreestanding -O2 -Wall -Wextra -O0 -I../include -std=gnu99 -g
+CFLAGS?=-ffreestanding -Wall -Wextra -O0 -I../include -std=gnu99 -g
 
 BUILD_DIR=../build/$(ARCH)
 LIBC_BUILD_DIR=$(BUILD_DIR)/libc

@@ -84,13 +84,16 @@ IRQ  15,    47
 extern isr_handler
 isr_common_stub:
     PUSHA
-    MOV eax,ds
-    PUSH eax
+    PUSH gs
+    PUSH fs
+    PUSH es
+    PUSH ds
 
     MOV ax, 0x10
     MOV ds, ax
     MOV es, ax
     MOV fs, ax
+    MOV gs, ax
 
     PUSH esp   ; Push the stack pointer
     CALL isr_handler
@@ -99,10 +102,10 @@ isr_common_stub:
     PUSH esp          ; Push registers_t* for signal handler
     CALL do_signal
     ADD esp, 4
-    POP eax
-    MOV ds, ax
-    MOV es, ax
-    MOV fs, ax
+    POP ds
+    POP es
+    POP fs
+    POP gs
 
     POPA
     ADD esp, 8 ; Remove error code and interrupt number
@@ -112,13 +115,16 @@ extern irq_handler
 extern do_signal
 irq_common_stub:
     PUSHA ; Save all registers, including error code and interrupt number as registers_t
-    MOV eax,ds
-    PUSH eax
+    PUSH gs
+    PUSH fs
+    PUSH es
+    PUSH ds
 
     MOV ax, 0x10 ; Load kernel data segment selector
     MOV ds, ax
     MOV es, ax
     MOV fs, ax
+    MOV gs, ax
 
     PUSH esp
     CALL irq_handler
@@ -129,10 +135,10 @@ irq_common_stub:
     CALL do_signal
 
     ADD esp, 4
-    POP ebx
-    MOV ds, bx
-    MOV es, bx
-    MOV fs, bx
+    POP ds
+    POP es
+    POP fs
+    POP gs
 
     POPA ; Restore all registers
     ADD esp, 8

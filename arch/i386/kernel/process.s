@@ -1,56 +1,63 @@
-; void switch_context(thread_context_t* context)
+; Segment selectors
+USER_CS equ 0x1B
+USER_DS equ 0x23
+
+; void switch_context(uintptr_t entry_point, uintptr_t user_esp, uint32_t gs)
 global switch_context
 switch_context:
-    MOV eax, [esp+4]
+    ; Load arguments into registers before we modify the stack pointer
+    mov eax, [esp+4]    ; eax = entry_point
+    mov ebx, [esp+8]    ; ebx = user_esp
+    movzx ecx, word [esp+12] ; ecx = gs
+
+    ; Load user data segments
+    mov dx, USER_DS
+    mov ds, dx
+    mov es, dx
+    mov fs, dx
+
+    ; Restore gs, default to USER_DS if 0
+    test ecx, ecx
+    jnz .set_gs
+    mov ecx, USER_DS
+.set_gs:
+    mov gs, cx
+
+    ; Set up the stack for IRET to transition to user space
+    push dword USER_DS                      ; SS
+    push ebx                                ; USER ESP
+    push dword 0x202                        ; EFLAGS (Interrupts enabled, IOPL=0)
+    push dword USER_CS                      ; CS
+    push eax                                ; EIP
     
-    MOV cx, 0x23
-    MOV ds, cx
-    MOV es, cx
-    MOV fs, cx
-
-    ; Restore gs from thread->gs
-    MOVZX ecx, WORD [eax+20]
-    TEST ecx, ecx
-    JZ .use_default_gs
-    MOV gs, cx
-    JMP .do_iret
-
-.use_default_gs:
-    MOV cx, 0x23
-    MOV gs, cx
-
-.do_iret:
-    PUSH DWORD 0x23     ; SS
-    PUSH DWORD [eax+16] ; USER ESP
-    PUSH DWORD 0x202    ; EFLAGS
-    PUSH DWORD 0x1B     ; CS 
-    PUSH DWORD [eax+4]  ; EIP
-    
-    IRET
+    iret
 
 
 ; void switch_task(uint32_t *prev_stack, uint32_t next_stack);
 global switch_task
 switch_task:
+    ; Fetch arguments before we modify the stack pointer
+    mov ecx, [esp+4]    ; ecx = prev_stack
+    mov edx, [esp+8]    ; edx = next_stack
+
+    ; Save context of the outgoing thread
     pushad
+    push gs
 
-    xor eax, eax      ; 
-    mov ax, gs
-    push eax          ; Save gs of outgoing thread into kernel stack
+    ; Switch stack pointers
+    mov [ecx], esp      ; Save current ESP in prev_thread context
+    mov esp, edx        ; Restore ESP from next_thread context
 
-    mov eax, [esp+40] ; prev_thread addr of stack_ptr
-    mov [eax], esp    ; Save current ESP in prev_thread context
-    mov eax, [esp+44]     ; next_thread addr of stack_ptr
-    mov esp, eax      ; Restore ESP from next_thread context
-
-    pop eax
-    mov gs, ax        ; Restore gs for incoming thread
-
+    ; Restore context of the incoming thread
+    pop gs
     popad
     ret
 
 global fork_trampoline
 fork_trampoline:
+    pop ds
+    pop es
+    pop fs
     pop gs
     popad
     add esp, 8 
@@ -60,3 +67,15 @@ global read_eip
 read_eip:
 	pop eax
 	jmp eax
+
+; Trampoline for new kernel threads.
+; When a thread is first scheduled it is entered via switch_task's `ret`,
+; which bypasses IRET and therefore never restores EFLAGS.  Because the timer
+; IRQ that triggered the context switch ran with IF=0, the new thread would
+; start with interrupts permanently disabled.  This stub re-enables them
+; before jumping to the real entry point (which is already on the stack as
+; the next return address).
+global kernel_thread_trampoline
+kernel_thread_trampoline:
+    sti
+    ret

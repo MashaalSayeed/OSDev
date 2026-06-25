@@ -32,14 +32,11 @@ typedef enum {
 
 typedef struct thread {
     size_t tid;
-    uintptr_t eip;
     uintptr_t esp;
-    uintptr_t ebp;
-    uintptr_t user_esp;
-    uint16_t gs;
 
     process_status_t status;
     uint32_t wakeup_tick; 
+    uint32_t time_slice_remaining;
 
     char thread_name[PROCESS_NAME_MAX_LEN];
     void *kernel_stack; // ESP saved when context switching

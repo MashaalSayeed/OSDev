@@ -828,7 +828,7 @@ void vfs_init() {
     };
 
     init_fs(&fat32_fs_type, "/dev/sda1", "/");
-    init_fs(&ramfs_fs_type, NULL, "/mnt/ramfs");
+    init_fs(&ramfs_fs_type, NULL, "/TMP");
 
     /* Mount devfs at /DEV so that devices appear as /DEV/<NAME> */
     vfs_superblock_t *devfs_sb = devfs_mount(NULL);
