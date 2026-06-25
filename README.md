@@ -56,7 +56,7 @@ Thank me later 😊
 11. Userspace Mode (Ring 3) ✅
 12. Shell ✅
 13. Syscalls ✅
-14. Multithreading 
+14. Multithreading ✅
 
 ### 2. Memory Management
 
@@ -70,9 +70,9 @@ Thank me later 😊
 
 1. Round Robin Scheduler ✅
 2. Process heap & stack ✅
-3. `fork()` / `exec()` 🟡
-4. Threads
-5. Signals and IPC
+3. `fork()` / `exec()`  ✅
+4. Threads ✅
+5. Signals and IPC ✅
 
 ### 4. File System
 
@@ -93,7 +93,7 @@ Thank me later 😊
 6. ATA Driver ✅
 7. RTC (Real Time Clock) ✅
 8. PCI Driver
-9. Mouse Driver
+9. Mouse Driver ✅
 10. Network Drivers
 
 ### 6. Video Output
@@ -101,13 +101,13 @@ Thank me later 😊
 1. VBE Driver ✅
 2. Draw Images ✅
 3. Draw Fonts ✅
-4. Window Manager 🟡
+4. Window Manager ✅
 
 ### 7. Shell
 
 1. Basic Commands Handling ✅
 2. Load and Execute ELFs ✅
-3. Movement with arrow keys 🟡
+3. Movement with arrow keys ✅
 4. Piping and Redirection 🟡
 5. Text Editor
 
@@ -115,7 +115,7 @@ Thank me later 😊
 
 1. Basic printf debugging ✅
 3. Exception Handling ✅
-4. Test Cases 🟡
+4. Test Cases ✅
 5. Make a [Complete ISO](https://wiki.osdev.org/GRUB#Disk_image_instructions) (GRUB + Kernel + Disk Image)
 6. Build setup on other platforms 
 7. Fix the folder structure
@@ -132,3 +132,4 @@ Thank me later 😊
 ## Known Issues
 
 1. Running /BIN/TEST hangs randomly - needs to be run multiple times
+2. Read TODO_PLAN.md as well

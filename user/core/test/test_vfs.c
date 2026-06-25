@@ -668,6 +668,140 @@ void test_tty_ioctl_basic(void)
     syscall_close(fd);
 }
 
+void test_vfs_truncate(void)
+{
+    printf("\n[vfs truncate]\n");
+
+    {
+        syscall_unlink("/home/TRUNC_A.TXT");
+        int fd = syscall_open("/home/TRUNC_A.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); goto tr2; }
+        syscall_write(fd, "hello world truncate test", 25);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_A.TXT", O_RDWR);
+        CHECK("open for ftruncate", fd >= 0, "open failed");
+        if (fd < 0) goto tr2;
+
+        int ret = syscall_ftruncate(fd, 5);
+        CHECK("ftruncate to 5 returns 0", ret == 0, "ftruncate failed");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_A.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char buf[32] = {0};
+            int n = syscall_read(fd, buf, sizeof(buf));
+            CHECK("ftruncate to 5: size", n == 5, "wrong size after truncate");
+            CHECK("ftruncate to 5: content", strncmp(buf, "hello", 5) == 0, "wrong content");
+            syscall_close(fd);
+        }
+        syscall_unlink("/home/TRUNC_A.TXT");
+    }
+
+tr2:
+    {
+        syscall_unlink("/home/TRUNC_B.TXT");
+        int fd = syscall_open("/home/TRUNC_B.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); goto tr3; }
+        syscall_write(fd, "data to zero out", 16);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_B.TXT", O_RDWR);
+        if (fd < 0) goto tr3;
+
+        int ret = syscall_ftruncate(fd, 0);
+        CHECK("ftruncate to 0 returns 0", ret == 0, "ftruncate to 0 failed");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_B.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char buf[4] = {0};
+            int n = syscall_read(fd, buf, sizeof(buf));
+            CHECK("ftruncate to 0: empty file", n == 0, "file not empty after truncate to 0");
+            syscall_close(fd);
+        }
+        syscall_unlink("/home/TRUNC_B.TXT");
+    }
+
+tr3:
+    {
+        syscall_unlink("/home/TRUNC_C.TXT");
+        int fd = syscall_open("/home/TRUNC_C.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); goto tr4; }
+
+        char buf[4096];
+        memset(buf, 'X', sizeof(buf));
+        syscall_write(fd, buf, sizeof(buf));
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_C.TXT", O_RDWR);
+        if (fd < 0) goto tr4;
+
+        int ret = syscall_ftruncate(fd, 2048);
+        CHECK("ftruncate multi-cluster to 2048", ret == 0, "ftruncate failed");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_C.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char rbuf[4096] = {0};
+            int n = syscall_read(fd, rbuf, sizeof(rbuf));
+            CHECK("multi-cluster truncate: size", n == 2048, "wrong size");
+            int ok = 1;
+            for (int i = 0; i < 2048; i++)
+                if (rbuf[i] != 'X') { ok = 0; break; }
+            CHECK("multi-cluster truncate: content", ok, "corrupted");
+            syscall_close(fd);
+        }
+        syscall_unlink("/home/TRUNC_C.TXT");
+    }
+
+tr4:
+    {
+        syscall_unlink("/home/TRUNC_D.TXT");
+        int fd = syscall_open("/home/TRUNC_D.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); return; }
+        syscall_write(fd, "original", 8);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_D.TXT", O_WRONLY);
+        if (fd < 0) return;
+
+        int ret = syscall_ftruncate(fd, 4);
+        CHECK("ftruncate write-only fd", ret == 0, "ftruncate on wr-only failed");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/TRUNC_D.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char buf[16] = {0};
+            int n = syscall_read(fd, buf, sizeof(buf));
+            CHECK("ftruncate wr-only: size", n == 4, "wrong size");
+            syscall_close(fd);
+        }
+        syscall_unlink("/home/TRUNC_D.TXT");
+    }
+
+    {
+        syscall_unlink("/home/TRUNC_E.TXT");
+        int fd = syscall_open("/home/TRUNC_E.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0) { printf("  SKIP\n"); return; }
+        syscall_write(fd, "path-based truncate test data", 29);
+        syscall_close(fd);
+
+        int ret = syscall_truncate("/home/TRUNC_E.TXT", 11);
+        CHECK("truncate (path-based) returns 0", ret == 0, "truncate failed");
+
+        fd = syscall_open("/home/TRUNC_E.TXT", O_RDONLY);
+        if (fd >= 0) {
+            char buf[32] = {0};
+            int n = syscall_read(fd, buf, sizeof(buf));
+            CHECK("truncate path-based: size", n == 11, "wrong size");
+            CHECK("truncate path-based: content", strncmp(buf, "path-based t", 11) == 0, "wrong content");
+            syscall_close(fd);
+        }
+        syscall_unlink("/home/TRUNC_E.TXT");
+    }
+}
+
 void test_path_syscalls_basic(void)
 {
     printf("\n[path syscalls]\n");

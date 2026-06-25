@@ -172,6 +172,14 @@ int syscall_unlink(const char *path) {
     return syscall(SYSCALL_UNLINK, (int)path, 0, 0);
 }
 
+int syscall_truncate(const char *path, uint32_t length) {
+    return syscall(SYSCALL_TRUNCATE, (int)path, length, 0);
+}
+
+int syscall_ftruncate(int fd, uint32_t length) {
+    return syscall(SYSCALL_FTRUNCATE, fd, length, 0);
+}
+
 int syscall_rename(const char *oldpath, const char *newpath) {
     return syscall(SYSCALL_RENAME, (int)oldpath, (int)newpath, 0);
 }

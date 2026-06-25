@@ -26,6 +26,7 @@ int main()
     test_vfs_unlink();
     test_vfs_rename();
     test_vfs_getdents();
+    test_vfs_truncate();
     test_tty_ioctl_basic();
     test_path_syscalls_basic();
 

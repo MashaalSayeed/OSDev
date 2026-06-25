@@ -116,6 +116,30 @@ int sys_llseek(int fd, uint32_t offset_high, uint32_t offset_low, uint64_t *resu
     return 0;
 }
 
+int sys_ftruncate(int fd, uint32_t length) {
+    process_t *proc = get_current_process();
+    vfs_file_t *file = proc->fds[fd];
+    if (!file) return -1;
+    if (!(file->flags & O_WRONLY) && !(file->flags & O_RDWR)) return -1;
+    if (!file->inode || !file->inode->inode_ops->truncate) return -1;
+    return file->inode->inode_ops->truncate(file->inode, length);
+}
+
+int sys_truncate(const char *path, uint32_t length) {
+    char resolved[256];
+    process_t *proc = get_current_process();
+    if (!vfs_relative_path(proc->cwd, path, resolved)) return -1;
+    vfs_inode_t *inode = vfs_traverse(resolved);
+    if (!inode) return -1;
+    if (!inode->inode_ops->truncate) {
+        inode->inode_ops->close(inode);
+        return -1;
+    }
+    int ret = inode->inode_ops->truncate(inode, length);
+    inode->inode_ops->close(inode);
+    return ret;
+}
+
 int sys_readv(int fd, const iovec_t *iov, int iovcnt) {
     if (!iov || iovcnt < 0) return -1;
 
@@ -788,6 +812,8 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_MKDIR:    return sys_mkdir((const char *)regs->ebx, regs->ecx);
         case SYSCALL_RMDIR:    return sys_rmdir((const char *)regs->ebx);
         case SYSCALL_UNLINK:   return sys_unlink((const char *)regs->ebx);
+        case SYSCALL_TRUNCATE: return sys_truncate((const char *)regs->ebx, regs->ecx);
+        case SYSCALL_FTRUNCATE: return sys_ftruncate(regs->ebx, regs->ecx);
         case SYSCALL_LSEEK:    return sys_lseek(regs->ebx, regs->ecx, regs->edx);
         case SYSCALL__LLSEEK:  return sys_llseek(regs->ebx, regs->ecx, regs->edx, (uint64_t *)regs->esi, regs->edi);
         case SYSCALL_PIPE:     return sys_pipe((int *)regs->ebx);

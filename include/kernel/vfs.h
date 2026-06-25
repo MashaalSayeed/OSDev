@@ -59,6 +59,7 @@ struct vfs_inode_operations {
 
     uint32_t (*write)(vfs_file_t* file, const void* buf, size_t count);
     uint32_t (*read)(vfs_file_t* file, void* buf, size_t count);
+    int (*truncate)(vfs_inode_t *inode, uint32_t new_size);
     
     int (*mkdir)(vfs_inode_t* dir, const char* name, uint32_t mode);
     int (*rmdir)(vfs_inode_t* dir, const char* name);
@@ -138,6 +139,7 @@ int vfs_relative_path(const char *cwd, const char *path, char *resolved_path);
 int vfs_mount(const char *path, vfs_superblock_t *sb);
 int vfs_unmount(const char *path);
 int vfs_create(const char *path, uint32_t mode);
+vfs_inode_t *vfs_traverse(const char *path);
 int vfs_unlink(const char *path);
 vfs_file_t *vfs_open(const char *path, int flags);
 int vfs_close(vfs_file_t *file);

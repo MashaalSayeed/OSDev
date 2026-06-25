@@ -12,6 +12,7 @@ static uint32_t fat32_write(vfs_file_t *file, const void *buf, size_t count);
 static int fat32_close(vfs_inode_t *inode);
 static int fat32_readdir(vfs_inode_t *dir, uint32_t offset, vfs_dir_entry_t *entry);
 static int fat32_rename(vfs_inode_t *olddir, const char *oldname, vfs_inode_t *newdir, const char *newname);
+static int fat32_truncate(vfs_inode_t *inode, uint32_t new_size);
 
 static struct vfs_inode_operations fat32_inode_ops = {
     .lookup = fat32_lookup,
@@ -19,6 +20,7 @@ static struct vfs_inode_operations fat32_inode_ops = {
     .unlink = fat32_unlink,
     .write = fat32_write,
     .read = fat32_read,
+    .truncate = fat32_truncate,
     .close = fat32_close,
     .mkdir = NULL,
     .rmdir = NULL,
@@ -710,6 +712,48 @@ static int fat32_close(vfs_inode_t *inode) {
     if (!inode || inode == inode->superblock->root) return -1;
     kfree(inode->fs_data);
     kfree(inode);
+    return 0;
+}
+
+static int fat32_truncate(vfs_inode_t *inode, uint32_t new_size) {
+    fat32_inode_t *fat_inode = (fat32_inode_t*)inode->fs_data;
+    fat32_superblock_t *sb = (fat32_superblock_t*)inode->superblock->fs_data;
+    uint32_t cluster = fat_inode->cluster;
+
+    if (new_size >= fat_inode->size) return 0;
+
+    if (new_size == 0) {
+        uint32_t next = fat32_get_next_cluster(sb, cluster);
+        if (next != FAT32_CLUSTER_LAST && next != FAT32_CLUSTER_BAD && next != FAT32_CLUSTER_FREE) {
+            fat32_free_cluster_chain(sb, next);
+        }
+        fat32_set_next_cluster(sb, cluster, FAT32_CLUSTER_LAST);
+    } else {
+        uint32_t needed = (new_size + sb->cluster_size - 1) / sb->cluster_size;
+        if (needed == 0) needed = 1;
+
+        for (uint32_t i = 0; i < needed - 1; i++) {
+            uint32_t next = fat32_get_next_cluster(sb, cluster);
+            if (next == FAT32_CLUSTER_LAST || next == FAT32_CLUSTER_BAD) break;
+            cluster = next;
+        }
+
+        uint32_t next = fat32_get_next_cluster(sb, cluster);
+        if (next != FAT32_CLUSTER_LAST && next != FAT32_CLUSTER_BAD && next != FAT32_CLUSTER_FREE) {
+            fat32_free_cluster_chain(sb, next);
+        }
+        fat32_set_next_cluster(sb, cluster, FAT32_CLUSTER_LAST);
+    }
+
+    fat_inode->size = new_size;
+    inode->size = new_size;
+
+    fat32_dir_entry_t entry;
+    if (fat32_read_dir_entry(sb, fat_inode, &entry) == 0) {
+        entry.size = new_size;
+        fat32_write_dir_entry(sb, fat_inode, &entry);
+    }
+
     return 0;
 }
 
