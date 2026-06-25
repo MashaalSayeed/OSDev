@@ -39,93 +39,39 @@ KERNEL_BIN_ARCH = $(BUILD_DIR)/zineos.bin
 KERNEL_BIN = $(ISO_DIR)/boot/zineos.bin
 ISO_IMAGE = $(ISO_DIR)/zineos-$(ARCH).iso
 DISK_IMAGE = $(ISO_DIR)/zdisk.img
-LOG_FILE = serial_output.log
+LOG_FILE   = serial_output.log
 
-# Source files
-KERNEL_SRC = $(shell find $(KERNEL_DIR) -name "*.c")
-ARCH_KERNEL_SRC = $(shell find $(ARCH_DIR)/kernel -name "*.c")
-DRIVER_SRC = $(shell find $(DRIVER_DIR) -name "*.c")
-ASM_SRC = $(shell find $(ARCH_DIR)/kernel $(BOOT_DIR) -name "*.s")
-FONT_PSF = resources/fonts/font.psf
+GDB = i386-elf-gdb
+KERNEL_BIN_ARCH = $(BUILD_DIR)/zineos.bin
 
-# Object files
-KERNEL_OBJ = $(KERNEL_SRC:%.c=$(BUILD_DIR)/%.o)
-ARCH_KERNEL_OBJ = $(ARCH_KERNEL_SRC:$(ARCH_DIR)/kernel/%.c=$(BUILD_DIR)/kernel/%.o)
-DRIVER_OBJ = $(DRIVER_SRC:$(DRIVER_DIR)/%.c=$(BUILD_DIR)/drivers/%.o)
-ASM_OBJ = $(ASM_SRC:$(ARCH_DIR)/%.s=$(BUILD_DIR)/%.s.o)
-FONT_OBJ = $(BUILD_DIR)/font.o
-LIBC_OBJ = $(BUILD_DIR)/libc/libc.a
-OBJS = $(KERNEL_OBJ) $(ARCH_KERNEL_OBJ) $(DRIVER_OBJ) $(LIBC_OBJ) $(ASM_OBJ) $(FONT_OBJ)
+.PHONY: all run debug clean help userland libc kernel disk_image
 
-USER_BIN=$(wildcard $(BUILD_DIR)/user/bin/*)
+all: libc kernel userland disk_image
 
-# Build rules
-.PHONY: all run debug clean help userland libc disk_image
+kernel: libc
+	$(MAKE) -C kernel iso
 
-all: libc userland $(ISO_IMAGE) disk_image
+libc:
+	$(MAKE) -C libc
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR) $(BUILD_DIR)/kernel $(BUILD_DIR)/drivers $(BUILD_DIR)/libc \
-	         $(BUILD_DIR)/kernel/memory $(BUILD_DIR)/kernel/cpu $(BUILD_DIR)/kernel/lib \
-			 $(BUILD_DIR)/kernel/gui $(BUILD_DIR)/kernel/fs $(BUILD_DIR)/kernel/scheduler \
-			 $(BUILD_DIR)/boot
-
-$(FONT_OBJ): $(FONT_PSF) | $(BUILD_DIR)
-	@echo "Building font object..."
-	i686-elf-objcopy -O elf32-i386 -B i386 -I binary $< $@
-
-$(BUILD_DIR)/boot/%.s.o: $(BOOT_DIR)/%.s | $(BUILD_DIR)
-	@echo "Assembling $<..."
-	$(AS) $(ASM_FLAGS) $< -o $@
-
-$(BUILD_DIR)/kernel/%.s.o: $(ARCH_DIR)/kernel/%.s | $(BUILD_DIR)
-	@echo "Assembling $<..."
-	$(AS) $(ASM_FLAGS) $< -o $@
-
-$(BUILD_DIR)/kernel/%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
-	@echo "Compiling kernel source file $<..."
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/kernel/%.o: $(ARCH_DIR)/kernel/%.c | $(BUILD_DIR)
-	@echo "Compiling kernel source file $<..."
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/drivers/%.o: $(DRIVER_DIR)/%.c | $(BUILD_DIR)
-	@echo "Compiling driver source file $<..."
-	$(CC) $(CFLAGS) -c $< -o $@
-
-userland: $(BUILD_DIR)
-	@echo "Compiling user source files $<..."
-	$(MAKE) -C $(USER_DIR)
-
-libc: $(BUILD_DIR)
-	@echo "Compiling libc source files $<..."
-	$(MAKE) -C $(LIBC_DIR)
-
-$(KERNEL_BIN_ARCH): $(OBJS) $(BOOT_DIR)/linker.ld
-	@echo "Linking kernel..."
-	$(LD) $(LDFLAGS) -o $(KERNEL_BIN_ARCH) $(OBJS)
-
-$(ISO_IMAGE): $(KERNEL_BIN_ARCH)
-	rm -f $(ISO_IMAGE)
-	mkdir -p iso/boot/grub
-	cp $(KERNEL_BIN_ARCH) $(KERNEL_BIN)
-	grub-mkrescue -o $(ISO_IMAGE) $(ISO_DIR)
+userland:
+	$(MAKE) -C user
+	@echo "Installing userland..."
+	./scripts/install.sh
 
 disk_image: $(DISK_IMAGE)
 $(DISK_IMAGE):
 	dd if=/dev/zero of=$(DISK_IMAGE) bs=1M count=64
 	mkfs.fat -F 32 $(DISK_IMAGE)
 
-run: $(ISO_IMAGE) $(DISK_IMAGE)
-	qemu-system-$(SCAMARCH) $(QEMU_FLAGS) \
+run: all
+	qemu-system-$(SCAMARCH) -d int,page,cpu_reset,guest_errors -no-reboot -no-shutdown \
 		-cdrom $(ISO_IMAGE) \
 		-drive file=$(DISK_IMAGE),format=raw \
 		-serial file:$(LOG_FILE) \
-		-boot d \
-		-vga std
+		-boot d -vga std
 
-debug: $(ISO_IMAGE)
+debug: all
 	qemu-system-$(SCAMARCH) -s -S \
 		-cdrom $(ISO_IMAGE) \
 		-drive file=$(DISK_IMAGE),format=raw \
@@ -144,11 +90,10 @@ debug: $(ISO_IMAGE)
 	kill -9 $$QEMU_PID 2>/dev/null || true
 
 clean:
-	rm -rf $(BUILD_DIR) $(KERNEL_BIN_ARCH) $(ISO_IMAGE) $(KERNEL_BIN) $(LOG_FILE)
+	$(MAKE) -C kernel clean
+	$(MAKE) -C libc clean
+	$(MAKE) -C user clean
+	rm -f $(DISK_IMAGE) $(LOG_FILE)
 
 help:
-	@echo "Available targets:"
-	@echo "  make       - Build the kernel iso file"
-	@echo "  run        - Run the kernel iso in QEMU"
-	@echo "  debug      - Run the kernel iso in QEMU with GDB server"
-	@echo "  clean      - Clean the build directory"
+	@echo "Targets: all  kernel  libc  userland  run  debug  clean"

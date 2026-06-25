@@ -18,7 +18,7 @@ all: $(LIBC_A)
 $(LIBC_BUILD_DIR):
 	mkdir -p $@
 
-$(LIBC_BUILD_DIR)/%.o: %.c
+$(LIBC_BUILD_DIR)/%.o: %.c | $(LIBC_BUILD_DIR)
 	@echo "Compiling libc source file $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 

@@ -6,8 +6,6 @@
 #include "kernel/system.h"
 #include "kernel/printf.h"
 
-#define SCHEDULER_FREQ 100 // 100 Hz or 10 ms per tick
-
 static volatile uint32_t tick = 0;
 uint32_t timer_freq = 100;
 extern thread_t* current_thread;
