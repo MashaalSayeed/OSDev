@@ -308,7 +308,7 @@ int sys_getdents64(int fd, void *dirp, int count) {
     vfs_file_t *file = vfs_get_file(fd);
     if (fd < 0 || fd >= MAX_OPEN_FILES || !file) return -1;
 
-    if (file->inode->mode != VFS_MODE_DIR) return -1;
+    if (!(file->inode->mode & VFS_MODE_DIR)) return -1;
 
     int bytes_written = 0;
     uint32_t offset = file->offset;
@@ -582,6 +582,12 @@ int sys_fstat(int fd, stat_t *st) {
     return 0;
 }
 
+int sys_ftruncate(int fd, uint32_t length) {
+    process_t *proc = get_current_process();
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !proc->fds[fd]) return -1;
+    return vfs_ftruncate(proc->fds[fd], length);
+}
+
 int sys_get_ticks() {
     return pit_get_ticks();
 }
@@ -815,6 +821,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_GETPPID:       return sys_getppid();
         case SYSCALL_RENAME:         return sys_rename((const char *)regs->ebx, (const char *)regs->ecx);
         case SYSCALL_CLOCK_GETTIME:     return sys_clock_gettime((int)regs->ebx, (timespec_t *)regs->ecx);
+        case SYSCALL_FTRUNCATE:         return sys_ftruncate(regs->ebx, regs->ecx);
         // case SYSCALL_INPUT_READ:  return sys_input_read((input_event_t *)regs->ebx);
         default:
             kprintf(WARNING, "Unknown syscall: %d\n", num);

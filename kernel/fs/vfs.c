@@ -678,7 +678,7 @@ int vfs_rename(const char *oldpath, const char *newpath) {
 }
 
 int vfs_write(vfs_file_t *file, const void* buf, size_t count) {
-    if (!file || file->inode->mode != VFS_MODE_FILE) {
+    if (!file || !(file->inode->mode & VFS_MODE_FILE)) {
         printf("Error: Not a file\n");
         return -1;
     }
@@ -692,17 +692,33 @@ int vfs_write(vfs_file_t *file, const void* buf, size_t count) {
 }
 
 int vfs_read(vfs_file_t *file, void* buf, size_t count) {
-    if (!file || file->inode->mode != VFS_MODE_FILE) {
+    if (!file || !(file->inode->mode & VFS_MODE_FILE)) {
         printf("Error: Not a file\n");
         return -1;
     }
 
-    // if (!(file->flags & VFS_FLAG_READ)) {
-    //     printf("Error: File not opened for reading %d\n");
-    //     return -1;
-    // }
-
     return file->inode->inode_ops->read(file, buf, count);
+}
+
+int vfs_ftruncate(vfs_file_t *file, uint32_t length) {
+    if (!file || !file->inode || !file->inode->inode_ops) return -1;
+
+    if (!(file->inode->mode & VFS_MODE_FILE)) {
+        printf("Error: Not a regular file\n");
+        return -1;
+    }
+
+    if (!(file->flags & O_WRONLY) && !(file->flags & O_RDWR)) {
+        printf("Error: File not opened for writing\n");
+        return -1;
+    }
+
+    if (!file->inode->inode_ops->truncate) {
+        printf("Error: truncate not supported\n");
+        return -1;
+    }
+
+    return file->inode->inode_ops->truncate(file, length);
 }
 
 int vfs_seek(vfs_file_t *file, uint32_t offset, int whence) {
@@ -750,10 +766,12 @@ int vfs_getdents(int fd, void* buf, int size) {
     vfs_file_t *file = vfs_get_file(fd);
     if (fd < 0 || fd >= MAX_OPEN_FILES || !file || !buf) return -1;
 
-    if (file->inode->mode != VFS_MODE_DIR) {
-        printf("Error: Not a directory %d\n", file->inode->mode);
+    if (!(file->inode->mode & VFS_MODE_DIR)) {
+        kprintf(DEBUG, "Error: Not a directory %d\n", file->inode->mode);
         return -1;
     }
+
+    if (!file->inode->inode_ops->readdir) return -1;
 
     int bytes_written = 0;
     uint32_t offset = file->offset;

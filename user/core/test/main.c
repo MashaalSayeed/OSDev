@@ -28,6 +28,7 @@ int main()
     test_vfs_getdents();
     test_tty_ioctl_basic();
     test_path_syscalls_basic();
+    test_vfs_ftruncate();
 
     test_print_summary();
     return test_get_failures() ? 1 : 0;

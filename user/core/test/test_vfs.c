@@ -690,3 +690,105 @@ void test_path_syscalls_basic(void)
     n = syscall_readlink("/proc/nope", exe, sizeof(exe) - 1);
     CHECK("readlink invalid path fails", n < 0, "expected failure");
 }
+
+void test_vfs_ftruncate(void)
+{
+    printf("\n[vfs ftruncate]\n");
+
+    {
+        int fd = syscall_open("/home/FTRUNC_A.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0)
+        {
+            printf("  SKIP: cannot create\n");
+            goto ft2;
+        }
+        syscall_write(fd, "ABCDEFGHIJ", 10);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_A.TXT", O_WRONLY);
+        int ret = syscall_ftruncate(fd, 5);
+        CHECK("ftruncate(5) returns 0", ret == 0, "ftruncate failed");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_A.TXT", O_RDONLY);
+        char buf[16] = {0};
+        int n = syscall_read(fd, buf, sizeof(buf));
+        CHECK("ftruncate(5) reduces size", n == 5, "wrong size after truncate");
+        CHECK("ftruncate(5) content correct",
+              strncmp(buf, "ABCDE", 5) == 0, "content mismatch");
+        syscall_close(fd);
+        syscall_unlink("/home/FTRUNC_A.TXT");
+    }
+
+ft2:
+    {
+        int fd = syscall_open("/home/FTRUNC_B.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0)
+        {
+            printf("  SKIP: cannot create\n");
+            goto ft3;
+        }
+        syscall_write(fd, "SHRINK-ME", 9);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_B.TXT", O_WRONLY);
+        int ret = syscall_ftruncate(fd, 0);
+        CHECK("ftruncate(0) returns 0", ret == 0, "ftruncate to 0 failed");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_B.TXT", O_RDONLY);
+        char buf[16] = {0};
+        int n = syscall_read(fd, buf, sizeof(buf));
+        CHECK("ftruncate(0) file is empty", n == 0, "file not empty after truncate to 0");
+
+        stat_t st;
+        syscall_fstat(fd, &st);
+        CHECK("ftruncate(0) size is 0", st.size == 0, "size not 0");
+        syscall_close(fd);
+        syscall_unlink("/home/FTRUNC_B.TXT");
+    }
+
+ft3:
+    {
+        syscall_unlink("/home/FTRUNC_C.TXT");
+
+        int fd = syscall_open("/home/FTRUNC_C.TXT", O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd < 0)
+        {
+            printf("  SKIP: cannot create\n");
+            return;
+        }
+        syscall_write(fd, "ORIGINAL DATA HERE", 18);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_C.TXT", O_WRONLY);
+        syscall_ftruncate(fd, 5);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_C.TXT", O_RDONLY);
+        char rbuf[8] = {0};
+        int n = syscall_read(fd, rbuf, sizeof(rbuf));
+        CHECK("partial truncate", n == 5 && strncmp(rbuf, "ORIGI", 5) == 0, "wrong data after truncate");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_C.TXT", O_WRONLY);
+        syscall_ftruncate(fd, 0);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_C.TXT", O_RDONLY);
+        n = syscall_read(fd, rbuf, sizeof(rbuf));
+        CHECK("re-truncate to 0", n == 0, "should be empty");
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_C.TXT", O_WRONLY);
+        syscall_write(fd, "REBORN", 6);
+        syscall_close(fd);
+
+        fd = syscall_open("/home/FTRUNC_C.TXT", O_RDONLY);
+        n = syscall_read(fd, rbuf, sizeof(rbuf));
+        CHECK("write after truncate",
+              n == 6 && strncmp(rbuf, "REBORN", 6) == 0, "wrong content after write");
+        syscall_close(fd);
+        syscall_unlink("/home/FTRUNC_C.TXT");
+    }
+}

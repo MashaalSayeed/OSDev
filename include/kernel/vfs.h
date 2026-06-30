@@ -64,6 +64,7 @@ struct vfs_inode_operations {
     int (*rmdir)(vfs_inode_t* dir, const char* name);
     int (*readdir)(vfs_inode_t* dir, uint32_t offset, vfs_dir_entry_t *entry); // Read a directory entry)
     int (*rename)(vfs_inode_t* olddir, const char* oldname, vfs_inode_t* newdir, const char* newname);
+    int (*truncate)(vfs_file_t* file, uint32_t size);
 };
 
 struct vfs_file_operations {
@@ -147,6 +148,7 @@ int vfs_read(vfs_file_t *file, void *buf, size_t count);
 
 int vfs_rename(const char *oldpath, const char *newpath);
 int vfs_seek(vfs_file_t *file, uint32_t offset, int whence);
+int vfs_ftruncate(vfs_file_t *file, uint32_t length);
 int vfs_rmdir(const char *path);
 int vfs_getdents(int fd, void *buf, int size);
 

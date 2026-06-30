@@ -217,3 +217,7 @@ int syscall_kill(int pid, int sig) {
 int syscall_getppid() {
     return syscall(SYSCALL_GETPPID, 0, 0, 0);
 }
+
+int syscall_ftruncate(int fd, uint32_t length) {
+    return syscall(SYSCALL_FTRUNCATE, fd, length, 0);
+}
