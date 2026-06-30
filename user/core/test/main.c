@@ -4,6 +4,7 @@
 #include "test_signals.h"
 #include "test_vfs.h"
 #include "test_proc.h"
+#include "test_procfs.h"
 
 int main()
 {
@@ -29,6 +30,13 @@ int main()
     test_tty_ioctl_basic();
     test_path_syscalls_basic();
     test_vfs_ftruncate();
+
+    test_proc_self();
+    test_proc_self_exe();
+    test_proc_pid_status();
+    test_proc_directory_semantics();
+    test_proc_invalid_paths();
+    test_proc_pid_lifetime();
 
     test_print_summary();
     return test_get_failures() ? 1 : 0;

@@ -157,6 +157,81 @@ void sleep_command(char **args) {
     printf("Awake!\n");
 }
 
+void ps_command(char **args) {
+    (void)args;
+    int fd = syscall_open("/PROC", O_RDONLY);
+    if (fd < 0) {
+        printf("Error: /PROC not available\n");
+        return;
+    }
+
+    printf("%5s %16s %s\n", "PID", "NAME", "STATE");
+
+    char buf[1024];
+    int n = syscall_getdents(fd, buf, sizeof(buf));
+    if (n <= 0) {
+        printf("(empty)\n");
+        syscall_close(fd);
+        return;
+    }
+
+    int off = 0;
+    while (off < n) {
+        linux_dirent_t *d = (linux_dirent_t *)(buf + off);
+        if (d->d_reclen == 0) break;
+
+        int is_num = 1;
+        for (int i = 0; d->d_name[i]; i++) {
+            if (d->d_name[i] < '0' || d->d_name[i] > '9') { is_num = 0; break; }
+        }
+
+        if (is_num) {
+            char path[32];
+            snprintf(path, sizeof(path), "/PROC/%s/status", d->d_name);
+
+            int sfd = syscall_open(path, O_RDONLY);
+            if (sfd >= 0) {
+                char status[256];
+                int m = syscall_read(sfd, status, sizeof(status) - 1);
+                syscall_close(sfd);
+                if (m > 0) {
+                    status[m] = '\0';
+                    char name[32] = "?";
+                    char state[16] = "?";
+                    char pid_str[16] = "?";
+
+                    char *line = strtok(status, "\n");
+                    while (line) {
+                        if (strncmp(line, "Name:", 5) == 0) {
+                            while (*line && *line != '\t') line++;
+                            if (*line == '\t') line++;
+                            strncpy(name, line, sizeof(name) - 1);
+                            name[sizeof(name) - 1] = '\0';
+                        } else if (strncmp(line, "Pid:", 4) == 0) {
+                            while (*line && *line != '\t') line++;
+                            if (*line == '\t') line++;
+                            strncpy(pid_str, line, sizeof(pid_str) - 1);
+                            pid_str[sizeof(pid_str) - 1] = '\0';
+                        } else if (strncmp(line, "State:", 6) == 0) {
+                            while (*line && *line != '\t') line++;
+                            if (*line == '\t') line++;
+                            strncpy(state, line, sizeof(state) - 1);
+                            state[sizeof(state) - 1] = '\0';
+                        }
+                        line = strtok(NULL, "\n");
+                    }
+
+                    printf("%5s %16s %s\n", pid_str, name, state);
+                }
+            }
+        }
+
+        off += d->d_reclen;
+    }
+
+    syscall_close(fd);
+}
+
 void help_command(char **args) {
     printf("Commands:\n");
     printf("    echo <text> - Print text\n");
@@ -169,6 +244,7 @@ void help_command(char **args) {
     printf("    pwd - Print working directory\n");
     printf("    cd <dir> - Change directory\n");
     printf("    clear - Clear the screen\n");
+    printf("    ps - List processes\n");
     printf("    write <file> - Write to a file\n");
     printf("    history - Display command history\n");
     printf("    help - Display this help message\n");
@@ -191,6 +267,7 @@ command_t commands[] = {
     {"history", history_command},
     {"help", help_command},
     {"sleep", sleep_command},
+    {"ps", ps_command},
     {NULL, NULL}
 };
 

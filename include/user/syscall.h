@@ -55,3 +55,4 @@ sighandler_t syscall_signal(int sig, uint32_t handler);
 int          syscall_kill(int pid, int sig);
 int syscall_getppid();
 int syscall_ftruncate(int fd, uint32_t length);
+int syscall_lstat(const char *path, stat_t *buf);

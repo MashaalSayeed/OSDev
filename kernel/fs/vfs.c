@@ -3,6 +3,7 @@
 #include "kernel/ramfs.h"
 #include "kernel/fat32.h"
 #include "kernel/devfs.h"
+#include "kernel/procfs.h"
 #include "kernel/printf.h"
 #include "kernel/process.h"
 #include "common/dirent.h"
@@ -576,6 +577,18 @@ vfs_file_t *vfs_open(const char *path, int flags) {
         }
     }
 
+    if ((flags & O_WRONLY) && (inode->mode & VFS_MODE_DIR)) {
+        if (inode->inode_ops && inode->inode_ops->close)
+            inode->inode_ops->close(inode);
+        return NULL;
+    }
+
+    if ((flags & O_WRONLY) && mount && strcmp(mount->path, "/PROC") == 0) {
+        if (inode->inode_ops && inode->inode_ops->close)
+            inode->inode_ops->close(inode);
+        return NULL;
+    }
+
     vfs_file_t* file = (vfs_file_t *)kmalloc(sizeof(vfs_file_t));
     if (!file) return NULL;
 
@@ -895,6 +908,12 @@ void vfs_init() {
     } else {
         printf("Failed to create devfs superblock\n");
     }
+
+    vfs_fs_type_t procfs_fs_type = {
+        .name = "procfs",
+        .mount = procfs_mount
+    };
+    init_fs(&procfs_fs_type, NULL, "/PROC");
 
     int fd;
     if (vfs_create("/home", VFS_MODE_DIR) != 0) {

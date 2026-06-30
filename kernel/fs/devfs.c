@@ -10,7 +10,6 @@ static int device_count = 0;
 static vfs_inode_t *devfs_root = NULL;
 
 static vfs_inode_t *devfs_lookup(vfs_inode_t *dir, const char *name) {
-    printf("reached lookup: %s\n", name);
     if (!dir || !name) return NULL;
 
     for (int i = 0; i < device_count; i++) {

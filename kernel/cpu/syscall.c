@@ -14,8 +14,11 @@
 #include "kernel/kheap.h"
 #include "kernel/gdt.h"
 #include "kernel/signals.h"
+#include <libc/stdio.h>
 
 extern struct tss_entry tss_entry;
+
+int sys_stat(const char *path, stat_t *st);
 extern thread_t *current_thread;
 registers_t *interrupt_frame;
 
@@ -434,19 +437,33 @@ int sys_readlink(const char *path, char *buf, size_t bufsiz) {
         return -1;
     }
 
-    if (strcmp(kpath, "/proc/self/exe") != 0) {
-        return -1;
+    if (strcmp(kpath, "/proc/self/exe") == 0 || strcmp(kpath, "/PROC/self/exe") == 0) {
+        const char *target = proc->process_name;
+        size_t target_len = strlen(target);
+        size_t copy_len = target_len < bufsiz ? target_len : bufsiz;
+
+        if (copy_to_user(proc->root_page_table, (uint32_t)buf, target, copy_len) < 0) {
+            return -1;
+        }
+        return (int)copy_len;
     }
 
-    const char *target = proc->process_name;
-    size_t target_len = strlen(target);
-    size_t copy_len = target_len < bufsiz ? target_len : bufsiz;
+    if (strcmp(kpath, "/proc/self") == 0 || strcmp(kpath, "/PROC/self") == 0) {
+        char pid_str[16];
+        int len = snprintf(pid_str, sizeof(pid_str), "%d", proc->pid);
+        size_t copy_len = (size_t)len < bufsiz ? (size_t)len : bufsiz;
 
-    if (copy_to_user(proc->root_page_table, (uint32_t)buf, target, copy_len) < 0) {
-        return -1;
+        if (copy_to_user(proc->root_page_table, (uint32_t)buf, pid_str, copy_len) < 0) {
+            return -1;
+        }
+        return (int)copy_len;
     }
 
-    return (int)copy_len;
+    return -1;
+}
+
+int sys_lstat(const char *path, stat_t *st) {
+    return sys_stat(path, st);
 }
 
 int sys_chdir(const char *path) {
@@ -822,6 +839,7 @@ static int dispatch(uint32_t num, registers_t *regs) {
         case SYSCALL_RENAME:         return sys_rename((const char *)regs->ebx, (const char *)regs->ecx);
         case SYSCALL_CLOCK_GETTIME:     return sys_clock_gettime((int)regs->ebx, (timespec_t *)regs->ecx);
         case SYSCALL_FTRUNCATE:         return sys_ftruncate(regs->ebx, regs->ecx);
+        case SYSCALL_LSTAT:             return sys_lstat((const char *)regs->ebx, (stat_t *)regs->ecx);
         // case SYSCALL_INPUT_READ:  return sys_input_read((input_event_t *)regs->ebx);
         default:
             kprintf(WARNING, "Unknown syscall: %d\n", num);

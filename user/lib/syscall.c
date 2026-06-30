@@ -221,3 +221,7 @@ int syscall_getppid() {
 int syscall_ftruncate(int fd, uint32_t length) {
     return syscall(SYSCALL_FTRUNCATE, fd, length, 0);
 }
+
+int syscall_lstat(const char *path, stat_t *buf) {
+    return syscall(SYSCALL_LSTAT, (int)path, (int)buf, 0);
+}

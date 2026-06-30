@@ -38,6 +38,7 @@
 #define SYSCALL_STAT 106
 #define SYSCALL_FSTAT 108
 #define SYSCALL_FTRUNCATE 93
+#define SYSCALL_LSTAT 107
 #define SYS_SIGRETURN   119
 #define SYSCALL_MPROTECT 125
 #define SYSCALL_NANOSLEEP 162
@@ -75,6 +76,20 @@
 #define MAP_PRIVATE    0x02  // private mapping, changes not shared
 #define MAP_ANONYMOUS  0x20  // not file-backed
 #define MAP_FIXED      0x10  // must use exact address given
+
+#define ENOENT   2
+#define EACCES  13
+#define EROFS   30
+#define EISDIR  21
+
+#define S_IFMT   0xF0
+#define S_IFDIR  0x10
+#define S_IFREG  0x20
+#define S_IFLNK  0x40
+
+#define S_ISDIR(m)  (((m) & S_IFMT) == S_IFDIR)
+#define S_ISREG(m)  (((m) & S_IFMT) == S_IFREG)
+#define S_ISLNK(m)  (((m) & S_IFMT) == S_IFLNK)
 
 typedef struct {
     uint32_t size;
